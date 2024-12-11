@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@aptos-labs/ts-sdk": "latest",
+    "yaml": "^2.6.1"
+  },
+  "scripts": {
+    "deploy": "ts-node scripts/deploy.ts"
+  }
+}

@@ -1,0 +1,31 @@
+[package]
+name = "PodiumProtocol"
+version = "1.0.0"
+authors = ["FiHub"]
+
+[addresses]
+CheerOrBooV2 = "0xb20104c986e1a6f6d270f82dc6694d0002401a9c4c0c7e0574845dcc59b05cb2"
+sender = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
+target = "0xaf32340d25c72007c70cf7f48f4f1cfc2bc706a386242482026e54cac8b66a68"
+participant = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
+podium = "0x1bc821d80a60be4d5d04f027fc6f55f73d6b6b7651615130a445f3262edabeec"  # Will be replaced with deployer address
+
+[dev-addresses]
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-framework"
+
+# Podium Protocol module dependencies
+[dependencies.PodiumPassCoin]
+addr = "podium"
+
+[dependencies.PodiumOutpost]
+addr = "podium"
+
+[dependencies.PodiumPass]
+addr = "podium"
+deps = ["PodiumPassCoin", "PodiumOutpost"]
+
+[dev-dependencies]
