@@ -1,11 +1,11 @@
-module 0xYourAddress::PodiumPassCoin {
+module podium::PodiumPassCoin {
     use std::string::String;
     use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
     use aptos_framework::event;
     use aptos_framework::account;
     use aptos_framework::signer;
     
-    friend 0xYourAddress::PodiumPass;  // Allow PodiumPass to mint/burn
+    friend podium::PodiumPass;  // Allow PodiumPass to mint/burn
 
     /// Errors
     const ENOT_AUTHORIZED: u64 = 1;

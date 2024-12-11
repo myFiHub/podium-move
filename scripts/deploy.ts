@@ -2,11 +2,18 @@ import { Account, Aptos, AptosConfig, Network, Ed25519PrivateKey } from "@aptos-
 import * as fs from "fs";
 import * as yaml from "yaml";
 import * as path from "path";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { isContractDeployed, CHEERORBOO_ADDRESS } from './utils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Load config function
 function loadConfig() {
-    const configFile = fs.readFileSync(path.join(__dirname, '../config.yaml'), 'utf8');
-    return yaml.parse(configFile);
+    const configFile = fs.readFileSync(path.join(__dirname, '../.movement/config.yaml'), 'utf8');
+    const config = yaml.parse(configFile);
+    return config.profiles.deployer; // Use deployer profile
 }
 
 async function main() {
@@ -18,8 +25,8 @@ async function main() {
     const config = loadConfig();
     const aptosConfig = new AptosConfig({ 
         network: Network.CUSTOM,
-        fullnode: config.account.rest_url,
-        faucet: config.account.faucet_url,
+        fullnode: config.rest_url,
+        faucet: config.faucet_url,
     });
     
     const aptos = new Aptos(aptosConfig);
@@ -31,8 +38,8 @@ async function main() {
     try {
         switch(deployTarget.toLowerCase()) {
             case 'cheerorboo':
-                console.log("\nDeploying CheerOrBooV2...");
-                await deployModule(aptos, account, "CheerOrBooV2.move");
+                console.log("\nChecking CheerOrBooV2 deployment...");
+                await deployIfNeeded(aptos, account, "CheerOrBooV2.move");
                 break;
 
             case 'podium':
@@ -41,8 +48,8 @@ async function main() {
                 break;
 
             case 'all':
-                console.log("\nDeploying CheerOrBooV2...");
-                await deployModule(aptos, account, "CheerOrBooV2.move");
+                console.log("\nChecking CheerOrBooV2 deployment...");
+                await deployIfNeeded(aptos, account, "CheerOrBooV2.move");
                 
                 console.log("\nDeploying Podium System...");
                 await deployPodiumSystem(aptos, account);
@@ -159,6 +166,18 @@ async function verifyDeployment(aptos: Aptos, account: Account, moduleName: stri
     } catch {
         return false;
     }
+}
+
+async function deployIfNeeded(aptos: Aptos, account: Account, moduleName: string) {
+    const isDeployed = await isContractDeployed(aptos, CHEERORBOO_ADDRESS);
+    
+    if (isDeployed) {
+        console.log(`Contract already deployed at ${CHEERORBOO_ADDRESS}`);
+        return true;
+    }
+
+    console.log(`Deploying contract to ${account.accountAddress}...`);
+    return await deployModule(aptos, account, moduleName);
 }
 
 // Run deployment

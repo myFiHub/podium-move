@@ -1,10 +1,10 @@
-dmodule 0xYourAddress::PodiumOutpost {
+module podium::PodiumOutpost {
     use std::string::{Self, String};
     use aptos_framework::event;
     use aptos_framework::account;
     use aptos_framework::signer;
     use aptos_token::token::{Self, TokenDataId};
-    use 0xYourAddress::PodiumPass;
+    use podium::PodiumPass;
 
     // Error codes
     const ENOT_AUTHORIZED: u64 = 1;

@@ -1,10 +1,10 @@
 #[test_only]
-module 0xYourAddress::PodiumPass_test {
+module podium::PodiumPass_test {
     use std::signer;
     use std::vector;
     use aptos_framework::account;
     use aptos_framework::timestamp;
-    use 0xYourAddress::PodiumPass;
+    use podium::PodiumPass;
 
     // Test constants
     const ADMIN: address = @0x123;

@@ -1,4 +1,4 @@
-module 0xb20104c986e1a6f6d270f82dc6694d0002401a9c4c0c7e0574845dcc59b05cb2::CheerOrBooV2 {
+module CheerOrBooV2::CheerOrBooV2 {
     use aptos_framework::aptos_account;
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
@@ -6,7 +6,7 @@ module 0xb20104c986e1a6f6d270f82dc6694d0002401a9c4c0c7e0574845dcc59b05cb2::Cheer
     use std::signer;
 
     const FEE_PERCENTAGE: u64 = 5;
-    const FEE_ADDRESS: address = @0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb;
+    const FEE_ADDRESS: address = @fihub;
     const INSUFFICIENT_BALANCE: u64 = 102;
 
     #[event]
