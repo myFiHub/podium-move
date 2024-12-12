@@ -1,6 +1,25 @@
 import { Aptos } from "@aptos-labs/ts-sdk";
+import * as fs from "fs";
+import * as yaml from "yaml";
+import * as path from "path";
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
-export const CHEERORBOO_ADDRESS = "0xb20104c986e1a6f6d270f82dc6694d0002401a9c4c0c7e0574845dcc59b05cb2";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Read config.yaml for deployer address
+const config = yaml.parse(
+    fs.readFileSync(path.join(__dirname, '../.movement/config.yaml'), 'utf-8')
+);
+const deployerAddress = config.profiles.deployer.account;
+
+// Read Move.toml for FiHub address
+const moveToml = fs.readFileSync(path.join(__dirname, '../Move.toml'), 'utf-8');
+const fihubRegex = /fihub\s*=\s*"([^"]+)"/;
+
+export const CHEERORBOO_ADDRESS = deployerAddress;
+export const FIHUB_ADDRESS = moveToml.match(fihubRegex)?.[1] || "";
 
 export async function isContractDeployed(aptos: Aptos, address: string) {
     try {

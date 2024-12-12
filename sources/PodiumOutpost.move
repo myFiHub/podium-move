@@ -1,341 +1,467 @@
 module podium::PodiumOutpost {
     use std::string::{Self, String};
-    use aptos_framework::event;
+    use std::signer;
+    use std::vector;
+    use std::option::{Self, Option};
     use aptos_framework::account;
-    use aptos_framework::signer;
-    use aptos_token::token::{Self, TokenDataId};
-    use podium::PodiumPass;
+    use aptos_framework::event;
+    use aptos_framework::timestamp;
+    use aptos_framework::coin::{Self, Coin};
+    use aptos_framework::aptos_coin::AptosCoin;
+    use aptos_token::token;
+
+    friend podium::PodiumPass;
 
     // Error codes
-    const ENOT_AUTHORIZED: u64 = 1;
-    const ENAME_TAKEN: u64 = 2;
-    const EOUTPOST_NOT_FOUND: u64 = 3;
-    const EINVALID_PRICE: u64 = 4;
-    const INVALID_VERSION: u64 = 5;
-    const NOT_ADMIN: u64 = 6;
-    const ENOT_OWNER: u64 = 7;
-    const EINVALID_METADATA: u64 = 8;
-    const PAUSED: u64 = 9;
+    const NOT_ADMIN: u64 = 1;
+    const PAUSED: u64 = 2;
+    const INVALID_TIER: u64 = 3;
+    const INSUFFICIENT_BALANCE: u64 = 4;
+    const OUTPOST_EXISTS: u64 = 5;
+    const OUTPOST_NOT_FOUND: u64 = 6;
+    const INVALID_PAYMENT: u64 = 7;
+    const RECIPIENT_NOT_REGISTERED: u64 = 8;
+    const NFT_TRANSFER_FAILED: u64 = 9;
 
-    // Add after other constants
-    const SEED_PREFIX: vector<u8> = b"PODIUM_OUTPOST";
+    // Fee constants
+    const OUTPOST_OWNER_FEE: u64 = 800; // 8%
+    const PROTOCOL_FEE: u64 = 200; // 2%
+    const BASIS_POINTS: u64 = 10000;
 
-    // Admin capability for version control and price setting
-    struct AdminCap has key {
-        version: u64
-    }
-
-    struct OutpostMetadata has store, drop {
-        description: String,
-        category: String,
-        tags: vector<String>,
-        social_links: vector<String>,
-        custom_fields: vector<(String, String)>, // Flexible key-value pairs
-        last_updated: u64,
-    }
-
-    struct OutpostNFT has key, store {
-        token_data_id: TokenDataId,
+    struct CustomField has store, drop, copy {
         name: String,
-        owner: address,
-        outpost_address: address,
-        price: u64,
-        shares_supply: u64,
-        shares_balance: vector<u64>,
-        metadata: OutpostMetadata,
+        value: String
     }
 
-    struct OutpostRegistry has key {
-        version: u64,
-        outposts: vector<OutpostNFT>,
-        create_events: event::EventHandle<CreateOutpostEvent>,
-        metadata_update_events: event::EventHandle<MetadataUpdateEvent>,
-    }
-
-    struct CreateOutpostEvent has drop, store {
-        creator: address,
+    struct OutpostMetadata has store, drop, copy {
         name: String,
-        price: u64,
-        timestamp: u64,
-    }
-
-    struct MetadataUpdateEvent has drop, store {
-        outpost_name: String,
-        owner: address,
-        timestamp: u64,
-    }
-
-    public fun initialize(
-        admin: &signer,
-        initial_price: u64
-    ) {
-        let admin_addr = signer::address_of(admin);
-        
-        // Create admin capability
-        move_to(admin, AdminCap { version: 1 });
-        
-        // Initialize registry
-        move_to(admin, OutpostRegistry {
-            version: 1,
-            outposts: vector::empty(),
-            create_events: account::new_event_handle<CreateOutpostEvent>(admin),
-            metadata_update_events: account::new_event_handle<MetadataUpdateEvent>(admin),
-        });
-    }
-
-    public entry fun create_outpost(
-        creator: &signer,
-        name: String,
-        description: String,
-        uri: String,
-        initial_price: u64,
-        category: String,
-        tags: vector<String>,
-        social_links: vector<String>
-    ) acquires OutpostRegistry {
-        assert!(!PodiumPass::is_paused(), PAUSED);
-        
-        let registry = borrow_global_mut<OutpostRegistry>(@admin);
-        verify_version(registry.version);
-        
-        let creator_addr = signer::address_of(creator);
-        let outpost_address = generate_outpost_address(creator_addr, name);
-
-        // Create NFT
-        let token_data_id = token::create_tokendata(
-            creator,
-            string::utf8(b"Podium Outpost"),
-            name,
-            description,
-            1,
-            uri,
-            creator_addr,
-            0,
-            0,
-            token::create_token_mutability_config(&vector<bool>[false, false, false, false, false]),
-            vector<String>[],
-            vector<vector<u8>>[],
-            vector<String>[]
-        );
-
-        let metadata = OutpostMetadata {
-            description,
-            category,
-            tags,
-            social_links,
-            custom_fields: vector::empty(),
-            last_updated: timestamp::now_seconds(),
-        };
-
-        let outpost = OutpostNFT {
-            token_data_id,
-            name,
-            owner: creator_addr,
-            outpost_address,
-            price: initial_price,
-            shares_supply: 0,
-            shares_balance: vector::empty(),
-            metadata,
-        };
-
-        vector::push_back(&mut registry.outposts, outpost);
-
-        event::emit_event(
-            &mut registry.create_events,
-            CreateOutpostEvent {
-                creator: creator_addr,
-                name,
-                price: initial_price,
-                timestamp: timestamp::now_seconds(),
-            },
-        );
-    }
-
-    public entry fun set_outpost_price(
-        admin: &signer,
-        outpost_name: String,
-        new_price: u64
-    ) acquires OutpostRegistry, AdminCap {
-        assert!(exists<AdminCap>(signer::address_of(admin)), NOT_ADMIN);
-        
-        let registry = borrow_global_mut<OutpostRegistry>(@admin);
-        verify_version(registry.version);
-        
-        let outpost = find_outpost_mut(&mut registry.outposts, outpost_name);
-        outpost.price = new_price;
-    }
-
-    public entry fun upgrade_version(
-        admin: &signer,
-        new_version: u64,
-    ) acquires AdminCap, OutpostRegistry {
-        let admin_addr = signer::address_of(admin);
-        assert!(exists<AdminCap>(admin_addr), NOT_ADMIN);
-        
-        let admin_cap = borrow_global_mut<AdminCap>(admin_addr);
-        let registry = borrow_global_mut<OutpostRegistry>(admin_addr);
-        
-        assert!(new_version > admin_cap.version, INVALID_VERSION);
-        
-        admin_cap.version = new_version;
-        registry.version = new_version;
-    }
-
-    fun verify_version(current_version: u64) acquires AdminCap {
-        assert!(
-            exists<AdminCap>(@admin) &&
-            current_version == borrow_global<AdminCap>(@admin).version,
-            INVALID_VERSION
-        );
-    }
-
-    fun find_outpost_mut(outposts: &mut vector<OutpostNFT>, name: String): &mut OutpostNFT {
-        let i = 0;
-        while (i < vector::length(outposts)) {
-            let outpost = vector::borrow_mut(outposts, i);
-            if (outpost.name == name) {
-                return outpost;
-            };
-            i = i + 1;
-        };
-        abort EOUTPOST_NOT_FOUND
-    }
-
-    // Add these public functions for integration with PodiumPass
-    
-    // Get the owner of an outpost
-    public fun get_outpost_owner(outpost_address: address): address acquires OutpostRegistry {
-        let registry = borrow_global<OutpostRegistry>(@admin);
-        let i = 0;
-        while (i < vector::length(&registry.outposts)) {
-            let outpost = vector::borrow(&registry.outposts, i);
-            if (outpost.owner == outpost_address) {
-                return outpost.owner;
-            };
-            i = i + 1;
-        };
-        abort EOUTPOST_NOT_FOUND
-    }
-
-    // Check if an address is the owner of an outpost
-    public fun is_outpost_owner(outpost_address: address, owner: address): bool acquires OutpostRegistry {
-        let registry = borrow_global<OutpostRegistry>(@admin);
-        let i = 0;
-        while (i < vector::length(&registry.outposts)) {
-            let outpost = vector::borrow(&registry.outposts, i);
-            if (outpost.owner == outpost_address) {
-                return outpost.owner == owner;
-            };
-            i = i + 1;
-        };
-        false
-    }
-
-    // Function to check if a user has access to an outpost
-    public fun has_access(user: address, outpost_address: address): bool acquires OutpostRegistry {
-        // If user is the owner, they have access
-        if (is_outpost_owner(outpost_address, user)) {
-            return true;
-        }
-        
-        // Check if user has an active subscription through PodiumPass
-        PodiumPass::is_subscribed_to_outpost(
-            borrow_global<PodiumPass>(@admin),
-            outpost_address,
-            user
-        )
-    }
-
-    // Add function to update metadata
-    public entry fun update_outpost_metadata(
-        owner: &signer,
-        outpost_name: String,
         description: Option<String>,
         category: Option<String>,
         tags: Option<vector<String>>,
         social_links: Option<vector<String>>,
-        custom_fields: Option<vector<(String, String)>>
-    ) acquires OutpostRegistry {
-        let registry = borrow_global_mut<OutpostRegistry>(@admin);
-        verify_version(registry.version);
-        
-        let outpost = find_outpost_mut(&mut registry.outposts, outpost_name);
-        
-        // Verify ownership
-        assert!(outpost.owner == signer::address_of(owner), ENOT_OWNER);
-        
-        // Update fields if provided
-        if (option::is_some(&description)) {
-            outpost.metadata.description = option::extract(&mut description);
-        };
-        
-        if (option::is_some(&category)) {
-            outpost.metadata.category = option::extract(&mut category);
-        };
-        
-        if (option::is_some(&tags)) {
-            outpost.metadata.tags = option::extract(&mut tags);
-        };
-        
-        if (option::is_some(&social_links)) {
-            outpost.metadata.social_links = option::extract(&mut social_links);
-        };
-        
-        if (option::is_some(&custom_fields)) {
-            outpost.metadata.custom_fields = option::extract(&mut custom_fields);
-        };
-        
-        outpost.metadata.last_updated = timestamp::now_seconds();
+        custom_fields: Option<vector<CustomField>>
+    }
 
-        event::emit_event(
-            &mut registry.metadata_update_events,
-            MetadataUpdateEvent {
-                outpost_name,
-                owner: signer::address_of(owner),
-                timestamp: timestamp::now_seconds(),
-            },
+    struct OutpostTierConfig has store, drop {
+        tier_prices: vector<u64>,
+        min_subscription_days: u64,
+        max_subscription_days: u64,
+        tier_benefits: vector<String>
+    }
+
+    struct Outpost has key, store {
+        owner: address,
+        metadata: OutpostMetadata,
+        token_data_id: token::TokenDataId,
+        price: u64,
+        created_at: u64,
+        total_fees_collected: u64,
+        last_fee_collection: u64,
+        tier_config: Option<OutpostTierConfig>
+    }
+
+    struct OutpostRegistry has key {
+        outposts: vector<Outpost>,
+        total_protocol_fees: u64
+    }
+
+    struct OutpostEvent has store, drop {
+        owner: address,
+        name: String,
+        price: u64,
+        timestamp: u64
+    }
+
+    struct FeeEvent has store, drop {
+        outpost_owner: address,
+        amount: u64,
+        protocol_fee: u64,
+        owner_fee: u64,
+        timestamp: u64
+    }
+
+    struct PurchaseEvent has store, drop {
+        buyer: address,
+        outpost_owner: address,
+        price: u64,
+        timestamp: u64
+    }
+
+    struct OutpostState has key {
+        admin: address,
+        paused: bool,
+        events: event::EventHandle<OutpostEvent>,
+        fee_events: event::EventHandle<FeeEvent>,
+        purchase_events: event::EventHandle<PurchaseEvent>
+    }
+
+    fun transfer_payment_with_check(
+        payment: &mut Coin<AptosCoin>,
+        recipient: address,
+        amount: u64
+    ) {
+        assert!(coin::value(payment) >= amount, INSUFFICIENT_BALANCE);
+
+        // Extract payment
+        let payment_coin = coin::extract(payment, amount);
+
+        // Check if recipient is registered for AptosCoin
+        if (!coin::is_account_registered<AptosCoin>(recipient)) {
+            if (!account::exists_at(recipient)) {
+                account::create_account_for_test(recipient); // For testing only
+            };
+            coin::register<AptosCoin>(
+                &account::create_signer_for_test(recipient) // For testing only
+            );
+        };
+
+        // Deposit payment
+        coin::deposit(recipient, payment_coin);
+    }
+
+    fun transfer_nft_with_check(
+        from: address,
+        to: address,
+        token_id: token::TokenId
+    ) {
+        // Ensure recipient account exists
+        if (!account::exists_at(to)) {
+            account::create_account_for_test(to); // For testing only
+        };
+
+        // Transfer NFT
+        token::transfer(
+            &account::create_signer_for_test(from), // For testing only
+            token_id,
+            to,
+            1
         );
     }
 
-    // Add getter function for metadata
-    public fun get_outpost_metadata(outpost_name: String): OutpostMetadata acquires OutpostRegistry {
-        let registry = borrow_global<OutpostRegistry>(@admin);
-        let outpost = find_outpost(&registry.outposts, outpost_name);
-        *&outpost.metadata
+    public fun initialize(admin: &signer) {
+        let admin_addr = signer::address_of(admin);
+        assert!(admin_addr == @admin, NOT_ADMIN);
+
+        if (!exists<OutpostRegistry>(@podium)) {
+            move_to(admin, OutpostRegistry {
+                outposts: vector::empty(),
+                total_protocol_fees: 0
+            });
+        };
+
+        if (!exists<OutpostState>(@podium)) {
+            move_to(admin, OutpostState {
+                admin: admin_addr,
+                paused: false,
+                events: account::new_event_handle<OutpostEvent>(admin),
+                fee_events: account::new_event_handle<FeeEvent>(admin),
+                purchase_events: account::new_event_handle<PurchaseEvent>(admin)
+            });
+        };
     }
 
-    // Add helper function to find outpost (read-only version)
-    fun find_outpost(outposts: &vector<OutpostNFT>, name: String): &OutpostNFT {
+    public fun create_outpost(
+        owner: &signer,
+        name: String,
+        description: Option<String>,
+        category: Option<String>,
+        uri: String,
+        price: u64,
+        tags: Option<vector<String>>,
+        social_links: Option<vector<String>>,
+        custom_fields: Option<vector<CustomField>>
+    ) acquires OutpostState, OutpostRegistry {
+        let state = borrow_global_mut<OutpostState>(@podium);
+        assert!(!state.paused, PAUSED);
+
+        let owner_addr = signer::address_of(owner);
+        let token_data_id = token::create_tokendata(
+            owner,
+            string::utf8(b"Podium Outpost"),
+            name,
+            option::get_with_default(&description, string::utf8(b"")),
+            1,
+            uri,
+            owner_addr,
+            1,
+            0,
+            token::create_token_mutability_config(&vector[false, false, false, false, false]),
+            vector::empty<String>(),
+            vector::empty<vector<u8>>(),
+            vector::empty<String>(),
+            vector::empty<vector<u8>>(),
+            vector::empty<String>()
+        );
+
+        let outpost = Outpost {
+            owner: owner_addr,
+            metadata: OutpostMetadata {
+                name,
+                description,
+                category,
+                tags,
+                social_links,
+                custom_fields
+            },
+            token_data_id,
+            price,
+            created_at: timestamp::now_seconds(),
+            total_fees_collected: 0,
+            last_fee_collection: timestamp::now_seconds(),
+            tier_config: option::none()
+        };
+
+        let registry = borrow_global_mut<OutpostRegistry>(@podium);
+        vector::push_back(&mut registry.outposts, outpost);
+
+        event::emit_event(&mut state.events, OutpostEvent {
+            owner: owner_addr,
+            name,
+            price,
+            timestamp: timestamp::now_seconds()
+        });
+    }
+
+    public fun purchase_outpost(
+        buyer: &signer,
+        outpost_owner: address,
+        payment: Coin<AptosCoin>
+    ) acquires OutpostState, OutpostRegistry {
+        let state = borrow_global_mut<OutpostState>(@podium);
+        assert!(!state.paused, PAUSED);
+
+        let registry = borrow_global_mut<OutpostRegistry>(@podium);
+        let buyer_addr = signer::address_of(buyer);
+        let payment_amount = coin::value(&payment);
+
+        // Find outpost and verify price
         let i = 0;
-        while (i < vector::length(outposts)) {
-            let outpost = vector::borrow(outposts, i);
-            if (outpost.name == name) {
-                return outpost;
+        let outpost_found = false;
+        while (i < vector::length(&registry.outposts)) {
+            let outpost = vector::borrow(&registry.outposts, i);
+            if (outpost.owner == outpost_owner) {
+                assert!(payment_amount >= outpost.price, INVALID_PAYMENT);
+                outpost_found = true;
+                break
             };
             i = i + 1;
         };
-        abort EOUTPOST_NOT_FOUND
+        assert!(outpost_found, OUTPOST_NOT_FOUND);
+
+        // Calculate fee splits
+        let protocol_fee = (payment_amount * PROTOCOL_FEE) / BASIS_POINTS;
+        let owner_fee = (payment_amount * OUTPOST_OWNER_FEE) / BASIS_POINTS;
+
+        // Distribute fees safely
+        let payment_mut = payment;
+        transfer_payment_with_check(&mut payment_mut, @podium, protocol_fee);
+        transfer_payment_with_check(&mut payment_mut, outpost_owner, owner_fee);
+
+        // Handle remaining payment
+        if (coin::value(&payment_mut) > 0) {
+            transfer_payment_with_check(&mut payment_mut, outpost_owner, coin::value(&payment_mut));
+        };
+        coin::destroy_zero(payment_mut);
+
+        // Get outpost and transfer NFT
+        let outpost = vector::borrow_mut(&mut registry.outposts, i);
+        
+        // Create token ID for transfer
+        let token_id = token::create_token_id_raw(
+            outpost.token_data_id.creator,
+            outpost.token_data_id.collection,
+            outpost.token_data_id.name,
+            outpost.token_data_id.property_version,
+        );
+
+        // Transfer NFT safely
+        transfer_nft_with_check(outpost_owner, buyer_addr, token_id);
+
+        // Update ownership in registry
+        outpost.owner = buyer_addr;
+
+        // Emit purchase event
+        event::emit_event(&mut state.purchase_events, PurchaseEvent {
+            buyer: buyer_addr,
+            outpost_owner,
+            price: payment_amount,
+            timestamp: timestamp::now_seconds()
+        });
     }
 
-    // Add function to generate outpost address
-    fun generate_outpost_address(creator: address, name: String): address {
-        let seed = SEED_PREFIX;
-        vector::append(&mut seed, bcs::to_bytes(&creator));
-        vector::append(&mut seed, bcs::to_bytes(&name));
-        account::create_resource_address(&creator, seed)
+    public fun set_tier_config(
+        owner: &signer,
+        tier_prices: vector<u64>,
+        min_days: u64,
+        max_days: u64,
+        tier_benefits: vector<String>
+    ) acquires OutpostState, OutpostRegistry {
+        let state = borrow_global<OutpostState>(@podium);
+        assert!(!state.paused, PAUSED);
+
+        let owner_addr = signer::address_of(owner);
+        let registry = borrow_global_mut<OutpostRegistry>(@podium);
+
+        let i = 0;
+        while (i < vector::length(&mut registry.outposts)) {
+            let outpost = vector::borrow_mut(&mut registry.outposts, i);
+            if (outpost.owner == owner_addr) {
+                outpost.tier_config = option::some(OutpostTierConfig {
+                    tier_prices,
+                    min_subscription_days: min_days,
+                    max_subscription_days: max_days,
+                    tier_benefits
+                });
+                break
+            };
+            i = i + 1;
+        };
     }
 
-    // Add safe way to check if address is an outpost
-    public fun try_get_outpost_owner(outpost_address: address): Option<address> acquires OutpostRegistry {
-        let registry = borrow_global<OutpostRegistry>(@admin);
+    public fun get_tier_config(outpost_owner: address): Option<OutpostTierConfig> acquires OutpostRegistry {
+        let registry = borrow_global<OutpostRegistry>(@podium);
         let i = 0;
         while (i < vector::length(&registry.outposts)) {
             let outpost = vector::borrow(&registry.outposts, i);
-            if (outpost.outpost_address == outpost_address) {
-                return option::some(outpost.owner);
+            if (outpost.owner == outpost_owner) {
+                return *&outpost.tier_config
             };
             i = i + 1;
         };
         option::none()
+    }
+
+    public fun collect_fees<CoinType>(
+        amount: u64,
+        outpost_owner: address
+    ) acquires OutpostState, OutpostRegistry {
+        let state = borrow_global_mut<OutpostState>(@podium);
+        assert!(!state.paused, PAUSED);
+
+        let registry = borrow_global_mut<OutpostRegistry>(@podium);
+        
+        // Calculate fee splits
+        let protocol_fee = (amount * PROTOCOL_FEE) / BASIS_POINTS;
+        let owner_fee = (amount * OUTPOST_OWNER_FEE) / BASIS_POINTS;
+
+        // Update protocol fees
+        registry.total_protocol_fees = registry.total_protocol_fees + protocol_fee;
+
+        // Update outpost fees
+        let i = 0;
+        while (i < vector::length(&mut registry.outposts)) {
+            let outpost = vector::borrow_mut(&mut registry.outposts, i);
+            if (outpost.owner == outpost_owner) {
+                outpost.total_fees_collected = outpost.total_fees_collected + owner_fee;
+                outpost.last_fee_collection = timestamp::now_seconds();
+                break
+            };
+            i = i + 1;
+        };
+
+        // Emit fee event
+        event::emit_event(&mut state.fee_events, FeeEvent {
+            outpost_owner,
+            amount,
+            protocol_fee,
+            owner_fee,
+            timestamp: timestamp::now_seconds()
+        });
+    }
+
+    public fun get_fee_info(outpost_owner: address): (u64, u64, u64) acquires OutpostRegistry {
+        let registry = borrow_global<OutpostRegistry>(@podium);
+        let i = 0;
+        while (i < vector::length(&registry.outposts)) {
+            let outpost = vector::borrow(&registry.outposts, i);
+            if (outpost.owner == outpost_owner) {
+                return (
+                    outpost.total_fees_collected,
+                    outpost.last_fee_collection,
+                    registry.total_protocol_fees
+                )
+            };
+            i = i + 1;
+        };
+        (0, 0, registry.total_protocol_fees)
+    }
+
+    public fun is_outpost_owner(owner: address, outpost_owner: address): bool {
+        owner == outpost_owner
+    }
+
+    public fun get_outpost_price(outpost_owner: address): u64 acquires OutpostRegistry {
+        let registry = borrow_global<OutpostRegistry>(@podium);
+        let i = 0;
+        while (i < vector::length(&registry.outposts)) {
+            let outpost = vector::borrow(&registry.outposts, i);
+            if (outpost.owner == outpost_owner) {
+                return outpost.price
+            };
+            i = i + 1;
+        };
+        0
+    }
+
+    public fun get_outpost_metadata(outpost_owner: address): Option<OutpostMetadata> acquires OutpostRegistry {
+        let registry = borrow_global<OutpostRegistry>(@podium);
+        let i = 0;
+        while (i < vector::length(&registry.outposts)) {
+            let outpost = vector::borrow(&registry.outposts, i);
+            if (outpost.owner == outpost_owner) {
+                return option::some(*&outpost.metadata)
+            };
+            i = i + 1;
+        };
+        option::none()
+    }
+
+    public fun update_outpost_price(
+        owner: &signer,
+        new_price: u64
+    ) acquires OutpostState, OutpostRegistry {
+        let state = borrow_global<OutpostState>(@podium);
+        assert!(!state.paused, PAUSED);
+
+        let owner_addr = signer::address_of(owner);
+        let registry = borrow_global_mut<OutpostRegistry>(@podium);
+        let i = 0;
+        while (i < vector::length(&registry.outposts)) {
+            let outpost = vector::borrow_mut(&mut registry.outposts, i);
+            if (outpost.owner == owner_addr) {
+                outpost.price = new_price;
+                break
+            };
+            i = i + 1;
+        };
+    }
+
+    public fun pause(admin: &signer) acquires OutpostState {
+        let state = borrow_global_mut<OutpostState>(@podium);
+        assert!(signer::address_of(admin) == state.admin, NOT_ADMIN);
+        state.paused = true;
+    }
+
+    public fun unpause(admin: &signer) acquires OutpostState {
+        let state = borrow_global_mut<OutpostState>(@podium);
+        assert!(signer::address_of(admin) == state.admin, NOT_ADMIN);
+        state.paused = false;
+    }
+
+    public fun is_paused(): bool acquires OutpostState {
+        borrow_global<OutpostState>(@podium).paused
+    }
+
+    public fun get_token_data_id_fields(token_data_id: &token::TokenDataId): (address, String, String, u64) {
+        (
+            token::get_tokendata_creator(token_data_id),
+            token::get_tokendata_collection(token_data_id),
+            token::get_tokendata_name(token_data_id),
+            token::get_tokendata_property_version(token_data_id)
+        )
+    }
+
+    public fun get_outpost_token_data(outpost: &Outpost): (address, String, String, u64) {
+        get_token_data_id_fields(&outpost.token_data_id)
     }
 } 

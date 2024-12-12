@@ -4,29 +4,24 @@ version = "1.0.0"
 authors = ["FiHub"]
 
 [addresses]
-CheerOrBooV2 = "_"  # Will be replaced with deployer address
+CheerOrBooV2 = "_"
 sender = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
 target = "0xaf32340d25c72007c70cf7f48f4f1cfc2bc706a386242482026e54cac8b66a68"
 participant = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
-podium = "_"  # Will be replaced with deployer address
-fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"  # FiHub address
+fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
+podium = "_"
+admin = "_"
+treasury = "_"
 
 [dev-addresses]
+CheerOrBooV2 = "0x345"
+podium = "0x456"
+admin = "0x123"
+treasury = "0x234"
 
-[dependencies.AptosFramework]
-git = "https://github.com/aptos-labs/aptos-core.git"
-rev = "mainnet"
-subdir = "aptos-move/framework/aptos-framework"
-
-# Podium Protocol module dependencies
-[dependencies.PodiumPassCoin]
-addr = "podium"
-
-[dependencies.PodiumOutpost]
-addr = "podium"
-
-[dependencies.PodiumPass]
-addr = "podium"
-deps = ["PodiumPassCoin", "PodiumOutpost"]
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework/", rev = "mainnet" }
+AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-stdlib/", rev = "mainnet" }
+AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token/", rev = "mainnet" }
 
 [dev-dependencies]

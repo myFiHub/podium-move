@@ -81,17 +81,22 @@ module CheerOrBooV2::CheerOrBooV2 {
     fun transfer_with_check(sender: &signer, recipient: address, amount: u64) {
         // Step 1: Check if the sender has sufficient balance
         let sender_addr = signer::address_of(sender);
-        assert!(
-            coin::balance<AptosCoin>(sender_addr) >= amount,
-            INSUFFICIENT_BALANCE
-        );
-
-        // Step 2: Check if the recipient has a CoinStore for AptosCoin
-        if (coin::is_account_registered<AptosCoin>(recipient)) {
-            // Use coin::transfer if CoinStore exists
-            coin::transfer<AptosCoin>(sender, recipient, amount);
+        
+        // Check if sender has CoinStore
+        if (coin::is_account_registered<AptosCoin>(sender_addr)) {
+            assert!(
+                coin::balance<AptosCoin>(sender_addr) >= amount,
+                INSUFFICIENT_BALANCE
+            );
+            
+            // Check recipient and transfer
+            if (coin::is_account_registered<AptosCoin>(recipient)) {
+                coin::transfer<AptosCoin>(sender, recipient, amount);
+            } else {
+                aptos_account::transfer(sender, recipient, amount);
+            };
         } else {
-            // Fallback to aptos_account::transfer if no CoinStore
+            // Fallback for sender without CoinStore
             aptos_account::transfer(sender, recipient, amount);
         };
     }

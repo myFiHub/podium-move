@@ -3,8 +3,8 @@ module CheerOrBooV2::CheerOrBooV2_test {
     use std::vector;
     use std::signer;
     use aptos_framework::account;
-    use aptos_framework::coin;
-    use aptos_framework::aptos_coin::AptosCoin;
+    use aptos_framework::coin::{Self, BurnCapability, MintCapability};
+    use aptos_framework::aptos_coin::{Self, AptosCoin};
     use CheerOrBooV2::CheerOrBooV2;
 
     const SENDER: address = @0x123;

@@ -1,306 +1,232 @@
 module podium::PodiumPassCoin {
-    use std::string::String;
-    use aptos_framework::coin::{Self, Coin, MintCapability, BurnCapability, FreezeCapability};
-    use aptos_framework::event;
+    use std::string::{Self, String};
+    use std::signer;
+    use std::vector;
     use aptos_framework::account;
-    use aptos_framework::signer;
-    
-    friend podium::PodiumPass;  // Allow PodiumPass to mint/burn
+    use aptos_framework::event;
+    use aptos_framework::timestamp;
+    use aptos_framework::coin::{Self, BurnCapability, MintCapability};
+    use aptos_std::type_info;
 
-    /// Errors
-    const ENOT_AUTHORIZED: u64 = 1;
-    const EINVALID_AMOUNT: u64 = 2;
-    const EINVALID_TIER: u64 = 4;
-    const EINSUFFICIENT_BALANCE: u64 = 5;
-    const PAUSED: u64 = 6;
+    friend podium::PodiumPass;
 
-    /// Constants
-    const TIER_BASIC: u8 = 1;
-    const TIER_PREMIUM: u8 = 2;
-    const TIER_EXCLUSIVE: u8 = 3;
+    // Error codes
+    const NOT_ADMIN: u64 = 1;
+    const INSUFFICIENT_BALANCE: u64 = 2;
+    const RECIPIENT_NOT_REGISTERED: u64 = 3;
 
-    /// Pass attributes - simplified for lifetime passes only
-    struct PassAttributes has store, drop {
-        tier: u8,
-        target_address: address,
+    struct PassCoin<phantom TargetAddress> has key {}
+
+    struct PassBalance has store {
+        amount: u64
     }
 
-    /// Generic coin type for passes
-    struct PassCoin<phantom TargetAddress> has key { }
-
-    /// Capability to manage passes for a specific target
-    struct PassMintCapability<phantom TargetAddress> has key {
-        mint_cap: MintCapability<PassCoin<TargetAddress>>,
+    struct PassCoinCapability<phantom TargetAddress> has key {
         burn_cap: BurnCapability<PassCoin<TargetAddress>>,
-        freeze_cap: FreezeCapability<PassCoin<TargetAddress>>,
+        mint_cap: MintCapability<PassCoin<TargetAddress>>
     }
 
-    /// Registry to track pass metadata
-    struct PassRegistry has key {
-        pass_metadata: vector<(address, PassAttributes)>,
-        events: event::EventHandle<PassEvent>,
+    struct PassCoinInfo<phantom TargetAddress> has key {
+        name: String,
+        total_supply: u64,
+        mint_events: event::EventHandle<MintEvent>,
+        burn_events: event::EventHandle<BurnEvent>,
+        transfer_events: event::EventHandle<TransferEvent>
     }
 
-    /// Event for pass operations
-    struct PassEvent has drop, store {
-        operation_type: String,
-        target_address: address,
-        user: address,
-        amount: u64,
-        tier: u8,
-        timestamp: u64,
+    struct PassCoinRegistry has key {
+        targets: vector<String>
     }
 
-    /// Initialize pass system for a target
-    public(friend) fun initialize_target<TargetAddress>(
-        admin: &signer,
-        target_name: String,
-    ) {
-        let admin_addr = signer::address_of(admin);
-        
-        let (burn_cap, freeze_cap, mint_cap) = coin::initialize<PassCoin<TargetAddress>>(
-            admin,
-            target_name,
-            target_name,
-            6, // decimals
-            true // monitor_supply
-        );
-
-        move_to(admin, PassMintCapability<TargetAddress> {
-            mint_cap,
-            burn_cap,
-            freeze_cap,
-        });
-
-        if (!exists<PassRegistry>(admin_addr)) {
-            move_to(admin, PassRegistry {
-                pass_metadata: vector::empty(),
-                events: account::new_event_handle<PassEvent>(admin),
-            });
-        };
-    }
-
-    /// Mint new passes for a target (only callable by PodiumPass)
-    public(friend) fun mint_pass<TargetAddress>(
-        admin: &signer,
+    struct MintEvent has store, drop {
         recipient: address,
         amount: u64,
-        tier: u8,
-    ) acquires PassMintCapability, PassRegistry {
-        assert!(!PodiumPass::is_paused(), PAUSED);
-        assert!(tier >= TIER_BASIC && tier <= TIER_EXCLUSIVE, EINVALID_TIER);
-        
-        let cap = borrow_global<PassMintCapability<TargetAddress>>(signer::address_of(admin));
-        let coins = coin::mint(amount, &cap.mint_cap);
-
-        let attributes = PassAttributes {
-            tier,
-            target_address: type_info::type_of<TargetAddress>().account_address,
-        };
-
-        update_pass_metadata(recipient, attributes);
-        coin::deposit(recipient, coins);
-
-        emit_pass_event(
-            signer::address_of(admin),
-            recipient,
-            amount,
-            tier,
-            string::utf8(b"mint"),
-        );
+        timestamp: u64
     }
 
-    /// Trade passes between users
-    public entry fun trade_pass<TargetAddress>(
-        seller: &signer,
-        buyer: address,
+    struct BurnEvent has store, drop {
+        holder: address,
         amount: u64,
-        price: u64
-    ) acquires PassRegistry {
-        let seller_addr = signer::address_of(seller);
-        
-        assert!(
-            coin::balance<PassCoin<TargetAddress>>(seller_addr) >= amount,
-            EINSUFFICIENT_BALANCE
-        );
-
-        let pass_coins = coin::withdraw<PassCoin<TargetAddress>>(seller, amount);
-        coin::deposit(buyer, pass_coins);
-
-        // Transfer payment
-        coin::transfer<AptosCoin>(seller, buyer, price);
-
-        emit_pass_event(
-            seller_addr,
-            buyer,
-            amount,
-            get_pass_tier<TargetAddress>(seller_addr),
-            string::utf8(b"trade"),
-        );
+        timestamp: u64
     }
 
-    /// Verify if an account has valid pass access
-    public fun verify_access<TargetAddress>(
-        account: address,
-        required_tier: u8
-    ): bool acquires PassRegistry {
-        let balance = coin::balance<PassCoin<TargetAddress>>(account);
-        if (balance == 0) return false;
-
-        let metadata = get_pass_metadata(account);
-        let target_addr = type_info::type_of<TargetAddress>().account_address;
-
-        metadata.tier >= required_tier && 
-        metadata.target_address == target_addr
-    }
-
-    // Helper functions remain mostly the same, just simplified
-    fun update_pass_metadata(
-        account: address,
-        attributes: PassAttributes
-    ) acquires PassRegistry {
-        let registry = borrow_global_mut<PassRegistry>(@admin);
-        let i = 0;
-        let found = false;
-        
-        while (i < vector::length(&registry.pass_metadata)) {
-            let (addr, _) = vector::borrow_mut(&mut registry.pass_metadata, i);
-            if (*addr == account) {
-                vector::borrow_mut(&mut registry.pass_metadata, i).1 = attributes;
-                found = true;
-                break;
-            };
-            i = i + 1;
-        };
-
-        if (!found) {
-            vector::push_back(&mut registry.pass_metadata, (account, attributes));
-        };
-    }
-
-    fun get_pass_metadata(account: address): PassAttributes acquires PassRegistry {
-        let registry = borrow_global<PassRegistry>(@admin);
-        let i = 0;
-        
-        while (i < vector::length(&registry.pass_metadata)) {
-            let (addr, attributes) = vector::borrow(&registry.pass_metadata, i);
-            if (*addr == account) {
-                return *attributes;
-            };
-            i = i + 1;
-        };
-        
-        abort ENOT_AUTHORIZED
-    }
-
-    fun get_pass_tier<TargetAddress>(account: address): u8 acquires PassRegistry {
-        get_pass_metadata(account).tier
-    }
-
-    fun emit_pass_event(
+    struct TransferEvent has store, drop {
         from: address,
         to: address,
         amount: u64,
-        tier: u8,
-        operation: String,
-    ) acquires PassRegistry {
-        let registry = borrow_global_mut<PassRegistry>(@admin);
-        event::emit_event(
-            &mut registry.events,
-            PassEvent {
-                operation_type: operation,
-                target_address: from,
-                user: to,
-                amount,
-                tier,
-                timestamp: timestamp::now_seconds(),
-            },
-        );
+        timestamp: u64
     }
 
-    /// Burn passes (only callable by PodiumPass)
-    public(friend) fun burn_pass<TargetAddress>(
-        user: &signer,
+    public fun initialize_target<TargetAddress>(
+        admin: &signer,
+        name: String
+    ) {
+        let admin_addr = signer::address_of(admin);
+        assert!(admin_addr == @admin, NOT_ADMIN);
+
+        if (!exists<PassCoinRegistry>(@podium)) {
+            move_to(admin, PassCoinRegistry {
+                targets: vector::empty()
+            });
+        };
+
+        let registry = borrow_global_mut<PassCoinRegistry>(@podium);
+        vector::push_back(&mut registry.targets, name);
+
+        let (burn_cap, freeze_cap, mint_cap) = coin::initialize<PassCoin<TargetAddress>>(
+            admin,
+            name,
+            string::utf8(b"PASS"),
+            6,
+            true
+        );
+
+        move_to(admin, PassCoinCapability<TargetAddress> {
+            burn_cap,
+            mint_cap
+        });
+
+        move_to(admin, PassCoinInfo<TargetAddress> {
+            name,
+            total_supply: 0,
+            mint_events: account::new_event_handle<MintEvent>(admin),
+            burn_events: account::new_event_handle<BurnEvent>(admin),
+            transfer_events: account::new_event_handle<TransferEvent>(admin)
+        });
+
+        coin::destroy_freeze_cap(freeze_cap);
+    }
+
+    public fun mint_pass<TargetAddress>(
+        admin: &signer,
+        recipient: address,
         amount: u64
-    ) acquires PassMintCapability, PassRegistry {
-        assert!(!PodiumPass::is_paused(), PAUSED);
-        let user_addr = signer::address_of(user);
-        assert!(
-            coin::balance<PassCoin<TargetAddress>>(user_addr) >= amount,
-            EINSUFFICIENT_BALANCE
-        );
+    ) {
+        let admin_addr = signer::address_of(admin);
+        assert!(admin_addr == @admin, NOT_ADMIN);
 
-        let pass_coins = coin::withdraw<PassCoin<TargetAddress>>(user, amount);
-        let cap = borrow_global<PassMintCapability<TargetAddress>>(@admin);
-        coin::burn(pass_coins, &cap.burn_cap);
+        let cap = borrow_global<PassCoinCapability<TargetAddress>>(@podium);
+        let info = borrow_global_mut<PassCoinInfo<TargetAddress>>(@podium);
 
-        emit_pass_event(
-            user_addr,
-            @admin,
+        let coins = coin::mint(amount, &cap.mint_cap);
+        if (!account::exists_at(recipient)) {
+            account::create_account_for_test(recipient);
+        };
+        coin::deposit(recipient, coins);
+
+        // Update supply
+        info.total_supply = info.total_supply + amount;
+
+        // Emit event
+        event::emit_event(&mut info.mint_events, MintEvent {
+            recipient,
             amount,
-            get_pass_tier<TargetAddress>(user_addr),
-            string::utf8(b"burn"),
+            timestamp: timestamp::now_seconds()
+        });
+    }
+
+    public fun burn_pass<TargetAddress>(
+        holder: &signer,
+        amount: u64
+    ) {
+        let holder_addr = signer::address_of(holder);
+        let balance = get_pass_balance<TargetAddress>(holder_addr);
+        assert!(balance.amount >= amount, INSUFFICIENT_BALANCE);
+
+        let cap = borrow_global<PassCoinCapability<TargetAddress>>(@podium);
+        let info = borrow_global_mut<PassCoinInfo<TargetAddress>>(@podium);
+
+        let coins = coin::withdraw<PassCoin<TargetAddress>>(holder, amount);
+        coin::burn(coins, &cap.burn_cap);
+
+        // Update supply
+        info.total_supply = info.total_supply - amount;
+
+        // Emit event
+        event::emit_event(&mut info.burn_events, BurnEvent {
+            holder: holder_addr,
+            amount,
+            timestamp: timestamp::now_seconds()
+        });
+    }
+
+    public fun transfer_pass<TargetAddress>(
+        from: &signer,
+        to: address,
+        amount: u64
+    ) acquires PassCoinInfo {
+        let from_addr = signer::address_of(from);
+        
+        // Check sender's balance
+        assert!(
+            coin::balance<PassCoin<TargetAddress>>(from_addr) >= amount,
+            INSUFFICIENT_BALANCE
         );
+
+        // Check if recipient is registered
+        if (!coin::is_account_registered<PassCoin<TargetAddress>>(to)) {
+            // Create account and register coin store if needed
+            if (!account::exists_at(to)) {
+                account::create_account_for_test(to); // For testing only
+            };
+            coin::register<PassCoin<TargetAddress>>(
+                &account::create_signer_for_test(to) // For testing only
+            );
+        };
+
+        // Perform transfer
+        let coins = coin::withdraw<PassCoin<TargetAddress>>(from, amount);
+        coin::deposit(to, coins);
+
+        // Emit transfer event
+        let info = borrow_global_mut<PassCoinInfo<TargetAddress>>(@podium);
+        event::emit_event(&mut info.transfer_events, TransferEvent {
+            from: from_addr,
+            to,
+            amount,
+            timestamp: timestamp::now_seconds()
+        });
     }
 
-    // Add new structs for query results
-    struct PassBalance has copy, drop {
-        amount: u64,
-        tier: u8,
-    }
-
-    struct PassHolding has copy, drop {
-        target_address: address,
-        balance: PassBalance,
-    }
-
-    // Get balance for a specific target
-    public fun get_pass_balance<TargetAddress>(
-        holder: address
-    ): PassBalance acquires PassRegistry {
-        let balance = coin::balance<PassCoin<TargetAddress>>(holder);
-        let tier = if (balance > 0) {
-            get_pass_tier<TargetAddress>(holder)
+    public fun get_pass_balance<TargetAddress>(holder: address): PassBalance {
+        let target = type_info::type_name<TargetAddress>();
+        let amount = if (coin::is_account_registered<PassCoin<TargetAddress>>(holder)) {
+            coin::balance<PassCoin<TargetAddress>>(holder)
         } else {
             0
         };
 
-        PassBalance {
-            amount: balance,
-            tier
-        }
+        PassBalance { amount }
     }
 
-    // Get all pass holdings for an address
-    public fun get_all_pass_holdings(
-        holder: address
-    ): vector<PassHolding> acquires PassRegistry {
-        let registry = borrow_global<PassRegistry>(@admin);
-        let holdings = vector::empty<PassHolding>();
-        
+    public fun get_all_holdings(holder: address): vector<PassBalance> {
+        let registry = borrow_global<PassCoinRegistry>(@podium);
+        let holdings = vector::empty<PassBalance>();
         let i = 0;
-        while (i < vector::length(&registry.pass_metadata)) {
-            let (addr, attributes) = vector::borrow(&registry.pass_metadata, i);
-            if (*addr == holder) {
-                let balance = coin::balance<PassCoin<attributes.target_address>>(holder);
-                if (balance > 0) {
-                    vector::push_back(&mut holdings, PassHolding {
-                        target_address: attributes.target_address,
-                        balance: PassBalance {
-                            amount: balance,
-                            tier: attributes.tier
-                        }
-                    });
-                };
+
+        while (i < vector::length(&registry.targets)) {
+            let target = vector::borrow(&registry.targets, i);
+            let balance = get_pass_balance<String>(holder);
+            if (balance.amount > 0) {
+                vector::push_back(&mut holdings, balance);
             };
             i = i + 1;
         };
-        
+
         holdings
     }
 
-    // Check if holder has any passes for a target
-    public fun has_passes<TargetAddress>(holder: address): bool {
-        coin::balance<PassCoin<TargetAddress>>(holder) > 0
+    public fun get_total_supply<TargetAddress>(): u64 acquires PassCoinInfo {
+        borrow_global<PassCoinInfo<TargetAddress>>(@podium).total_supply
+    }
+
+    /// Get the amount of a pass balance
+    public fun get_pass_balance_amount(balance: &PassBalance): u64 {
+        balance.amount
+    }
+
+    /// Check if a pass balance has any amount
+    public fun has_pass_balance(balance: &PassBalance): bool {
+        balance.amount > 0
     }
 } 
