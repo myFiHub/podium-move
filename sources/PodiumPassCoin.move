@@ -4,12 +4,13 @@ module podium::PodiumPassCoin {
     use std::string::{Self, String};
     use std::option;
     use std::vector;
-    use aptos_framework::object::{Self, Object, ConstructorRef};
+    use aptos_framework::object::{Self, Object};
     use aptos_framework::fungible_asset::{Self, Metadata, FungibleAsset, MintRef, TransferRef, BurnRef};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::table::{Self, Table};
     use aptos_framework::coin;
     use aptos_framework::aptos_account;
+    use aptos_framework::aptos_coin::AptosCoin;
 
     /// Error codes
     /// When a non-PodiumPass contract tries to perform restricted operations
@@ -45,9 +46,23 @@ module podium::PodiumPassCoin {
         metadata_objects: Table<String, Object<Metadata>>,
     }
 
+    /// Verifies if the caller is the PodiumPass contract
+    /// Checks both address and presence of AssetCapabilities resource
+    /// @param caller: The signer to verify
+    /// @return Boolean indicating if caller is PodiumPass
+    fun is_podium_pass(caller: &signer): bool {
+        let caller_address = signer::address_of(caller);
+        caller_address == @podium && exists<AssetCapabilities>(@podium)
+    }
+
     /// Initializes the PodiumPassCoin module
     /// Creates the central storage for managing all pass types
     /// @param admin: The signer of the module creator (podium address)
+    public fun init_module_for_test(admin: &signer) {
+        init_module(admin)
+    }
+
+    /// Internal initialization function
     fun init_module(admin: &signer) {
         move_to(admin, AssetCapabilities {
             mint_refs: table::new(),
@@ -217,14 +232,22 @@ module podium::PodiumPassCoin {
     /// @param target_id: The target account identifier
     /// @return The formatted asset symbol
     fun generate_target_symbol(target_id: String): String {
-        string::utf8(vector::append(PREFIX_TARGET, *string::bytes(&target_id)))
+        let prefix = string::utf8(b"TARGET_");
+        let result = string::utf8(vector::empty());
+        string::append(&mut result, prefix);
+        string::append(&mut result, target_id);
+        result
     }
 
     /// Generates a standardized symbol for outpost assets
     /// @param outpost_id: The outpost identifier
     /// @return The formatted asset symbol
     fun generate_outpost_symbol(outpost_id: String): String {
-        string::utf8(vector::append(PREFIX_OUTPOST, *string::bytes(&outpost_id)))
+        let prefix = string::utf8(b"OUTPOST_");
+        let result = string::utf8(vector::empty());
+        string::append(&mut result, prefix);
+        string::append(&mut result, outpost_id);
+        result
     }
 
     /// Retrieves the metadata object for a specific asset type
@@ -234,15 +257,6 @@ module podium::PodiumPassCoin {
         let caps = borrow_global<AssetCapabilities>(@podium);
         assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
         *table::borrow(&caps.metadata_objects, asset_symbol)
-    }
-
-    /// Verifies if the caller is the PodiumPass contract
-    /// Checks both address and presence of Config resource
-    /// @param caller: The signer to verify
-    /// @return Boolean indicating if caller is PodiumPass
-    fun is_podium_pass(caller: &signer): bool {
-        let caller_address = signer::address_of(caller);
-        caller_address == @podium && exists<podium::PodiumPass::Config>(caller_address)
     }
 
     /// Safely transfers $MOVE coins with recipient account verification

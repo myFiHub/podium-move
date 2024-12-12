@@ -3,10 +3,12 @@ module podium::PodiumPass {
     use std::signer;
     use std::string::{Self, String};
     use std::vector;
-    use aptos_framework::coin::{Self, Coin};
+    use std::option::{Self, Option};
+    use aptos_framework::coin;
     use aptos_framework::timestamp;
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::table::{Self, Table};
+    use aptos_framework::primary_fungible_store;
     use podium::PodiumPassCoin;
     use podium::PodiumOutpost;
     use aptos_framework::aptos_account;
@@ -63,8 +65,18 @@ module podium::PodiumPass {
         weight_c: u64,
     }
 
+    /// Helper function to check if a caller is authorized
+    public fun is_authorized(caller: &signer): bool {
+        signer::address_of(caller) == @podium && exists<Config>(@podium)
+    }
+
+    /// Helper function to check if Config exists
+    public fun has_config(addr: address): bool {
+        exists<Config>(addr)
+    }
+
     /// Subscription tier configuration
-    struct SubscriptionTier has store {
+    struct SubscriptionTier has store, copy, drop {
         name: String,
         week_price: u64,
         month_price: u64,
@@ -72,7 +84,7 @@ module podium::PodiumPass {
     }
 
     /// Tracks active subscriptions
-    struct Subscription has store {
+    struct Subscription has store, copy, drop {
         tier: String,
         start_time: u64,
         end_time: u64,
@@ -96,6 +108,16 @@ module podium::PodiumPass {
         referrer_address: Option<address>,
     }
 
+    /// Helper function to get duration value
+    public fun get_duration_week(): u64 { DURATION_WEEK }
+    public fun get_duration_month(): u64 { DURATION_MONTH }
+    public fun get_duration_year(): u64 { DURATION_YEAR }
+
+    #[test_only]
+    public fun init_module_for_test(admin: &signer) {
+        init_module(admin)
+    }
+
     /// Initialize module
     fun init_module(admin: &signer) {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
@@ -113,23 +135,23 @@ module podium::PodiumPass {
 
     /// Calculate price based on bonding curve
     /// price = initial_price * (1 + weight_a * supply^weight_c / weight_b)
-    fun calculate_price(supply: u64, is_sell: bool): u64 {
+    fun calculate_price(supply: u64, is_sell: bool): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
         
         let base_price = INITIAL_PRICE;
         if (supply == 0) {
-            return base_price
-        };
+            base_price
+        } else {
+            let supply_factor = power(supply, config.weight_c);
+            let weight_factor = (config.weight_a * supply_factor) / config.weight_b;
+            let price = base_price * (100 + weight_factor) / 100;
 
-        let supply_factor = power(supply, config.weight_c);
-        let weight_factor = (config.weight_a * supply_factor) / config.weight_b;
-        let price = base_price * (100 + weight_factor) / 100;
-
-        if (is_sell) {
-            price = price * (100 - SELL_DISCOUNT_PERCENT) / 100;
-        };
-
-        price
+            if (is_sell) {
+                price * (100 - SELL_DISCOUNT_PERCENT) / 100
+            } else {
+                price
+            }
+        }
     }
 
     /// Helper function for exponentiation
@@ -211,7 +233,7 @@ module podium::PodiumPass {
         target_or_outpost: address,
         amount: u64,
         referrer: Option<address>
-    ) acquires Config, PassConfig, FeeConfig {
+    ) acquires Config, PassConfig {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
 
         // Initialize PassConfig if it doesn't exist
@@ -222,17 +244,8 @@ module podium::PodiumPass {
             });
         };
 
-        // Initialize FeeConfig if it doesn't exist
-        if (!exists<FeeConfig>(target_or_outpost)) {
-            move_to(buyer, FeeConfig {
-                subject_address: target_or_outpost,
-                referrer_address: referrer,
-            });
-        };
-
         let pass_config = borrow_global_mut<PassConfig>(target_or_outpost);
-        let config = borrow_global<Config>(@podium);
-        let fee_config = borrow_global<FeeConfig>(target_or_outpost);
+        let _config = borrow_global<Config>(@podium);
 
         // Calculate total price
         let price = calculate_price(pass_config.supply, false);
@@ -249,18 +262,16 @@ module podium::PodiumPass {
         distribute_fees(buyer, total_cost, target_or_outpost, referrer);
 
         // Mint passes
-        let asset_symbol = if (exists<PodiumOutpost::OutpostData>(target_or_outpost)) {
-            // It's an outpost
+        let asset_symbol = if (PodiumOutpost::has_outpost_data(target_or_outpost)) {
             generate_outpost_symbol(target_or_outpost)
         } else {
-            // It's a target account
             generate_target_symbol(target_or_outpost)
         };
 
         let fa = PodiumPassCoin::mint(buyer, asset_symbol, amount);
         primary_fungible_store::deposit(buyer_addr, fa);
 
-        // Update supply and price
+        // Update supply
         pass_config.supply = pass_config.supply + amount;
         pass_config.last_price = price;
     }
@@ -272,35 +283,30 @@ module podium::PodiumPass {
         amount: u64
     ) acquires Config, PassConfig {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-        assert!(exists<PassConfig>(target_or_outpost), error::not_found(EPASS_NOT_FOUND));
 
         let pass_config = borrow_global_mut<PassConfig>(target_or_outpost);
-        
-        // Calculate sell price with discount
+        let _config = borrow_global<Config>(@podium);
+
+        // Calculate sell price
         let price = calculate_price(pass_config.supply - amount, true);
         let total_payment = price * amount;
 
-        // Verify seller has enough passes
-        let seller_addr = signer::address_of(seller);
-        let asset_symbol = if (exists<PodiumOutpost::OutpostData>(target_or_outpost)) {
+        // Burn passes
+        let asset_symbol = if (PodiumOutpost::has_outpost_data(target_or_outpost)) {
             generate_outpost_symbol(target_or_outpost)
         } else {
             generate_target_symbol(target_or_outpost)
         };
 
-        assert!(
-            PodiumPassCoin::balance(seller_addr, asset_symbol) >= amount,
-            error::invalid_argument(EINSUFFICIENT_PASS_BALANCE)
-        );
-
-        // Burn passes
-        let fa = primary_fungible_store::withdraw(seller, asset_symbol, amount);
+        let seller_addr = signer::address_of(seller);
+        let metadata = PodiumPassCoin::get_metadata(asset_symbol);
+        let fa = primary_fungible_store::withdraw(seller, metadata, amount);
         PodiumPassCoin::burn(seller, asset_symbol, fa);
 
-        // Pay seller using safe transfer
-        transfer_with_check(@podium, seller_addr, total_payment);
+        // Pay seller
+        transfer_with_check(seller, seller_addr, total_payment);
 
-        // Update supply and price
+        // Update supply
         pass_config.supply = pass_config.supply - amount;
         pass_config.last_price = price;
     }
@@ -331,24 +337,32 @@ module podium::PodiumPass {
         };
     }
 
-    /// Helper function to generate target symbol
-    fun generate_target_symbol(target: address): String {
-        string::utf8(b"TARGET_") + string::utf8(target)
+    /// Generate symbol for target passes
+    fun generate_target_symbol(_target: address): String {
+        let prefix = string::utf8(b"TARGET_");
+        let addr_str = string::utf8(vector::empty());
+        string::append(&mut addr_str, prefix);
+        string::append_utf8(&mut addr_str, vector::empty()); // TODO: Convert address to string
+        addr_str
     }
 
-    /// Helper function to generate outpost symbol
-    fun generate_outpost_symbol(outpost: address): String {
-        string::utf8(b"OUTPOST_") + string::utf8(outpost)
+    /// Generate symbol for outpost passes
+    fun generate_outpost_symbol(_outpost: address): String {
+        let prefix = string::utf8(b"OUTPOST_");
+        let addr_str = string::utf8(vector::empty());
+        string::append(&mut addr_str, prefix);
+        string::append_utf8(&mut addr_str, vector::empty()); // TODO: Convert address to string
+        addr_str
     }
 
     /// Subscribe to a target/outpost
     public entry fun subscribe(
-        subscriber: &signer,
+        buyer: &signer,
         target_or_outpost: address,
         tier_name: String,
         duration: u64,
         referrer: Option<address>
-    ) acquires Config, SubscriptionConfig, FeeConfig {
+    ) acquires Config, SubscriptionConfig {
         assert!(exists<SubscriptionConfig>(target_or_outpost), error::not_found(ESUBSCRIPTION_NOT_FOUND));
         assert!(
             duration == DURATION_WEEK || duration == DURATION_MONTH || duration == DURATION_YEAR,
@@ -392,10 +406,10 @@ module podium::PodiumPass {
         let end_time = start_time + duration_secs;
 
         // Process payment using distribute_fees which now uses transfer_with_check
-        distribute_fees(subscriber, tier_price, target_or_outpost, referrer);
+        distribute_fees(buyer, tier_price, target_or_outpost, referrer);
 
         // Create or update subscription
-        let subscriber_addr = signer::address_of(subscriber);
+        let subscriber_addr = signer::address_of(buyer);
         if (table::contains(&config.subscriptions, subscriber_addr)) {
             let sub = table::borrow_mut(&mut config.subscriptions, subscriber_addr);
             sub.tier = tier_name;
@@ -410,26 +424,26 @@ module podium::PodiumPass {
         };
     }
 
-    /// Verify access rights for a user
+    /// Verifies if a user has access to a target/outpost
+    /// Returns (has_access, tier)
+    /// @param user: The user address to check
+    /// @param target_or_outpost: The target/outpost address
+    /// @return (bool, Option<String>) - (has_access, tier)
     public fun verify_access(
         user: address,
         target_or_outpost: address
-    ): (bool, Option<String>) acquires PassConfig, SubscriptionConfig {
-        // Check lifetime pass ownership
-        let has_lifetime_pass = if (exists<PassConfig>(target_or_outpost)) {
-            let asset_symbol = if (exists<PodiumOutpost::OutpostData>(target_or_outpost)) {
+    ): (bool, Option<String>) acquires SubscriptionConfig {
+        // Check if user has lifetime pass
+        if (exists<PassConfig>(target_or_outpost)) {
+            let asset_symbol = if (PodiumOutpost::has_outpost_data(target_or_outpost)) {
                 generate_outpost_symbol(target_or_outpost)
             } else {
                 generate_target_symbol(target_or_outpost)
             };
-            PodiumPassCoin::balance(user, asset_symbol) > 0
-        } else {
-            false
-        };
 
-        // If user has a lifetime pass, they have full access
-        if (has_lifetime_pass) {
-            return (true, option::none())
+            if (PodiumPassCoin::balance(user, asset_symbol) > 0) {
+                return (true, option::none())
+            };
         };
 
         // Check subscription status

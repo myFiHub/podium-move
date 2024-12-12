@@ -1,9 +1,10 @@
 #[test_only]
 module podium::PodiumPassCoin_test {
-    use std::string;
+    use std::string::{Self, String};
     use std::signer;
+    use std::vector;
     use aptos_framework::account;
-    use aptos_framework::fungible_asset::{Self, FungibleAsset};
+    use aptos_framework::fungible_asset::{Self};
     use aptos_framework::primary_fungible_store;
     use podium::PodiumPassCoin;
     use podium::PodiumPass;
@@ -38,7 +39,7 @@ module podium::PodiumPassCoin_test {
         // Verify asset was created by checking metadata exists
         let asset_symbol = generate_test_target_symbol(target_id);
         let metadata = PodiumPassCoin::get_metadata(asset_symbol);
-        assert!(fungible_asset::name(&metadata) == name, 0);
+        assert!(fungible_asset::name<fungible_asset::Metadata>(metadata) == name, 0);
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789)]
@@ -53,7 +54,8 @@ module podium::PodiumPassCoin_test {
 
         // Try to mint with unauthorized user
         let asset_symbol = string::utf8(b"TEST_ASSET");
-        PodiumPassCoin::mint(user1, asset_symbol, 100);
+        let fa = PodiumPassCoin::mint(user1, asset_symbol, 100);
+        primary_fungible_store::deposit(signer::address_of(user1), fa);
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789)]
@@ -87,7 +89,8 @@ module podium::PodiumPassCoin_test {
     }
 
     // Helper functions
-    fun setup_test(aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer) {
+    fun setup_test(_aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer) {
+        // Create test accounts
         account::create_account_for_test(@podium);
         account::create_account_for_test(signer::address_of(user1));
         account::create_account_for_test(signer::address_of(user2));
@@ -107,6 +110,10 @@ module podium::PodiumPassCoin_test {
     }
 
     fun generate_test_target_symbol(target_id: String): String {
-        string::utf8(b"TARGET_") + target_id
+        let prefix = string::utf8(b"TARGET_");
+        let result = string::utf8(vector::empty());
+        string::append(&mut result, prefix);
+        string::append(&mut result, target_id);
+        result
     }
 } 

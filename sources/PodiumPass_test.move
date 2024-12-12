@@ -22,6 +22,11 @@ module podium::PodiumPass_test {
     const ENOT_AUTHORIZED: u64 = 1;
     const EINVALID_AMOUNT: u64 = 2;
 
+    // Duration constants
+    const DURATION_WEEK: u64 = 1;
+    const DURATION_MONTH: u64 = 2;
+    const DURATION_YEAR: u64 = 3;
+
     #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789, target = @0x123)]
     fun test_buy_pass(
         aptos_framework: &signer,
@@ -81,7 +86,7 @@ module podium::PodiumPass_test {
             user1,
             target_addr,
             string::utf8(b"premium"),
-            PodiumPass::DURATION_MONTH,
+            PodiumPass::get_duration_month(),
             referrer
         );
 
@@ -154,7 +159,7 @@ module podium::PodiumPass_test {
             user1,
             target_addr,
             string::utf8(b"basic"),
-            PodiumPass::DURATION_WEEK,
+            PodiumPass::get_duration_week(),
             option::none()
         );
 
@@ -188,9 +193,9 @@ module podium::PodiumPass_test {
         coin::deposit(signer::address_of(admin), coin::mint<AptosCoin>(100000, &mint_cap));
         
         // Initialize modules
-        PodiumPass::init_module(admin);
-        PodiumPassCoin::init_module(admin);
-        PodiumOutpost::init_module(admin);
+        PodiumPass::init_module_for_test(admin);
+        PodiumPassCoin::init_module_for_test(admin);
+        PodiumOutpost::init_module_for_test(admin);
 
         // Cleanup
         coin::destroy_burn_cap(burn_cap);

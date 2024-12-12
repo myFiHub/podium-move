@@ -55,7 +55,7 @@ module podium::PodiumIntegration_test {
             user2,
             user1_addr,
             string::utf8(b"vip"),
-            PodiumPass::DURATION_MONTH,
+            PodiumPass::get_duration_month(),
             option::none()
         );
 
@@ -65,7 +65,8 @@ module podium::PodiumIntegration_test {
         assert!(option::extract(&mut tier) == string::utf8(b"vip"), 2);
 
         // User2 buys lifetime pass
-        PodiumPass::buy_pass(user2, user1_addr, 1, option::none());
+        let fihub_addr = signer::address_of(fihub);
+        PodiumPass::buy_pass(user2, user1_addr, 1, option::some(fihub_addr));
 
         // Verify lifetime pass access
         let (has_access, tier) = PodiumPass::verify_access(signer::address_of(user2), user1_addr);
@@ -96,7 +97,8 @@ module podium::PodiumIntegration_test {
         let initial_subject = coin::balance<AptosCoin>(user1_addr);
 
         // Buy pass with referral
-        PodiumPass::buy_pass(user2, user1_addr, 1, option::some(fihub));
+        let fihub_addr = signer::address_of(fihub);
+        PodiumPass::buy_pass(user2, user1_addr, 1, option::some(fihub_addr));
 
         // Verify fee distribution
         let final_treasury = coin::balance<AptosCoin>(treasury_addr);
@@ -129,9 +131,9 @@ module podium::PodiumIntegration_test {
         coin::deposit(signer::address_of(admin), coin::mint<AptosCoin>(100000, &mint_cap));
 
         // Initialize all modules
-        PodiumPass::init_module(admin);
-        PodiumPassCoin::init_module(admin);
-        PodiumOutpost::init_module(admin);
+        PodiumPass::init_module_for_test(admin);
+        PodiumPassCoin::init_module_for_test(admin);
+        PodiumOutpost::init_module_for_test(admin);
 
         // Cleanup
         coin::destroy_burn_cap(burn_cap);

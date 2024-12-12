@@ -1,10 +1,12 @@
 module podium::PodiumOutpost {
+    friend podium::PodiumPass;
+
     use std::error;
     use std::signer;
     use std::string::{Self, String};
     use std::vector;
-    use std::option::{Self, Option};
-    use aptos_framework::object::{Self, Object, ConstructorRef};
+    use std::option::Self;
+    use aptos_framework::object::{Self, Object};
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_token_objects::collection;
     use aptos_token_objects::token::{Self, Token};
@@ -45,6 +47,11 @@ module podium::PodiumOutpost {
         metadata_uri: String,
     }
 
+    /// Helper function to check if an address has OutpostData
+    public fun has_outpost_data(addr: address): bool {
+        exists<OutpostData>(addr)
+    }
+
     /// Global configuration for the outpost system
     /// Stores collection-wide settings and pricing information
     struct Config has key {
@@ -68,6 +75,14 @@ module podium::PodiumOutpost {
     /// Initializes the PodiumOutpost module
     /// Sets up the NFT collection with royalties
     /// @param admin: The signer of the module creator
+    #[test_only]
+    /// Initialize module for testing
+    public fun init_module_for_test(admin: &signer) {
+        init_module(admin)
+    }
+
+    /// Initialize module with the given admin signer
+    /// @param admin The signer of the module creator
     fun init_module(admin: &signer) {
         // Create royalty config
         let royalty = royalty::create(
