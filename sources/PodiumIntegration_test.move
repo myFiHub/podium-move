@@ -91,7 +91,7 @@ module podium::PodiumIntegration_test {
         coin::register<AptosCoin>(user2);
         coin::transfer<AptosCoin>(admin, signer::address_of(user2), 10000);
 
-        // Record initial balances
+        // Record initial $MOVE balances
         let initial_treasury = coin::balance<AptosCoin>(treasury_addr);
         let initial_subject = coin::balance<AptosCoin>(user1_addr);
 

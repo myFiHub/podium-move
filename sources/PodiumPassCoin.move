@@ -245,11 +245,11 @@ module podium::PodiumPassCoin {
         caller_address == @podium && exists<podium::PodiumPass::Config>(caller_address)
     }
 
-    /// Safely transfers APT coins with recipient account verification
+    /// Safely transfers $MOVE coins with recipient account verification
     /// Handles both registered and unregistered recipient accounts
     /// @param sender: The signer of the sender
     /// @param recipient: The recipient address
-    /// @param amount: Amount of APT to transfer
+    /// @param amount: Amount of $MOVE to transfer
     fun transfer_with_check(sender: &signer, recipient: address, amount: u64) {
         let sender_addr = signer::address_of(sender);
         assert!(

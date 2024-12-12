@@ -37,7 +37,7 @@ module podium::PodiumPass {
     const DEFAULT_WEIGHT_A: u64 = 80; // 80%
     const DEFAULT_WEIGHT_B: u64 = 50; // 50%
     const DEFAULT_WEIGHT_C: u64 = 2;  // Adjustment factor
-    const INITIAL_PRICE: u64 = 1; // Initial price in APT
+    const INITIAL_PRICE: u64 = 1; // Initial price in $MOVE
 
     /// Time constants
     const SECONDS_PER_WEEK: u64 = 7 * 24 * 60 * 60;
@@ -186,11 +186,11 @@ module podium::PodiumPass {
         });
     }
 
-    /// Safely transfers APT coins with recipient account verification
+    /// Safely transfers $MOVE coins with recipient account verification
     /// Handles both registered and unregistered recipient accounts
     /// @param sender: The signer of the sender
     /// @param recipient: The recipient address
-    /// @param amount: Amount of APT to transfer
+    /// @param amount: Amount of $MOVE to transfer
     fun transfer_with_check(sender: &signer, recipient: address, amount: u64) {
         let sender_addr = signer::address_of(sender);
         assert!(

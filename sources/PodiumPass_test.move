@@ -114,10 +114,10 @@ module podium::PodiumPass_test {
         let target_addr = signer::address_of(target);
         let referrer = option::none();
 
-        // First purchase should be at initial price
+        // First purchase should be at initial price (1 $MOVE)
         PodiumPass::buy_pass(user1, target_addr, 1, referrer);
 
-        // Second purchase should be more expensive
+        // Second purchase should be more expensive in $MOVE
         PodiumPass::buy_pass(user2, target_addr, 1, referrer);
 
         // Verify increasing prices through balances

@@ -98,7 +98,7 @@ module podium::PodiumOutpost {
     /// Sets the default price for new outposts
     /// Only callable by admin
     /// @param admin: The admin signer
-    /// @param price: New default price in APT
+    /// @param price: New default price in $MOVE
     public entry fun set_default_price(admin: &signer, price: u64) acquires Config {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
         let config = borrow_global_mut<Config>(@podium);
@@ -109,7 +109,7 @@ module podium::PodiumOutpost {
     /// Only callable by admin
     /// @param admin: The admin signer
     /// @param outpost_name: Name of the outpost
-    /// @param price: Custom price in APT
+    /// @param price: Custom price in $MOVE
     public entry fun set_custom_price(
         admin: &signer,
         outpost_name: String,

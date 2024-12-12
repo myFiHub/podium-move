@@ -56,7 +56,7 @@ module podium::PodiumOutpost_test {
     ) {
         setup_test(aptos_framework, admin, fihub, user1);
 
-        // Set default and custom prices
+        // Set default and custom prices in $MOVE
         let outpost_name = string::utf8(b"premium_outpost");
         PodiumOutpost::set_default_price(admin, 1000);
         PodiumOutpost::set_custom_price(admin, outpost_name, 2000);
