@@ -1,232 +1,190 @@
 module podium::PodiumPassCoin {
-    use std::string::{Self, String};
+    use std::error;
     use std::signer;
+    use std::string::{Self, String};
+    use std::option;
     use std::vector;
-    use aptos_framework::account;
-    use aptos_framework::event;
-    use aptos_framework::timestamp;
-    use aptos_framework::coin::{Self, BurnCapability, MintCapability};
-    use aptos_std::type_info;
+    use aptos_framework::object::{Self, Object, ConstructorRef};
+    use aptos_framework::fungible_asset::{Self, Metadata, FungibleAsset, MintRef, TransferRef, BurnRef};
+    use aptos_framework::primary_fungible_store;
+    use aptos_framework::table::{Self, Table};
 
-    friend podium::PodiumPass;
+    /// Error codes
+    const ENOT_PODIUM_PASS: u64 = 1;
+    const EZERO_AMOUNT: u64 = 2;
+    const EASSET_ALREADY_EXISTS: u64 = 3;
+    const EASSET_DOES_NOT_EXIST: u64 = 4;
 
-    // Error codes
-    const NOT_ADMIN: u64 = 1;
-    const INSUFFICIENT_BALANCE: u64 = 2;
-    const RECIPIENT_NOT_REGISTERED: u64 = 3;
+    /// Constants
+    const DECIMALS: u8 = 0; // Since passes are whole units
+    const PREFIX_TARGET: vector<u8> = b"TARGET_";
+    const PREFIX_OUTPOST: vector<u8> = b"OUTPOST_";
 
-    struct PassCoin<phantom TargetAddress> has key {}
-
-    struct PassBalance has store {
-        amount: u64
+    /// Stores capabilities for all asset types
+    struct AssetCapabilities has key {
+        mint_refs: Table<String, MintRef>,
+        burn_refs: Table<String, BurnRef>,
+        transfer_refs: Table<String, TransferRef>,
+        metadata_objects: Table<String, Object<Metadata>>,
     }
 
-    struct PassCoinCapability<phantom TargetAddress> has key {
-        burn_cap: BurnCapability<PassCoin<TargetAddress>>,
-        mint_cap: MintCapability<PassCoin<TargetAddress>>
+    /// Initialize the PodiumPassCoin module
+    fun init_module(admin: &signer) {
+        move_to(admin, AssetCapabilities {
+            mint_refs: table::new(),
+            burn_refs: table::new(),
+            transfer_refs: table::new(),
+            metadata_objects: table::new(),
+        });
     }
 
-    struct PassCoinInfo<phantom TargetAddress> has key {
+    /// Create a new asset type for a target account
+    public fun create_target_asset(
+        caller: &signer,
+        target_id: String,
         name: String,
-        total_supply: u64,
-        mint_events: event::EventHandle<MintEvent>,
-        burn_events: event::EventHandle<BurnEvent>,
-        transfer_events: event::EventHandle<TransferEvent>
-    }
-
-    struct PassCoinRegistry has key {
-        targets: vector<String>
-    }
-
-    struct MintEvent has store, drop {
-        recipient: address,
-        amount: u64,
-        timestamp: u64
-    }
-
-    struct BurnEvent has store, drop {
-        holder: address,
-        amount: u64,
-        timestamp: u64
-    }
-
-    struct TransferEvent has store, drop {
-        from: address,
-        to: address,
-        amount: u64,
-        timestamp: u64
-    }
-
-    public fun initialize_target<TargetAddress>(
-        admin: &signer,
-        name: String
-    ) {
-        let admin_addr = signer::address_of(admin);
-        assert!(admin_addr == @admin, NOT_ADMIN);
-
-        if (!exists<PassCoinRegistry>(@podium)) {
-            move_to(admin, PassCoinRegistry {
-                targets: vector::empty()
-            });
-        };
-
-        let registry = borrow_global_mut<PassCoinRegistry>(@podium);
-        vector::push_back(&mut registry.targets, name);
-
-        let (burn_cap, freeze_cap, mint_cap) = coin::initialize<PassCoin<TargetAddress>>(
-            admin,
-            name,
-            string::utf8(b"PASS"),
-            6,
-            true
-        );
-
-        move_to(admin, PassCoinCapability<TargetAddress> {
-            burn_cap,
-            mint_cap
-        });
-
-        move_to(admin, PassCoinInfo<TargetAddress> {
-            name,
-            total_supply: 0,
-            mint_events: account::new_event_handle<MintEvent>(admin),
-            burn_events: account::new_event_handle<BurnEvent>(admin),
-            transfer_events: account::new_event_handle<TransferEvent>(admin)
-        });
-
-        coin::destroy_freeze_cap(freeze_cap);
-    }
-
-    public fun mint_pass<TargetAddress>(
-        admin: &signer,
-        recipient: address,
-        amount: u64
-    ) {
-        let admin_addr = signer::address_of(admin);
-        assert!(admin_addr == @admin, NOT_ADMIN);
-
-        let cap = borrow_global<PassCoinCapability<TargetAddress>>(@podium);
-        let info = borrow_global_mut<PassCoinInfo<TargetAddress>>(@podium);
-
-        let coins = coin::mint(amount, &cap.mint_cap);
-        if (!account::exists_at(recipient)) {
-            account::create_account_for_test(recipient);
-        };
-        coin::deposit(recipient, coins);
-
-        // Update supply
-        info.total_supply = info.total_supply + amount;
-
-        // Emit event
-        event::emit_event(&mut info.mint_events, MintEvent {
-            recipient,
-            amount,
-            timestamp: timestamp::now_seconds()
-        });
-    }
-
-    public fun burn_pass<TargetAddress>(
-        holder: &signer,
-        amount: u64
-    ) {
-        let holder_addr = signer::address_of(holder);
-        let balance = get_pass_balance<TargetAddress>(holder_addr);
-        assert!(balance.amount >= amount, INSUFFICIENT_BALANCE);
-
-        let cap = borrow_global<PassCoinCapability<TargetAddress>>(@podium);
-        let info = borrow_global_mut<PassCoinInfo<TargetAddress>>(@podium);
-
-        let coins = coin::withdraw<PassCoin<TargetAddress>>(holder, amount);
-        coin::burn(coins, &cap.burn_cap);
-
-        // Update supply
-        info.total_supply = info.total_supply - amount;
-
-        // Emit event
-        event::emit_event(&mut info.burn_events, BurnEvent {
-            holder: holder_addr,
-            amount,
-            timestamp: timestamp::now_seconds()
-        });
-    }
-
-    public fun transfer_pass<TargetAddress>(
-        from: &signer,
-        to: address,
-        amount: u64
-    ) acquires PassCoinInfo {
-        let from_addr = signer::address_of(from);
+        icon_uri: String,
+        project_uri: String
+    ) acquires AssetCapabilities {
+        // Only PodiumPass contract can call this
+        assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
         
-        // Check sender's balance
-        assert!(
-            coin::balance<PassCoin<TargetAddress>>(from_addr) >= amount,
-            INSUFFICIENT_BALANCE
+        let asset_symbol = generate_target_symbol(target_id);
+        create_asset(caller, asset_symbol, name, icon_uri, project_uri);
+    }
+
+    /// Create a new asset type for an outpost
+    public fun create_outpost_asset(
+        caller: &signer,
+        outpost_id: String,
+        name: String,
+        icon_uri: String,
+        project_uri: String
+    ) acquires AssetCapabilities {
+        // Only PodiumPass contract can call this
+        assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
+        
+        let asset_symbol = generate_outpost_symbol(outpost_id);
+        create_asset(caller, asset_symbol, name, icon_uri, project_uri);
+    }
+
+    /// Internal function to create a new asset type
+    fun create_asset(
+        admin: &signer,
+        asset_symbol: String,
+        name: String,
+        icon_uri: String,
+        project_uri: String,
+    ) acquires AssetCapabilities {
+        let caps = borrow_global_mut<AssetCapabilities>(@podium);
+        assert!(!table::contains(&caps.metadata_objects, asset_symbol), error::already_exists(EASSET_ALREADY_EXISTS));
+
+        // Create metadata object
+        let constructor_ref = &object::create_named_object(
+            admin,
+            *string::bytes(&asset_symbol)
         );
 
-        // Check if recipient is registered
-        if (!coin::is_account_registered<PassCoin<TargetAddress>>(to)) {
-            // Create account and register coin store if needed
-            if (!account::exists_at(to)) {
-                account::create_account_for_test(to); // For testing only
-            };
-            coin::register<PassCoin<TargetAddress>>(
-                &account::create_signer_for_test(to) // For testing only
-            );
-        };
+        // Initialize the fungible asset with metadata
+        primary_fungible_store::create_primary_store_enabled_fungible_asset(
+            constructor_ref,
+            option::none(), // No maximum supply
+            name,
+            asset_symbol,
+            DECIMALS,
+            icon_uri,
+            project_uri,
+        );
 
-        // Perform transfer
-        let coins = coin::withdraw<PassCoin<TargetAddress>>(from, amount);
-        coin::deposit(to, coins);
+        // Generate and store capabilities
+        let mint_ref = fungible_asset::generate_mint_ref(constructor_ref);
+        let burn_ref = fungible_asset::generate_burn_ref(constructor_ref);
+        let transfer_ref = fungible_asset::generate_transfer_ref(constructor_ref);
+        
+        let metadata = object::address_to_object<Metadata>(
+            object::create_object_address(&@podium, *string::bytes(&asset_symbol))
+        );
 
-        // Emit transfer event
-        let info = borrow_global_mut<PassCoinInfo<TargetAddress>>(@podium);
-        event::emit_event(&mut info.transfer_events, TransferEvent {
-            from: from_addr,
-            to,
-            amount,
-            timestamp: timestamp::now_seconds()
-        });
+        table::add(&mut caps.mint_refs, asset_symbol, mint_ref);
+        table::add(&mut caps.burn_refs, asset_symbol, burn_ref);
+        table::add(&mut caps.transfer_refs, asset_symbol, transfer_ref);
+        table::add(&mut caps.metadata_objects, asset_symbol, metadata);
     }
 
-    public fun get_pass_balance<TargetAddress>(holder: address): PassBalance {
-        let target = type_info::type_name<TargetAddress>();
-        let amount = if (coin::is_account_registered<PassCoin<TargetAddress>>(holder)) {
-            coin::balance<PassCoin<TargetAddress>>(holder)
-        } else {
-            0
-        };
-
-        PassBalance { amount }
+    /// Mint new passes for a specific asset type
+    public fun mint(
+        caller: &signer,
+        asset_symbol: String,
+        amount: u64
+    ): FungibleAsset acquires AssetCapabilities {
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
+        assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
+        
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.mint_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let mint_ref = table::borrow(&caps.mint_refs, asset_symbol);
+        fungible_asset::mint(mint_ref, amount)
     }
 
-    public fun get_all_holdings(holder: address): vector<PassBalance> {
-        let registry = borrow_global<PassCoinRegistry>(@podium);
-        let holdings = vector::empty<PassBalance>();
-        let i = 0;
-
-        while (i < vector::length(&registry.targets)) {
-            let target = vector::borrow(&registry.targets, i);
-            let balance = get_pass_balance<String>(holder);
-            if (balance.amount > 0) {
-                vector::push_back(&mut holdings, balance);
-            };
-            i = i + 1;
-        };
-
-        holdings
+    /// Burn passes of a specific asset type
+    public fun burn(
+        caller: &signer,
+        asset_symbol: String,
+        fa: FungibleAsset
+    ) acquires AssetCapabilities {
+        assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
+        
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.burn_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let burn_ref = table::borrow(&caps.burn_refs, asset_symbol);
+        fungible_asset::burn(burn_ref, fa)
     }
 
-    public fun get_total_supply<TargetAddress>(): u64 acquires PassCoinInfo {
-        borrow_global<PassCoinInfo<TargetAddress>>(@podium).total_supply
+    /// Transfer passes between accounts for a specific asset type
+    public fun transfer(
+        from: &signer,
+        asset_symbol: String,
+        to: address,
+        amount: u64,
+    ) acquires AssetCapabilities {
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
+        primary_fungible_store::transfer(from, *metadata, to, amount);
     }
 
-    /// Get the amount of a pass balance
-    public fun get_pass_balance_amount(balance: &PassBalance): u64 {
-        balance.amount
+    /// Get balance of an account for a specific asset type
+    public fun balance(account: address, asset_symbol: String): u64 acquires AssetCapabilities {
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
+        primary_fungible_store::balance(account, *metadata)
     }
 
-    /// Check if a pass balance has any amount
-    public fun has_pass_balance(balance: &PassBalance): bool {
-        balance.amount > 0
+    /// Helper function to generate target asset symbol
+    fun generate_target_symbol(target_id: String): String {
+        string::utf8(vector::append(PREFIX_TARGET, *string::bytes(&target_id)))
+    }
+
+    /// Helper function to generate outpost asset symbol
+    fun generate_outpost_symbol(outpost_id: String): String {
+        string::utf8(vector::append(PREFIX_OUTPOST, *string::bytes(&outpost_id)))
+    }
+
+    /// Get metadata object for a specific asset type
+    public fun get_metadata(asset_symbol: String): Object<Metadata> acquires AssetCapabilities {
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        *table::borrow(&caps.metadata_objects, asset_symbol)
+    }
+
+    /// Helper function to check if caller is the PodiumPass contract
+    fun is_podium_pass(caller: &signer): bool {
+        let caller_address = signer::address_of(caller);
+        caller_address == @podium && exists<podium::PodiumPass::Config>(caller_address)
     }
 } 
