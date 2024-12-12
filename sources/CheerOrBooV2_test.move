@@ -1,10 +1,9 @@
 #[test_only]
 module CheerOrBooV2::CheerOrBooV2_test {
     use std::vector;
-    use std::signer;
     use aptos_framework::account;
     use aptos_framework::coin;
-    use aptos_framework::aptos_coin::AptosCoin;
+    use aptos_framework::aptos_coin::{Self, AptosCoin};
     use CheerOrBooV2::CheerOrBooV2;
 
     const SENDER: address = @0x123;
@@ -12,7 +11,8 @@ module CheerOrBooV2::CheerOrBooV2_test {
     const PARTICIPANT1: address = @0x789;
     const PARTICIPANT2: address = @0x321;
 
-    fun setup(): (signer, signer, signer, signer) {
+    #[test(aptos_framework = @0x1)]
+    fun test_cheer(aptos_framework: &signer) {
         // Create test accounts
         let sender = account::create_account_for_test(SENDER);
         let target = account::create_account_for_test(TARGET);
@@ -20,7 +20,7 @@ module CheerOrBooV2::CheerOrBooV2_test {
         let participant2 = account::create_account_for_test(PARTICIPANT2);
 
         // Initialize AptosCoin for testing
-        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(&sender);
+        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(aptos_framework);
 
         // Register and fund accounts
         coin::register<AptosCoin>(&sender);
@@ -29,16 +29,9 @@ module CheerOrBooV2::CheerOrBooV2_test {
         coin::register<AptosCoin>(&participant2);
 
         // Fund sender with test coins
-        let coins = coin::mint(1000000000, &mint_cap);
+        let coins = coin::mint<AptosCoin>(1000000000, &mint_cap);
         coin::deposit(SENDER, coins);
 
-        (sender, target, participant1, participant2)
-    }
-
-    #[test]
-    fun test_cheer() {
-        let (sender, target, participant1, participant2) = setup();
-        
         let participants = vector::empty<address>();
         vector::push_back(&mut participants, PARTICIPANT1);
         vector::push_back(&mut participants, PARTICIPANT2);
@@ -67,11 +60,30 @@ module CheerOrBooV2::CheerOrBooV2_test {
         assert!(coin::balance<AptosCoin>(TARGET) == initial_target_balance + target_amount, 1);
         assert!(coin::balance<AptosCoin>(PARTICIPANT1) == initial_p1_balance + participant_amount, 2);
         assert!(coin::balance<AptosCoin>(PARTICIPANT2) == initial_p2_balance + participant_amount, 3);
+
+        // Clean up
+        coin::destroy_burn_cap<AptosCoin>(burn_cap);
+        coin::destroy_mint_cap<AptosCoin>(mint_cap);
     }
 
-    #[test]
-    fun test_boo() {
-        let (sender, target, participant1, participant2) = setup();
+    #[test(aptos_framework = @0x1)]
+    fun test_boo(aptos_framework: &signer) {
+        // Create test accounts
+        let sender = account::create_account_for_test(SENDER);
+        let target = account::create_account_for_test(TARGET);
+        let participant1 = account::create_account_for_test(PARTICIPANT1);
+
+        // Initialize AptosCoin for testing
+        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(aptos_framework);
+
+        // Register and fund accounts
+        coin::register<AptosCoin>(&sender);
+        coin::register<AptosCoin>(&target);
+        coin::register<AptosCoin>(&participant1);
+
+        // Fund sender with test coins
+        let coins = coin::mint<AptosCoin>(1000000000, &mint_cap);
+        coin::deposit(SENDER, coins);
         
         let participants = vector::empty<address>();
         vector::push_back(&mut participants, PARTICIPANT1);
@@ -98,12 +110,27 @@ module CheerOrBooV2::CheerOrBooV2_test {
 
         assert!(coin::balance<AptosCoin>(TARGET) == initial_target_balance + target_amount, 1);
         assert!(coin::balance<AptosCoin>(PARTICIPANT1) == initial_p1_balance + participant_amount, 2);
+
+        // Clean up
+        coin::destroy_burn_cap<AptosCoin>(burn_cap);
+        coin::destroy_mint_cap<AptosCoin>(mint_cap);
     }
 
-    #[test]
+    #[test(aptos_framework = @0x1)]
     #[expected_failure(abort_code = 102)]
-    fun test_insufficient_balance() {
-        let (sender, target, participant1, _) = setup();
+    fun test_insufficient_balance(aptos_framework: &signer) {
+        // Create test accounts
+        let sender = account::create_account_for_test(SENDER);
+        let target = account::create_account_for_test(TARGET);
+        let participant1 = account::create_account_for_test(PARTICIPANT1);
+
+        // Initialize AptosCoin for testing
+        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(aptos_framework);
+
+        // Register accounts
+        coin::register<AptosCoin>(&sender);
+        coin::register<AptosCoin>(&target);
+        coin::register<AptosCoin>(&participant1);
         
         let participants = vector::empty<address>();
         vector::push_back(&mut participants, PARTICIPANT1);
@@ -118,5 +145,9 @@ module CheerOrBooV2::CheerOrBooV2_test {
             50,
             b"test_insufficient"
         );
+
+        // Clean up
+        coin::destroy_burn_cap<AptosCoin>(burn_cap);
+        coin::destroy_mint_cap<AptosCoin>(mint_cap);
     }
 } 
