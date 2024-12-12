@@ -1,154 +1,112 @@
 #[test_only]
 module podium::PodiumPassCoin_test {
     use std::string;
-    use std::vector;
-    use aptos_framework::account;
-    use aptos_framework::timestamp;
-    use aptos_framework::coin::{Self};
-    use aptos_framework::aptos_coin::{Self, AptosCoin};
     use std::signer;
-
-    use podium::PodiumPass;
+    use aptos_framework::account;
+    use aptos_framework::fungible_asset::{Self, FungibleAsset};
+    use aptos_framework::primary_fungible_store;
     use podium::PodiumPassCoin;
-    use podium::PodiumPassCoin::{Self, PassBalance};
+    use podium::PodiumPass;
 
     // Test addresses
-    const ADMIN: address = @admin;
-    const TREASURY: address = @treasury;
+    const ADMIN: address = @0x123;
     const USER1: address = @0x456;
     const USER2: address = @0x789;
 
-    struct TEST_TARGET {}
+    // Test error codes
+    const ENOT_PODIUM_PASS: u64 = 1;
+    const EZERO_AMOUNT: u64 = 2;
 
-    fun setup(framework: &signer, admin: &signer) {
-        timestamp::set_time_has_started_for_testing(framework);
-        account::create_account_for_test(ADMIN);
-        account::create_account_for_test(TREASURY);
-        account::create_account_for_test(USER1);
-        account::create_account_for_test(USER2);
+    #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789)]
+    fun test_create_target_asset(
+        aptos_framework: &signer,
+        admin: &signer,
+        user1: &signer,
+        user2: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, admin, user1, user2);
+
+        // Create a target asset
+        let target_id = string::utf8(b"target1");
+        let name = string::utf8(b"Target Pass");
+        let icon_uri = string::utf8(b"https://example.com/icon.png");
+        let project_uri = string::utf8(b"https://example.com/project");
+
+        PodiumPassCoin::create_target_asset(admin, target_id, name, icon_uri, project_uri);
+
+        // Verify asset was created by checking metadata exists
+        let asset_symbol = generate_test_target_symbol(target_id);
+        let metadata = PodiumPassCoin::get_metadata(asset_symbol);
+        assert!(fungible_asset::name(&metadata) == name, 0);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789)]
+    #[expected_failure(abort_code = ENOT_PODIUM_PASS)]
+    fun test_unauthorized_mint(
+        aptos_framework: &signer,
+        admin: &signer,
+        user1: &signer,
+        user2: &signer,
+    ) {
+        setup_test(aptos_framework, admin, user1, user2);
+
+        // Try to mint with unauthorized user
+        let asset_symbol = string::utf8(b"TEST_ASSET");
+        PodiumPassCoin::mint(user1, asset_symbol, 100);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789)]
+    fun test_mint_and_transfer(
+        aptos_framework: &signer,
+        admin: &signer,
+        user1: &signer,
+        user2: &signer,
+    ) {
+        setup_test(aptos_framework, admin, user1, user2);
+
+        // Create and mint asset
+        let target_id = string::utf8(b"target1");
+        let asset_symbol = generate_test_target_symbol(target_id);
+        create_test_asset(admin, target_id);
         
-        // Initialize modules
-        PodiumPass::initialize(admin);
-        PodiumPassCoin::initialize_target<TEST_TARGET>(admin, string::utf8(b"Test Pass"));
-    }
-
-    fun setup_test_coins(admin: &signer, account: address, amount: u64) {
-        let coins = coin::mint<AptosCoin>(amount, &aptos_coin::mint_capability());
-        coin::deposit(account, coins);
-    }
-
-    #[test(framework = @0x1, admin = @admin)]
-    public fun test_initialize_target(framework: &signer, admin: &signer) {
-        setup(framework, admin);
-
-        // Verify initialization by checking if we can get pass balance
-        let balance = PodiumPassCoin::get_pass_balance<address>(ADMIN);
-        assert!(balance.amount == 0, 1);
-    }
-
-    #[test(framework = @0x1, admin = @admin)]
-    public fun test_pass_transfer(framework: &signer, admin: &signer) {
-        setup(framework, admin);
-        setup_test_coins(admin, USER1, 10000000);
-
-        // Create user signers
-        let user1_signer = account::create_signer_for_test(USER1);
+        let amount = 100;
+        let fa = PodiumPassCoin::mint(admin, asset_symbol, amount);
         
-        // Purchase pass through PodiumPass
-        let payment = coin::withdraw<AptosCoin>(&user1_signer, 1000000);
-        PodiumPass::purchase_lifetime_access<TEST_TARGET>(
-            &user1_signer,
-            USER1,
-            1,
-            payment
+        // Transfer to user1
+        let user1_addr = signer::address_of(user1);
+        primary_fungible_store::deposit(user1_addr, fa);
+
+        // Verify balance
+        assert!(PodiumPassCoin::balance(user1_addr, asset_symbol) == amount, 0);
+
+        // Test transfer between users
+        PodiumPassCoin::transfer(user1, asset_symbol, signer::address_of(user2), 50);
+        assert!(PodiumPassCoin::balance(signer::address_of(user2), asset_symbol) == 50, 1);
+        assert!(PodiumPassCoin::balance(user1_addr, asset_symbol) == 50, 2);
+    }
+
+    // Helper functions
+    fun setup_test(aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer) {
+        account::create_account_for_test(@podium);
+        account::create_account_for_test(signer::address_of(user1));
+        account::create_account_for_test(signer::address_of(user2));
+        
+        // Initialize PodiumPass (required for authorization)
+        PodiumPass::init_module_for_test(admin);
+    }
+
+    fun create_test_asset(admin: &signer, target_id: String) {
+        PodiumPassCoin::create_target_asset(
+            admin,
+            target_id,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"https://example.com/icon.png"),
+            string::utf8(b"https://example.com/project"),
         );
-
-        // Transfer pass to USER2
-        PodiumPassCoin::transfer_pass<TEST_TARGET>(&user1_signer, USER2, 1);
-
-        // Verify balances
-        let balance1 = PodiumPassCoin::get_pass_balance<address>(USER1);
-        let balance2 = PodiumPassCoin::get_pass_balance<address>(USER2);
-        assert!(balance1.amount == 0, 1);
-        assert!(balance2.amount == 1, 2);
     }
 
-    #[test(framework = @0x1, admin = @admin)]
-    public fun test_get_all_holdings(framework: &signer, admin: &signer) {
-        setup(framework, admin);
-        setup_test_coins(admin, USER1, 10000000);
-
-        // Create user signer
-        let user1_signer = account::create_signer_for_test(USER1);
-
-        // Purchase pass through PodiumPass
-        let payment = coin::withdraw<AptosCoin>(&user1_signer, 1000000);
-        PodiumPass::purchase_lifetime_access<TEST_TARGET>(
-            &user1_signer,
-            USER1,
-            1,
-            payment
-        );
-
-        // Get all holdings
-        let holdings = PodiumPassCoin::get_all_holdings(USER1);
-        assert!(vector::length(&holdings) == 1, 1);
-
-        let holding = vector::borrow(&holdings, 0);
-        assert!(holding.amount == 1, 2);
-    }
-
-    #[test(framework = @0x1, admin = @admin)]
-    public fun test_total_supply(framework: &signer, admin: &signer) {
-        setup(framework, admin);
-        setup_test_coins(admin, USER1, 10000000);
-
-        // Get initial supply
-        let initial_supply = PodiumPassCoin::get_total_supply<TEST_TARGET>();
-        assert!(initial_supply == 0, 1);
-
-        // Create user signer
-        let user1_signer = account::create_signer_for_test(USER1);
-
-        // Purchase pass through PodiumPass
-        let payment = coin::withdraw<AptosCoin>(&user1_signer, 1000000);
-        PodiumPass::purchase_lifetime_access<TEST_TARGET>(
-            &user1_signer,
-            USER1,
-            1,
-            payment
-        );
-
-        // Verify supply increased
-        let final_supply = PodiumPassCoin::get_total_supply<TEST_TARGET>();
-        assert!(final_supply == 1, 2);
-    }
-
-    #[test(framework = @0x1, admin = @admin)]
-    #[expected_failure(abort_code = 2)]
-    public fun test_insufficient_balance_transfer(framework: &signer, admin: &signer) {
-        setup(framework, admin);
-        setup_test_coins(admin, USER1, 10000000);
-
-        // Create user signer
-        let user1_signer = account::create_signer_for_test(USER1);
-
-        // Try to transfer without having any passes (should fail)
-        PodiumPassCoin::transfer_pass<TEST_TARGET>(&user1_signer, USER2, 1);
-    }
-
-    #[test(sender = @0x123)]
-    public entry fun test_initialize(sender: &signer) {
-        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(sender);
-        let coins = coin::mint<AptosCoin>(1000000000, &mint_cap);
-        coin::register<AptosCoin>(sender);
-        coin::deposit(signer::address_of(sender), coins);
-
-        PodiumPassCoin::initialize(sender);
-        let balance = PodiumPassCoin::get_pass_balance<address>(signer::address_of(sender));
-        assert!(PodiumPassCoin::get_pass_balance_amount(&balance) == 0, 1);
-
-        coin::destroy_burn_cap(burn_cap);
-        coin::destroy_mint_cap(mint_cap);
+    fun generate_test_target_symbol(target_id: String): String {
+        string::utf8(b"TARGET_") + target_id
     }
 } 

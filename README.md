@@ -2,12 +2,50 @@
 
 A decentralized protocol suite built on Movement, including subscription management and social tipping features.
 
+##Podium
+Podium's foundation is simple yet transformative: content creators and audiences should actively shape and own the conversations they engage in. Our “Showtime at Apollo”-style moderation system allows listeners to influence speaker time by paying to adjust it in real-time, creating an organic attention economy where creators and participants are rewarded for their contributions. This breaks the traditional passive consumption model, empowering users to become part of the content itself.
+In the future, social media will shift from passive listening to active participation. Platforms like Podium will allow users to influence conversations, while Web3 technology enables decentralized ownership of engagement. Podium is leading this shift, turning engagement into a monetizable experience for both creators and audiences.
+Our key assumptions are that users want more control over conversations, creators need better monetization tools, and Web3 adoption will grow.
+
+
 ## Contracts
 
 - **PodiumPass**: Core subscription and lifetime access management
 - **PodiumPassCoin**: Token implementation for lifetime passes
 - **PodiumOutpost**: Outpost management and access control
 - **CheerOrBooV2**: Social tipping and reward distribution system
+
+
+Podium Pass
+// Core functionality:
+Manages lifetime passes purchases for target accounts/addresses
+Manages temporary subscriptions for target accounts/addresses and outposts
+Handles buying/selling of passes
+Is the initiatior of Mints(buys) and redemption(sell) of lifetime passes as the owner of that functionality in PodiumPassCoin
+Controls fee distribution
+Verifies access rights
+Bonding curve for pass pricing (buying and selling)
+Subscription management
+Fee distribution (protocol, subject, referral)
+Access verification for both passes and subscriptions
+Supports subscription different tiers that can be set by Target Accounts/Addresses or the Owner of Outposts
+Lifetime passes can only be minted and redeemed in whole values through Podium Pass
+tracks subscription and lifetime pass ownership
+
+Podium Pass Coin
+// Core functionality:
+Creates fungible tokens for lifetime access
+The underlying logic for minting, burning
+Contract responsible for trading /transferability of passes
+Tracks pass ownership and balances
+
+Podium Outposts
+// Core functionality:
+Creates and manages NFT-based spaces ("Outposts")
+Tracks ownership and metadata of Outposts
+Integrates with access control
+Handles Outpost-specific fee distribution
+Sells Outpost NFTs to Owners
 
 ## Prerequisites
 

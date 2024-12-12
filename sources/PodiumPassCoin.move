@@ -8,27 +8,46 @@ module podium::PodiumPassCoin {
     use aptos_framework::fungible_asset::{Self, Metadata, FungibleAsset, MintRef, TransferRef, BurnRef};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::table::{Self, Table};
+    use aptos_framework::coin;
+    use aptos_framework::aptos_account;
 
     /// Error codes
+    /// When a non-PodiumPass contract tries to perform restricted operations
     const ENOT_PODIUM_PASS: u64 = 1;
+    /// When attempting to mint/transfer zero tokens
     const EZERO_AMOUNT: u64 = 2;
+    /// When trying to create an asset type that already exists
     const EASSET_ALREADY_EXISTS: u64 = 3;
+    /// When trying to operate on a non-existent asset type
     const EASSET_DOES_NOT_EXIST: u64 = 4;
+    /// When trying to transfer more coins than available balance
+    const INSUFFICIENT_BALANCE: u64 = 5;
 
-    /// Constants
-    const DECIMALS: u8 = 0; // Since passes are whole units
+    /// Constants for asset configuration
+    /// No decimal places as passes are whole units only
+    const DECIMALS: u8 = 0;
+    /// Prefix for target account assets to distinguish them
     const PREFIX_TARGET: vector<u8> = b"TARGET_";
+    /// Prefix for outpost assets to distinguish them
     const PREFIX_OUTPOST: vector<u8> = b"OUTPOST_";
 
-    /// Stores capabilities for all asset types
+    /// Central storage for all fungible asset capabilities
+    /// This structure holds all the permissions and references needed to manage
+    /// multiple types of fungible assets (passes) in the system
     struct AssetCapabilities has key {
+        /// Stores mint permissions for each asset type
         mint_refs: Table<String, MintRef>,
+        /// Stores burn permissions for each asset type
         burn_refs: Table<String, BurnRef>,
+        /// Stores transfer permissions for each asset type
         transfer_refs: Table<String, TransferRef>,
+        /// Stores metadata objects for each asset type
         metadata_objects: Table<String, Object<Metadata>>,
     }
 
-    /// Initialize the PodiumPassCoin module
+    /// Initializes the PodiumPassCoin module
+    /// Creates the central storage for managing all pass types
+    /// @param admin: The signer of the module creator (podium address)
     fun init_module(admin: &signer) {
         move_to(admin, AssetCapabilities {
             mint_refs: table::new(),
@@ -38,7 +57,13 @@ module podium::PodiumPassCoin {
         });
     }
 
-    /// Create a new asset type for a target account
+    /// Creates a new fungible asset type for a target account
+    /// Only callable by the PodiumPass contract
+    /// @param caller: The signer of the calling contract (must be PodiumPass)
+    /// @param target_id: Unique identifier for the target account
+    /// @param name: Display name for the asset
+    /// @param icon_uri: URI for the asset's icon
+    /// @param project_uri: URI for the asset's project details
     public fun create_target_asset(
         caller: &signer,
         target_id: String,
@@ -53,7 +78,10 @@ module podium::PodiumPassCoin {
         create_asset(caller, asset_symbol, name, icon_uri, project_uri);
     }
 
-    /// Create a new asset type for an outpost
+    /// Creates a new fungible asset type for an outpost
+    /// Similar to create_target_asset but specifically for outpost passes
+    /// @param caller: The signer of the calling contract (must be PodiumPass)
+    /// @param outpost_id: Unique identifier for the outpost
     public fun create_outpost_asset(
         caller: &signer,
         outpost_id: String,
@@ -68,7 +96,10 @@ module podium::PodiumPassCoin {
         create_asset(caller, asset_symbol, name, icon_uri, project_uri);
     }
 
-    /// Internal function to create a new asset type
+    /// Internal function to handle asset creation logic
+    /// Sets up all necessary capabilities and metadata for a new asset type
+    /// @param admin: The signer creating the asset
+    /// @param asset_symbol: Unique identifier for the asset
     fun create_asset(
         admin: &signer,
         asset_symbol: String,
@@ -111,7 +142,12 @@ module podium::PodiumPassCoin {
         table::add(&mut caps.metadata_objects, asset_symbol, metadata);
     }
 
-    /// Mint new passes for a specific asset type
+    /// Mints new passes of a specific asset type
+    /// Only callable by PodiumPass contract
+    /// @param caller: The signer of the calling contract
+    /// @param asset_symbol: The asset type to mint
+    /// @param amount: Number of passes to mint
+    /// @return The newly minted fungible asset
     public fun mint(
         caller: &signer,
         asset_symbol: String,
@@ -127,7 +163,11 @@ module podium::PodiumPassCoin {
         fungible_asset::mint(mint_ref, amount)
     }
 
-    /// Burn passes of a specific asset type
+    /// Burns (destroys) passes of a specific asset type
+    /// Only callable by PodiumPass contract
+    /// @param caller: The signer of the calling contract
+    /// @param asset_symbol: The asset type to burn
+    /// @param fa: The fungible asset to burn
     public fun burn(
         caller: &signer,
         asset_symbol: String,
@@ -142,7 +182,12 @@ module podium::PodiumPassCoin {
         fungible_asset::burn(burn_ref, fa)
     }
 
-    /// Transfer passes between accounts for a specific asset type
+    /// Transfers passes between accounts
+    /// Can be called by any account that owns passes
+    /// @param from: The signer of the sender
+    /// @param asset_symbol: The asset type to transfer
+    /// @param to: Recipient address
+    /// @param amount: Number of passes to transfer
     public fun transfer(
         from: &signer,
         asset_symbol: String,
@@ -156,7 +201,10 @@ module podium::PodiumPassCoin {
         primary_fungible_store::transfer(from, *metadata, to, amount);
     }
 
-    /// Get balance of an account for a specific asset type
+    /// Checks the balance of a specific asset type for an account
+    /// @param account: The address to check
+    /// @param asset_symbol: The asset type to check
+    /// @return The number of passes owned
     public fun balance(account: address, asset_symbol: String): u64 acquires AssetCapabilities {
         let caps = borrow_global<AssetCapabilities>(@podium);
         assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
@@ -165,26 +213,54 @@ module podium::PodiumPassCoin {
         primary_fungible_store::balance(account, *metadata)
     }
 
-    /// Helper function to generate target asset symbol
+    /// Generates a standardized symbol for target account assets
+    /// @param target_id: The target account identifier
+    /// @return The formatted asset symbol
     fun generate_target_symbol(target_id: String): String {
         string::utf8(vector::append(PREFIX_TARGET, *string::bytes(&target_id)))
     }
 
-    /// Helper function to generate outpost asset symbol
+    /// Generates a standardized symbol for outpost assets
+    /// @param outpost_id: The outpost identifier
+    /// @return The formatted asset symbol
     fun generate_outpost_symbol(outpost_id: String): String {
         string::utf8(vector::append(PREFIX_OUTPOST, *string::bytes(&outpost_id)))
     }
 
-    /// Get metadata object for a specific asset type
+    /// Retrieves the metadata object for a specific asset type
+    /// @param asset_symbol: The asset type to look up
+    /// @return The metadata object for the asset
     public fun get_metadata(asset_symbol: String): Object<Metadata> acquires AssetCapabilities {
         let caps = borrow_global<AssetCapabilities>(@podium);
         assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
         *table::borrow(&caps.metadata_objects, asset_symbol)
     }
 
-    /// Helper function to check if caller is the PodiumPass contract
+    /// Verifies if the caller is the PodiumPass contract
+    /// Checks both address and presence of Config resource
+    /// @param caller: The signer to verify
+    /// @return Boolean indicating if caller is PodiumPass
     fun is_podium_pass(caller: &signer): bool {
         let caller_address = signer::address_of(caller);
         caller_address == @podium && exists<podium::PodiumPass::Config>(caller_address)
+    }
+
+    /// Safely transfers APT coins with recipient account verification
+    /// Handles both registered and unregistered recipient accounts
+    /// @param sender: The signer of the sender
+    /// @param recipient: The recipient address
+    /// @param amount: Amount of APT to transfer
+    fun transfer_with_check(sender: &signer, recipient: address, amount: u64) {
+        let sender_addr = signer::address_of(sender);
+        assert!(
+            coin::balance<AptosCoin>(sender_addr) >= amount,
+            error::invalid_argument(INSUFFICIENT_BALANCE)
+        );
+
+        if (coin::is_account_registered<AptosCoin>(recipient)) {
+            coin::transfer<AptosCoin>(sender, recipient, amount);
+        } else {
+            aptos_account::transfer(sender, recipient, amount);
+        };
     }
 } 
