@@ -85,6 +85,25 @@ module podium::PodiumOutpost {
         paused: bool,
     }
 
+    /// Event emitted when an outpost's metadata is updated
+    #[event]
+    struct MetadataUpdateEvent has drop, store {
+        /// Address of the outpost being updated
+        outpost_address: address,
+        /// Old name of the outpost
+        old_name: String,
+        /// New name of the outpost
+        new_name: String,
+        /// Old description of the outpost
+        old_description: String,
+        /// New description of the outpost
+        new_description: String,
+        /// Old URI of the outpost
+        old_uri: String,
+        /// New URI of the outpost
+        new_uri: String,
+    }
+
     /// Get event creator address
     public fun get_event_creator(event: &OutpostCreatedEvent): address {
         event.creator
@@ -314,5 +333,38 @@ module podium::PodiumOutpost {
     /// Get outpost object from token address
     public fun get_outpost_from_token_address(token_address: address): Object<OutpostData> {
         object::address_to_object<OutpostData>(token_address)
+    }
+
+    /// Update outpost metadata (owner only)
+    public entry fun update_metadata(
+        owner: &signer,
+        outpost: Object<OutpostData>,
+        new_name: String,
+        new_description: String,
+        new_uri: String,
+    ) acquires OutpostData {
+        // Validate owner
+        assert!(object::is_owner(outpost, signer::address_of(owner)), ENOT_OWNER);
+
+        let outpost_addr = object::object_address(&outpost);
+        let outpost_data = borrow_global_mut<OutpostData>(outpost_addr);
+        
+        // Validate state
+        assert!(!outpost_data.emergency_pause, EEMERGENCY_PAUSE);
+
+        // Emit metadata update event
+        event::emit(MetadataUpdateEvent {
+            outpost_address: outpost_addr,
+            old_name: outpost_data.name,
+            new_name,
+            old_description: outpost_data.description,
+            new_description,
+            old_uri: outpost_data.uri,
+            new_uri,
+        });
+
+        outpost_data.name = new_name;
+        outpost_data.description = new_description;
+        outpost_data.uri = new_uri;
     }
 }
