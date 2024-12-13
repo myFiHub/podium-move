@@ -15,6 +15,7 @@ module podium::PodiumPass {
     use aptos_framework::object::{Self, Object};
     use aptos_framework::account;
     use aptos_framework::event::{Self, EventHandle};
+    use aptos_token_objects::token;
 
     /// Error codes
     const ENOT_AUTHORIZED: u64 = 1;
@@ -162,6 +163,56 @@ module podium::PodiumPass {
         });
     }
 
+    /// Initialize pass configuration for a new outpost
+    public fun init_pass_config(creator: &signer, target_or_outpost: Object<OutpostData>) {
+        let target_addr = object::object_address(&target_or_outpost);
+        assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
+        
+        if (!exists<PassConfig>(target_addr)) {
+            // Create a named token for the pass config
+            let constructor_ref = token::create_named_token(
+                creator,
+                string::utf8(b"PodiumOutposts"),
+                string::utf8(b"Pass Config"),
+                string::utf8(b"Pass Config"),
+                option::none(),
+                string::utf8(b""),
+            );
+            let outpost_signer = object::generate_signer(&constructor_ref);
+            
+            // Move the config directly to the outpost address
+            move_to(&outpost_signer, PassConfig {
+                supply: 0,
+                last_price: INITIAL_PRICE,
+            });
+        };
+    }
+
+    /// Initialize subscription configuration for a new outpost
+    public fun init_subscription_config(creator: &signer, target_or_outpost: Object<OutpostData>) {
+        let target_addr = object::object_address(&target_or_outpost);
+        assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
+        
+        if (!exists<SubscriptionConfig>(target_addr)) {
+            // Create a named token for the subscription config
+            let constructor_ref = token::create_named_token(
+                creator,
+                string::utf8(b"PodiumOutposts"),
+                string::utf8(b"Subscription Config"),
+                string::utf8(b"Subscription Config"),
+                option::none(),
+                string::utf8(b""),
+            );
+            let outpost_signer = object::generate_signer(&constructor_ref);
+            
+            // Move the config directly to the outpost address
+            move_to(&outpost_signer, SubscriptionConfig {
+                tiers: vector::empty(),
+                subscriptions: table::new(),
+            });
+        };
+    }
+
     /// Calculate price based on bonding curve
     /// price = initial_price * (1 + weight_a * supply^weight_c / weight_b)
     fun calculate_price(supply: u64, is_sell: bool): u64 acquires Config {
@@ -205,13 +256,7 @@ module podium::PodiumPass {
     ) acquires SubscriptionConfig {
         let target_addr = object::object_address(&target_or_outpost);
         assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), ENOT_OWNER);
-
-        if (!exists<SubscriptionConfig>(target_addr)) {
-            move_to(creator, SubscriptionConfig {
-                tiers: vector::empty(),
-                subscriptions: table::new(),
-            });
-        };
+        assert!(exists<SubscriptionConfig>(target_addr), error::not_found(ETIER_NOT_FOUND));
 
         let config = borrow_global_mut<SubscriptionConfig>(target_addr);
         
@@ -360,12 +405,7 @@ module podium::PodiumPass {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         let target_addr = object::object_address(&target_or_outpost);
-        if (!exists<PassConfig>(target_addr)) {
-            move_to(buyer, PassConfig {
-                supply: 0,
-                last_price: INITIAL_PRICE,
-            });
-        };
+        assert!(exists<PassConfig>(target_addr), error::not_found(EPASS_NOT_FOUND));
 
         let pass_config = borrow_global_mut<PassConfig>(target_addr);
         let base_price = calculate_price(pass_config.supply, false);
