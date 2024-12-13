@@ -146,13 +146,13 @@ module podium::PodiumPass {
 
     /// Initialize module
     fun init_module(admin: &signer) {
-        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
+        assert!(signer::address_of(admin) == @admin, error::permission_denied(ENOT_AUTHORIZED));
         
         move_to(admin, Config {
             protocol_fee_percent: MAX_PROTOCOL_FEE_PERCENT,
             subject_fee_percent: MAX_SUBJECT_FEE_PERCENT,
             referral_fee_percent: MAX_REFERRAL_FEE_PERCENT,
-            treasury: @podium,
+            treasury: @admin,
             weight_a: DEFAULT_WEIGHT_A,
             weight_b: DEFAULT_WEIGHT_B,
             weight_c: DEFAULT_WEIGHT_C,
@@ -165,7 +165,7 @@ module podium::PodiumPass {
     /// Calculate price based on bonding curve
     /// price = initial_price * (1 + weight_a * supply^weight_c / weight_b)
     fun calculate_price(supply: u64, is_sell: bool): u64 acquires Config {
-        let config = borrow_global<Config>(@podium);
+        let config = borrow_global<Config>(@admin);
         
         let base_price = INITIAL_PRICE;
         if (supply == 0) {
@@ -372,7 +372,7 @@ module podium::PodiumPass {
         let base_cost = base_price * amount;
 
         // Calculate fees on top of base price
-        let config = borrow_global<Config>(@podium);
+        let config = borrow_global<Config>(@admin);
         let protocol_fee = (base_cost * config.protocol_fee_percent) / 100;
         let subject_fee = (base_cost * config.subject_fee_percent) / 100;
         let referral_fee = if (option::is_some(&referrer)) {
@@ -382,7 +382,7 @@ module podium::PodiumPass {
         };
 
         // Transfer base cost to contract (for bonding curve)
-        transfer_with_check(buyer, @podium, base_cost);
+        transfer_with_check(buyer, @admin, base_cost);
 
         // Transfer fees to respective parties
         transfer_with_check(buyer, config.treasury, protocol_fee);
@@ -402,7 +402,7 @@ module podium::PodiumPass {
 
         // Emit event
         event::emit_event(
-            &mut borrow_global_mut<Config>(@podium).pass_purchase_events,
+            &mut borrow_global_mut<Config>(@admin).pass_purchase_events,
             PassPurchaseEvent {
                 buyer: signer::address_of(buyer),
                 target_or_outpost: target_addr,
@@ -455,7 +455,7 @@ module podium::PodiumPass {
         assert!(!table::contains(&config.subscriptions, subscriber_addr), error::already_exists(ESUBSCRIPTION_ALREADY_EXISTS));
 
         // Handle fee distribution
-        let global_config = borrow_global<Config>(@podium);
+        let global_config = borrow_global<Config>(@admin);
         let protocol_fee = (price * global_config.protocol_fee_percent) / 100;
         let subject_fee = (price * global_config.subject_fee_percent) / 100;
         let referral_fee = if (option::is_some(&referrer)) {
@@ -490,7 +490,7 @@ module podium::PodiumPass {
 
         // Emit event
         event::emit_event(
-            &mut borrow_global_mut<Config>(@podium).subscription_events,
+            &mut borrow_global_mut<Config>(@admin).subscription_events,
             SubscriptionEvent {
                 subscriber: subscriber_addr,
                 target_or_outpost: target_addr,
@@ -521,7 +521,7 @@ module podium::PodiumPass {
         let base_payment = base_price * amount;
 
         // Calculate fees to be deducted from payment
-        let config = borrow_global<Config>(@podium);
+        let config = borrow_global<Config>(@admin);
         let protocol_fee = (base_payment * config.protocol_fee_percent) / 100;
         let subject_fee = (base_payment * config.subject_fee_percent) / 100;
         
@@ -545,7 +545,7 @@ module podium::PodiumPass {
 
         // Emit event
         event::emit_event(
-            &mut borrow_global_mut<Config>(@podium).pass_sell_events,
+            &mut borrow_global_mut<Config>(@admin).pass_sell_events,
             PassSellEvent {
                 seller: seller_addr,
                 target_or_outpost: target_addr,
