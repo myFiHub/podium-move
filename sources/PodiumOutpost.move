@@ -1,251 +1,318 @@
 module podium::PodiumOutpost {
-    friend podium::PodiumPass;
-
-    use std::error;
-    use std::signer;
     use std::string::{Self, String};
-    use std::vector;
+    use std::signer;
     use std::option::Self;
     use aptos_framework::object::{Self, Object};
-    use aptos_framework::aptos_coin::AptosCoin;
+    use aptos_framework::event;
     use aptos_token_objects::collection;
-    use aptos_token_objects::token::{Self, Token};
-    use aptos_token_objects::royalty;
-    use aptos_framework::coin;
-    use aptos_framework::aptos_account;
+    use aptos_token_objects::token;
+    
+    // Error codes
+    const ENOT_ADMIN: u64 = 0x10001;  // 65537
+    const EOUTPOST_EXISTS: u64 = 0x10002;  // 65538
+    const EOUTPOST_NOT_FOUND: u64 = 0x10003;  // 65539
+    const ENOT_OWNER: u64 = 0x10004;  // 65540
+    const EINVALID_PRICE: u64 = 0x10005;  // 65541
+    const EINVALID_FEE: u64 = 0x10006;  // 65542
+    const EEMERGENCY_PAUSE: u64 = 0x10007;  // 65543
 
-    /// Error codes
-    /// When a non-admin tries to perform restricted operations
-    const ENOT_AUTHORIZED: u64 = 1;
-    /// When trying to create/modify an outpost with invalid price
-    const EINVALID_PRICE: u64 = 2;
-    /// When trying to create an outpost that already exists
-    const EOUTPOST_EXISTS: u64 = 3;
-    /// When trying to operate on a non-existent outpost
-    const EOUTPOST_NOT_FOUND: u64 = 4;
-    /// When trying to transfer more coins than available balance
-    const INSUFFICIENT_BALANCE: u64 = 5;
+    // Constants
+    const COLLECTION_NAME: vector<u8> = b"PodiumOutposts";
+    const COLLECTION_DESCRIPTION: vector<u8> = b"Podium Protocol Outposts";
+    const COLLECTION_URI: vector<u8> = b"https://podium.fi/outposts";
+    const MAX_FEE_PERCENTAGE: u64 = 10000; // 100% = 10000 basis points
 
-    /// Constants for collection configuration
-    /// Name of the NFT collection for all outposts
-    const COLLECTION_NAME: vector<u8> = b"Podium Outposts";
-    /// Description of what outposts represent
-    const COLLECTION_DESCRIPTION: vector<u8> = b"Exclusive spaces in the Podium ecosystem";
-    /// Base URI for the collection
-    const COLLECTION_URI: vector<u8> = b"https://podium.network/outposts";
-    /// Default royalty percentage (5%)
-    const DEFAULT_ROYALTY_NUMERATOR: u64 = 5;
-    /// Denominator for royalty calculation (100 = percentage)
-    const DEFAULT_ROYALTY_DENOMINATOR: u64 = 100;
-
-    /// Stores data specific to each outpost NFT
-    /// This data is stored in the token object itself
-    struct OutpostData has key {
-        /// Purchase price paid for the outpost
-        price: u64,
-        /// URI pointing to outpost-specific metadata
-        metadata_uri: String,
-    }
-
-    /// Helper function to check if an address has OutpostData
-    public fun has_outpost_data(addr: address): bool {
-        exists<OutpostData>(addr)
-    }
-
-    /// Global configuration for the outpost system
-    /// Stores collection-wide settings and pricing information
-    struct Config has key {
-        /// Default price for new outposts
-        default_price: u64,
-        /// List of custom prices for specific outposts
-        custom_prices: vector<CustomPrice>,
-        /// Reference to the NFT collection object
-        collection: Object<collection::Collection>,
-    }
-
-    /// Defines custom pricing for specific outposts
-    /// Allows for different pricing tiers or special outposts
-    struct CustomPrice has store {
-        /// Name of the outpost this price applies to
-        outpost_name: String,
-        /// Custom price for this specific outpost
-        price: u64,
-    }
-
-    /// Initializes the PodiumOutpost module
-    /// Sets up the NFT collection with royalties
-    /// @param admin: The signer of the module creator
-    #[test_only]
-    /// Initialize module for testing
-    public fun init_module_for_test(admin: &signer) {
-        init_module(admin)
-    }
-
-    /// Initialize module with the given admin signer
-    /// @param admin The signer of the module creator
-    fun init_module(admin: &signer) {
-        // Create royalty config
-        let royalty = royalty::create(
-            DEFAULT_ROYALTY_NUMERATOR,
-            DEFAULT_ROYALTY_DENOMINATOR,
-            @fihub // FiHub receives royalties
-        );
-
-        // Create the collection
-        let constructor_ref = collection::create_unlimited_collection(
-            admin,
-            string::utf8(COLLECTION_DESCRIPTION),
-            string::utf8(COLLECTION_NAME),
-            option::some(royalty),
-            string::utf8(COLLECTION_URI),
-        );
-
-        let collection = object::object_from_constructor_ref<collection::Collection>(&constructor_ref);
-
-        // Initialize config
-        move_to(admin, Config {
-            default_price: 0,
-            custom_prices: vector::empty(),
-            collection,
-        });
-    }
-
-    /// Sets the default price for new outposts
-    /// Only callable by admin
-    /// @param admin: The admin signer
-    /// @param price: New default price in $MOVE
-    public entry fun set_default_price(admin: &signer, price: u64) acquires Config {
-        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
-        let config = borrow_global_mut<Config>(@podium);
-        config.default_price = price;
-    }
-
-    /// Sets a custom price for a specific outpost
-    /// Only callable by admin
-    /// @param admin: The admin signer
-    /// @param outpost_name: Name of the outpost
-    /// @param price: Custom price in $MOVE
-    public entry fun set_custom_price(
-        admin: &signer,
-        outpost_name: String,
-        price: u64
-    ) acquires Config {
-        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
-        let config = borrow_global_mut<Config>(@podium);
-        
-        let i = 0;
-        let len = vector::length(&config.custom_prices);
-        while (i < len) {
-            let custom_price = vector::borrow_mut(&mut config.custom_prices, i);
-            if (custom_price.outpost_name == outpost_name) {
-                custom_price.price = price;
-                return
-            };
-            i = i + 1;
-        };
-
-        vector::push_back(&mut config.custom_prices, CustomPrice { outpost_name, price });
-    }
-
-    /// Safely transfers APT coins with recipient account verification
-    /// @param sender: The signer of the sender
-    /// @param recipient: The recipient address
-    /// @param amount: Amount of APT to transfer
-    fun transfer_with_check(sender: &signer, recipient: address, amount: u64) {
-        let sender_addr = signer::address_of(sender);
-        assert!(
-            coin::balance<AptosCoin>(sender_addr) >= amount,
-            error::invalid_argument(INSUFFICIENT_BALANCE)
-        );
-
-        if (coin::is_account_registered<AptosCoin>(recipient)) {
-            coin::transfer<AptosCoin>(sender, recipient, amount);
-        } else {
-            aptos_account::transfer(sender, recipient, amount);
-        };
-    }
-
-    /// Creates a new outpost NFT
-    /// Mints the NFT and transfers payment to FiHub
-    /// @param buyer: The signer purchasing the outpost
-    /// @param outpost_name: Name for the new outpost
-    /// @param description: Description of the outpost
-    /// @param metadata_uri: URI for outpost metadata
-    public entry fun create_outpost(
-        buyer: &signer,
-        outpost_name: String,
+    /// Struct to store outpost-specific data
+    #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
+    struct OutpostData has key, store {
+        /// The outpost's name
+        name: String,
+        /// The outpost's description
         description: String,
-        metadata_uri: String
-    ) acquires Config {
-        let config = borrow_global<Config>(@podium);
-        
-        // Get price for this outpost
-        let price = get_outpost_price(&config.custom_prices, &outpost_name, config.default_price);
-        assert!(price > 0, error::invalid_argument(EINVALID_PRICE));
+        /// The outpost's URI
+        uri: String,
+        /// The outpost's price
+        price: u64,
+        /// The outpost's fee share (in basis points)
+        fee_share: u64,
+        /// Emergency pause flag
+        emergency_pause: bool,
+    }
 
-        // Use safe transfer instead of direct transfer
-        transfer_with_check(buyer, @fihub, price);
+    /// Event emitted when a new outpost is created
+    #[event]
+    struct OutpostCreatedEvent has drop, store {
+        /// Address of the outpost creator
+        creator: address,
+        /// Address of the created outpost
+        outpost_address: address,
+        /// Name of the outpost
+        name: String,
+        /// Initial price of the outpost
+        price: u64,
+        /// Initial fee share of the outpost
+        fee_share: u64,
+    }
 
-        // Create the token
-        let constructor_ref = &token::create(
-            buyer,
+    /// Event emitted when an outpost's price is updated
+    #[event]
+    struct PriceUpdateEvent has drop, store {
+        /// Address of the outpost being updated
+        outpost_address: address,
+        /// Previous price
+        old_price: u64,
+        /// New price
+        new_price: u64,
+    }
+
+    /// Event emitted when an outpost's fee share is updated
+    #[event]
+    struct FeeUpdateEvent has drop, store {
+        /// Address of the outpost being updated
+        outpost_address: address,
+        /// Previous fee share
+        old_fee: u64,
+        /// New fee share
+        new_fee: u64,
+    }
+
+    /// Event emitted when an outpost's emergency pause status changes
+    #[event]
+    struct EmergencyPauseEvent has drop, store {
+        /// Address of the outpost being updated
+        outpost_address: address,
+        /// New pause status
+        paused: bool,
+    }
+
+    /// Get event creator address
+    public fun get_event_creator(event: &OutpostCreatedEvent): address {
+        event.creator
+    }
+
+    /// Get event outpost address
+    public fun get_event_outpost_address(event: &OutpostCreatedEvent): address {
+        event.outpost_address
+    }
+
+    /// Get event outpost name
+    public fun get_event_name(event: &OutpostCreatedEvent): String {
+        event.name
+    }
+
+    /// Get event price
+    public fun get_event_price(event: &OutpostCreatedEvent): u64 {
+        event.price
+    }
+
+    /// Get event fee share
+    public fun get_event_fee_share(event: &OutpostCreatedEvent): u64 {
+        event.fee_share
+    }
+
+    /// Internal function to create an outpost and return the object
+    public fun create_outpost_internal(
+        creator: &signer,
+        name: String,
+        description: String,
+        uri: String,
+        price: u64,
+        fee_share: u64,
+    ): Object<OutpostData> {
+        // Validate inputs
+        assert!(fee_share <= MAX_FEE_PERCENTAGE, EINVALID_FEE);
+        assert!(price > 0, EINVALID_PRICE);
+
+        // Initialize collection if needed
+        init_collection(creator);
+
+        // Verify collection exists and creator has permission
+        let collection_addr = collection::create_collection_address(&@admin, &string::utf8(COLLECTION_NAME));
+        assert!(object::is_object(collection_addr), EOUTPOST_NOT_FOUND);
+
+        // Create outpost token
+        let constructor_ref = token::create_named_token(
+            creator,
             string::utf8(COLLECTION_NAME),
             description,
-            outpost_name,
-            option::none(), // Use collection-level royalty
-            metadata_uri,
+            name,
+            option::none(),
+            uri,
         );
 
-        // Add outpost data
-        let token_signer = object::generate_signer(constructor_ref);
-        move_to(&token_signer, OutpostData {
+        // Generate signer and extend the token object
+        let outpost_signer = object::generate_signer(&constructor_ref);
+        
+        // Initialize outpost data
+        move_to(&outpost_signer, OutpostData {
+            name,
+            description,
+            uri,
             price,
-            metadata_uri,
+            fee_share,
+            emergency_pause: false,
+        });
+
+        // Get the object reference
+        let object = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
+
+        // Emit creation event
+        event::emit(OutpostCreatedEvent {
+            creator: signer::address_of(creator),
+            outpost_address: object::object_address<OutpostData>(&object),
+            name,
+            price,
+            fee_share,
+        });
+
+        object
+    }
+
+    /// Entry function to create a new outpost
+    public entry fun create_outpost(
+        creator: &signer,
+        name: String,
+        description: String,
+        uri: String,
+        price: u64,
+        fee_share: u64,
+    ) {
+        create_outpost_internal(creator, name, description, uri, price, fee_share);
+    }
+
+    /// Create the Podium Outposts collection (admin only)
+    fun create_podium_collection(creator: &signer) {
+        assert!(signer::address_of(creator) == @admin, ENOT_ADMIN);
+        
+        collection::create_unlimited_collection(
+            creator,
+            string::utf8(COLLECTION_DESCRIPTION),
+            string::utf8(COLLECTION_NAME),
+            option::none(), // No royalty
+            string::utf8(COLLECTION_URI),
+        );
+    }
+
+    /// Update outpost price (owner only)
+    public entry fun update_price(
+        owner: &signer,
+        outpost: Object<OutpostData>,
+        new_price: u64,
+    ) acquires OutpostData {
+        // Validate owner
+        assert!(object::is_owner(outpost, signer::address_of(owner)), ENOT_OWNER);
+        assert!(new_price > 0, EINVALID_PRICE);
+        
+        let outpost_addr = object::object_address(&outpost);
+        let outpost_data = borrow_global_mut<OutpostData>(outpost_addr);
+        
+        // Validate state
+        assert!(!outpost_data.emergency_pause, EEMERGENCY_PAUSE);
+
+        // Emit price update event
+        event::emit(PriceUpdateEvent {
+            outpost_address: outpost_addr,
+            old_price: outpost_data.price,
+            new_price,
+        });
+
+        outpost_data.price = new_price;
+    }
+
+    /// Update fee share (owner only)
+    public entry fun update_fee_share(
+        owner: &signer,
+        outpost: Object<OutpostData>,
+        new_fee_share: u64,
+    ) acquires OutpostData {
+        // Validate owner and input
+        assert!(object::is_owner(outpost, signer::address_of(owner)), ENOT_OWNER);
+        assert!(new_fee_share <= MAX_FEE_PERCENTAGE, EINVALID_FEE);
+        
+        let outpost_addr = object::object_address(&outpost);
+        let outpost_data = borrow_global_mut<OutpostData>(outpost_addr);
+        
+        // Validate state
+        assert!(!outpost_data.emergency_pause, EEMERGENCY_PAUSE);
+
+        // Emit fee update event
+        event::emit(FeeUpdateEvent {
+            outpost_address: outpost_addr,
+            old_fee: outpost_data.fee_share,
+            new_fee: new_fee_share,
+        });
+
+        outpost_data.fee_share = new_fee_share;
+    }
+
+    /// Toggle emergency pause (owner only)
+    public entry fun toggle_emergency_pause(
+        owner: &signer,
+        outpost: Object<OutpostData>,
+    ) acquires OutpostData {
+        assert!(object::is_owner(outpost, signer::address_of(owner)), ENOT_OWNER);
+        
+        let outpost_addr = object::object_address(&outpost);
+        let outpost_data = borrow_global_mut<OutpostData>(outpost_addr);
+        
+        outpost_data.emergency_pause = !outpost_data.emergency_pause;
+
+        event::emit(EmergencyPauseEvent {
+            outpost_address: outpost_addr,
+            paused: outpost_data.emergency_pause,
         });
     }
 
-    /// Determines the price for a specific outpost
-    /// Checks custom prices first, falls back to default
-    /// @param custom_prices: List of custom price configurations
-    /// @param outpost_name: Name of the outpost to price
-    /// @param default_price: Fallback price if no custom price exists
-    /// @return The price for the outpost
-    fun get_outpost_price(
-        custom_prices: &vector<CustomPrice>,
-        outpost_name: &String,
-        default_price: u64
-    ): u64 {
-        let i = 0;
-        let len = vector::length(custom_prices);
-        while (i < len) {
-            let custom_price = vector::borrow(custom_prices, i);
-            if (custom_price.outpost_name == *outpost_name) {
-                return custom_price.price
-            };
-            i = i + 1;
-        };
-        default_price
+    // Getter functions for outpost data
+    #[view]
+    public fun get_price(outpost: Object<OutpostData>): u64 acquires OutpostData {
+        borrow_global<OutpostData>(object::object_address(&outpost)).price
     }
 
-    /// Verifies if an address owns a specific outpost
-    /// @param owner: Address to check
-    /// @param outpost_name: Name of the outpost
-    /// @return Boolean indicating ownership
-    public fun is_outpost_owner(owner: address, outpost_name: String): bool acquires Config {
-        let config = borrow_global<Config>(@podium);
-        let token_address = token::create_token_address(
-            &@podium,
-            &string::utf8(COLLECTION_NAME),
-            &outpost_name
-        );
-        object::is_owner(object::address_to_object<Token>(token_address), owner)
+    #[view]
+    public fun get_fee_share(outpost: Object<OutpostData>): u64 acquires OutpostData {
+        borrow_global<OutpostData>(object::object_address(&outpost)).fee_share
     }
 
-    /// Gets the collection object
-    /// Used for integration with other modules
-    /// @return The collection object
-    public fun get_collection(): Object<collection::Collection> acquires Config {
-        borrow_global<Config>(@podium).collection
+    #[view]
+    public fun is_paused(outpost: Object<OutpostData>): bool acquires OutpostData {
+        borrow_global<OutpostData>(object::object_address(&outpost)).emergency_pause
+    }
+
+    #[view]
+    public fun verify_access(outpost: Object<OutpostData>): bool acquires OutpostData {
+        !borrow_global<OutpostData>(object::object_address(&outpost)).emergency_pause
+    }
+
+    /// Create a new outpost collection if it doesn't exist
+    public fun init_collection(creator: &signer) {
+        // Only admin can initialize collection
+        assert!(signer::address_of(creator) == @admin, ENOT_ADMIN);
+        
+        let collection_addr = collection::create_collection_address(&@admin, &string::utf8(COLLECTION_NAME));
+        if (!object::is_object(collection_addr)) {
+            collection::create_unlimited_collection(
+                creator,
+                string::utf8(COLLECTION_DESCRIPTION),
+                string::utf8(COLLECTION_NAME),
+                option::none(), // No royalty
+                string::utf8(COLLECTION_URI),
+            );
+        }
+    }
+
+    /// Verify ownership of an outpost
+    public fun verify_ownership(outpost: Object<OutpostData>, owner: address): bool {
+        object::is_owner(outpost, owner)
+    }
+
+    /// Check if an object has outpost data
+    public fun has_outpost_data(outpost: Object<OutpostData>): bool {
+        exists<OutpostData>(object::object_address(&outpost))
+    }
+
+    /// Get outpost object from token address
+    public fun get_outpost_from_token_address(token_address: address): Object<OutpostData> {
+        object::address_to_object<OutpostData>(token_address)
     }
 }
-   

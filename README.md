@@ -40,12 +40,28 @@ Contract responsible for trading /transferability of passes
 Tracks pass ownership and balances
 
 Podium Outposts
-// Core functionality:
-Creates and manages NFT-based spaces ("Outposts")
-Tracks ownership and metadata of Outposts
-Integrates with access control
-Handles Outpost-specific fee distribution
-Sells Outpost NFTs to Owners
+// Core functionality
+- Create named outposts with unique identifiers (can be created at time of purchase)
+- Store metadata (name, description, URI)
+- Track ownership and permissions
+- Support custom pricing for outposts by name/unique identifier
+// Access features
+- Verify outpost ownership
+- Verify outpost access
+- Verify outpost metadata
+// Event tracking
+- Outpost creation events
+- Ownership transfer events
+- Price update events
+- Metadata update events
+- Fee configuration events
+// Admin capabilities
+- Update pricing
+- Modify metadata
+- Emergency controls
+- Fee configuration
+
+
 
 ## Prerequisites
 

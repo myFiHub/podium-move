@@ -10,8 +10,10 @@ module podium::PodiumPass {
     use aptos_framework::table::{Self, Table};
     use aptos_framework::primary_fungible_store;
     use podium::PodiumPassCoin;
-    use podium::PodiumOutpost;
+    use podium::PodiumOutpost::{Self, OutpostData};
     use aptos_framework::aptos_account;
+    use aptos_framework::object::{Self, Object};
+    use aptos_framework::event;
 
     /// Error codes
     const ENOT_AUTHORIZED: u64 = 1;
@@ -28,6 +30,7 @@ module podium::PodiumPass {
     const EPASS_NOT_FOUND: u64 = 12;
     const EINSUFFICIENT_PASS_BALANCE: u64 = 13;
     const INSUFFICIENT_BALANCE: u64 = 14;
+    const ENOT_OWNER: u64 = 15;
 
     /// Fee constants
     const MAX_REFERRAL_FEE_PERCENT: u64 = 2; // 2%
@@ -167,28 +170,24 @@ module podium::PodiumPass {
 
     /// Create subscription tiers for a target/outpost
     public fun create_subscription_tier(
-        owner: &signer,
-        target_or_outpost: address,
+        creator: &signer,
+        target_or_outpost: Object<OutpostData>,
         tier_name: String,
-        week_price: u64,
-        month_price: u64,
-        year_price: u64
+        price: u64,
+        renewal_price: u64,
+        duration: u64,
     ) acquires SubscriptionConfig {
-        // Verify owner is either target account or outpost owner
-        assert!(
-            signer::address_of(owner) == target_or_outpost || 
-            PodiumOutpost::is_outpost_owner(signer::address_of(owner), string::utf8(b"")), // TODO: Get outpost name
-            error::permission_denied(ENOT_AUTHORIZED)
-        );
+        let target_addr = object::object_address(&target_or_outpost);
+        assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), ENOT_OWNER);
 
-        if (!exists<SubscriptionConfig>(target_or_outpost)) {
-            move_to(owner, SubscriptionConfig {
+        if (!exists<SubscriptionConfig>(target_addr)) {
+            move_to(creator, SubscriptionConfig {
                 tiers: vector::empty(),
                 subscriptions: table::new(),
             });
         };
 
-        let config = borrow_global_mut<SubscriptionConfig>(target_or_outpost);
+        let config = borrow_global_mut<SubscriptionConfig>(target_addr);
         
         // Verify tier doesn't already exist
         let i = 0;
@@ -202,10 +201,34 @@ module podium::PodiumPass {
         // Add new tier
         vector::push_back(&mut config.tiers, SubscriptionTier {
             name: tier_name,
-            week_price,
-            month_price,
-            year_price,
+            week_price: price,
+            month_price: renewal_price,
+            year_price: renewal_price,
         });
+    }
+
+    /// Helper function to get asset type and verify ownership
+    fun get_asset_type_and_verify(
+        target_or_outpost: address,
+        owner: address
+    ): String {
+        if (PodiumOutpost::has_outpost_data(object::address_to_object<OutpostData>(target_or_outpost))) {
+            let outpost = PodiumOutpost::get_outpost_from_token_address(target_or_outpost);
+            assert!(PodiumOutpost::verify_ownership(outpost, owner), error::permission_denied(ENOT_AUTHORIZED));
+            string::utf8(b"outpost")
+        } else {
+            assert!(target_or_outpost == owner, error::permission_denied(ENOT_AUTHORIZED));
+            string::utf8(b"target")
+        }
+    }
+
+    /// Helper function to get asset symbol
+    fun get_asset_symbol(target_or_outpost: address): String {
+        if (PodiumOutpost::has_outpost_data(object::address_to_object<OutpostData>(target_or_outpost))) {
+            string::utf8(b"OUTPOST")
+        } else {
+            string::utf8(b"TARGET")
+        }
     }
 
     /// Safely transfers $MOVE coins with recipient account verification
@@ -230,26 +253,27 @@ module podium::PodiumPass {
     /// Buy passes for a target/outpost
     public entry fun buy_pass(
         buyer: &signer,
-        target_or_outpost: address,
-        amount: u64,
-        referrer: Option<address>
+        target_or_outpost: Object<OutpostData>,
+        quantity: u64,
+        referral: Option<address>,
     ) acquires Config, PassConfig {
-        assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
+        let target_addr = object::object_address(&target_or_outpost);
+        assert!(quantity > 0, error::invalid_argument(EINVALID_AMOUNT));
 
         // Initialize PassConfig if it doesn't exist
-        if (!exists<PassConfig>(target_or_outpost)) {
+        if (!exists<PassConfig>(target_addr)) {
             move_to(buyer, PassConfig {
                 supply: 0,
                 last_price: INITIAL_PRICE,
             });
         };
 
-        let pass_config = borrow_global_mut<PassConfig>(target_or_outpost);
+        let pass_config = borrow_global_mut<PassConfig>(target_addr);
         let _config = borrow_global<Config>(@podium);
 
         // Calculate total price
         let price = calculate_price(pass_config.supply, false);
-        let total_cost = price * amount;
+        let total_cost = price * quantity;
 
         // Verify buyer has enough balance
         let buyer_addr = signer::address_of(buyer);
@@ -259,20 +283,15 @@ module podium::PodiumPass {
         );
 
         // Use distribute_fees which now uses transfer_with_check
-        distribute_fees(buyer, total_cost, target_or_outpost, referrer);
+        distribute_fees(buyer, total_cost, target_addr, referral);
 
         // Mint passes
-        let asset_symbol = if (PodiumOutpost::has_outpost_data(target_or_outpost)) {
-            generate_outpost_symbol(target_or_outpost)
-        } else {
-            generate_target_symbol(target_or_outpost)
-        };
-
-        let fa = PodiumPassCoin::mint(buyer, asset_symbol, amount);
+        let asset_symbol = get_asset_symbol(target_addr);
+        let fa = PodiumPassCoin::mint(buyer, asset_symbol, quantity);
         primary_fungible_store::deposit(buyer_addr, fa);
 
         // Update supply
-        pass_config.supply = pass_config.supply + amount;
+        pass_config.supply = pass_config.supply + quantity;
         pass_config.last_price = price;
     }
 
@@ -292,12 +311,7 @@ module podium::PodiumPass {
         let total_payment = price * amount;
 
         // Burn passes
-        let asset_symbol = if (PodiumOutpost::has_outpost_data(target_or_outpost)) {
-            generate_outpost_symbol(target_or_outpost)
-        } else {
-            generate_target_symbol(target_or_outpost)
-        };
-
+        let asset_symbol = get_asset_symbol(target_or_outpost);
         let seller_addr = signer::address_of(seller);
         let metadata = PodiumPassCoin::get_metadata(asset_symbol);
         let fa = primary_fungible_store::withdraw(seller, metadata, amount);
@@ -357,19 +371,20 @@ module podium::PodiumPass {
 
     /// Subscribe to a target/outpost
     public entry fun subscribe(
-        buyer: &signer,
-        target_or_outpost: address,
+        subscriber: &signer,
+        target_or_outpost: Object<OutpostData>,
         tier_name: String,
         duration: u64,
-        referrer: Option<address>
+        referral: Option<address>,
     ) acquires Config, SubscriptionConfig {
-        assert!(exists<SubscriptionConfig>(target_or_outpost), error::not_found(ESUBSCRIPTION_NOT_FOUND));
+        let target_addr = object::object_address(&target_or_outpost);
+        assert!(exists<SubscriptionConfig>(target_addr), error::not_found(ESUBSCRIPTION_NOT_FOUND));
         assert!(
             duration == DURATION_WEEK || duration == DURATION_MONTH || duration == DURATION_YEAR,
             error::invalid_argument(EINVALID_DURATION)
         );
 
-        let config = borrow_global_mut<SubscriptionConfig>(target_or_outpost);
+        let config = borrow_global_mut<SubscriptionConfig>(target_addr);
         
         // Find tier and get price
         let tier_price = 0u64;
@@ -406,10 +421,10 @@ module podium::PodiumPass {
         let end_time = start_time + duration_secs;
 
         // Process payment using distribute_fees which now uses transfer_with_check
-        distribute_fees(buyer, tier_price, target_or_outpost, referrer);
+        distribute_fees(subscriber, tier_price, target_addr, referral);
 
         // Create or update subscription
-        let subscriber_addr = signer::address_of(buyer);
+        let subscriber_addr = signer::address_of(subscriber);
         if (table::contains(&config.subscriptions, subscriber_addr)) {
             let sub = table::borrow_mut(&mut config.subscriptions, subscriber_addr);
             sub.tier = tier_name;
@@ -435,11 +450,7 @@ module podium::PodiumPass {
     ): (bool, Option<String>) acquires SubscriptionConfig {
         // Check if user has lifetime pass
         if (exists<PassConfig>(target_or_outpost)) {
-            let asset_symbol = if (PodiumOutpost::has_outpost_data(target_or_outpost)) {
-                generate_outpost_symbol(target_or_outpost)
-            } else {
-                generate_target_symbol(target_or_outpost)
-            };
+            let asset_symbol = get_asset_symbol(target_or_outpost);
 
             if (PodiumPassCoin::balance(user, asset_symbol) > 0) {
                 return (true, option::none())

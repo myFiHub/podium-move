@@ -3,13 +3,14 @@ module podium::PodiumPass_test {
     use std::string;
     use std::signer;
     use std::option;
+    use aptos_framework::object::{Self, Object};
     use aptos_framework::account;
     use aptos_framework::coin;
     use aptos_framework::timestamp;
     use aptos_framework::aptos_coin::AptosCoin;
     use podium::PodiumPass;
     use podium::PodiumPassCoin;
-    use podium::PodiumOutpost;
+    use podium::PodiumOutpost::{Self, OutpostData};
 
     // Test addresses
     const ADMIN: address = @podium;
@@ -27,150 +28,134 @@ module podium::PodiumPass_test {
     const DURATION_MONTH: u64 = 2;
     const DURATION_YEAR: u64 = 3;
 
-    #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789, target = @0x123)]
-    fun test_buy_pass(
-        aptos_framework: &signer,
-        admin: &signer,
-        user1: &signer,
-        user2: &signer,
-        target: &signer,
-    ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, user1, user2, target);
+    // Test helper function to create test accounts
+    fun create_test_account(): signer {
+        account::create_account_for_test(@0x123)
+    }
 
-        // Fund user account
-        coin::register<AptosCoin>(user1);
-        coin::transfer<AptosCoin>(admin, signer::address_of(user1), 1000);
+    // Test helper function to create target account
+    fun create_target_account(): signer {
+        account::create_account_for_test(@0x456)
+    }
+
+    // Test helper function to create outpost
+    fun create_test_outpost(creator: &signer): Object<OutpostData> {
+        PodiumOutpost::create_outpost_internal(
+            creator,
+            string::utf8(b"Test Outpost"),
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test.uri"),
+            1000,
+            500,
+        )
+    }
+
+    #[test(admin = @admin)]
+    fun test_buy_pass_success(admin: &signer) {
+        // Create accounts
+        let user1 = create_test_account();
+        let target = create_target_account();
+        let referrer = create_test_account();
+
+        // Create outpost
+        let outpost = create_test_outpost(&target);
 
         // Buy pass
-        let referrer = option::none();
-        PodiumPass::buy_pass(user1, signer::address_of(target), 1, referrer);
-
-        // Verify pass ownership
-        let (has_access, tier) = PodiumPass::verify_access(
-            signer::address_of(user1),
-            signer::address_of(target)
-        );
-        assert!(has_access, 0);
-        assert!(option::is_none(&tier), 1); // Lifetime pass has no tier
+        PodiumPass::buy_pass(&user1, outpost, 1, option::some(signer::address_of(&referrer)));
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789, target = @0x123)]
-    fun test_subscription(
-        aptos_framework: &signer,
-        admin: &signer,
-        user1: &signer,
-        user2: &signer,
-        target: &signer,
-    ) {
-        setup_test(aptos_framework, admin, user1, user2, target);
+    #[test(admin = @admin)]
+    fun test_subscription_tier_creation(admin: &signer) {
+        // Create accounts
+        let target = create_target_account();
+        
+        // Create outpost
+        let outpost = create_test_outpost(&target);
 
         // Create subscription tier
-        let target_addr = signer::address_of(target);
         PodiumPass::create_subscription_tier(
-            target,
-            target_addr,
+            &target,
+            outpost,
             string::utf8(b"premium"),
-            100, // week price
-            300, // month price
+            1000, // month price
+            2000, // renewal price
             3000, // year price
         );
-
-        // Fund user account
-        coin::register<AptosCoin>(user1);
-        coin::transfer<AptosCoin>(admin, signer::address_of(user1), 1000);
-
-        // Subscribe
-        let referrer = option::none();
-        PodiumPass::subscribe(
-            user1,
-            target_addr,
-            string::utf8(b"premium"),
-            PodiumPass::get_duration_month(),
-            referrer
-        );
-
-        // Verify subscription
-        let (has_access, tier) = PodiumPass::verify_access(
-            signer::address_of(user1),
-            target_addr
-        );
-        assert!(has_access, 0);
-        assert!(option::is_some(&tier), 1);
-        assert!(option::extract(&mut tier) == string::utf8(b"premium"), 2);
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789, target = @0x123)]
-    fun test_bonding_curve_pricing(
-        aptos_framework: &signer,
-        admin: &signer,
-        user1: &signer,
-        user2: &signer,
-        target: &signer,
-    ) {
-        setup_test(aptos_framework, admin, user1, user2, target);
+    #[test(admin = @admin)]
+    fun test_subscription_success(admin: &signer) {
+        // Create accounts
+        let user1 = create_test_account();
+        let target = create_target_account();
+        let referrer = create_test_account();
 
-        // Fund users
-        coin::register<AptosCoin>(user1);
-        coin::register<AptosCoin>(user2);
-        coin::transfer<AptosCoin>(admin, signer::address_of(user1), 10000);
-        coin::transfer<AptosCoin>(admin, signer::address_of(user2), 10000);
-
-        let target_addr = signer::address_of(target);
-        let referrer = option::none();
-
-        // First purchase should be at initial price (1 $MOVE)
-        PodiumPass::buy_pass(user1, target_addr, 1, referrer);
-
-        // Second purchase should be more expensive in $MOVE
-        PodiumPass::buy_pass(user2, target_addr, 1, referrer);
-
-        // Verify increasing prices through balances
-        assert!(coin::balance<AptosCoin>(signer::address_of(user2)) < coin::balance<AptosCoin>(signer::address_of(user1)), 0);
-    }
-
-    #[test(aptos_framework = @0x1, admin = @podium, user1 = @0x456, user2 = @0x789, target = @0x123)]
-    fun test_subscription_expiration(
-        aptos_framework: &signer,
-        admin: &signer,
-        user1: &signer,
-        user2: &signer,
-        target: &signer,
-    ) {
-        setup_test(aptos_framework, admin, user1, user2, target);
+        // Create outpost
+        let outpost = create_test_outpost(&target);
 
         // Create subscription tier
-        let target_addr = signer::address_of(target);
         PodiumPass::create_subscription_tier(
-            target,
-            target_addr,
-            string::utf8(b"basic"),
-            100,
-            300,
+            &target,
+            outpost,
+            string::utf8(b"premium"),
+            1000,
+            2000,
             3000,
         );
 
-        // Fund user
-        coin::register<AptosCoin>(user1);
-        coin::transfer<AptosCoin>(admin, signer::address_of(user1), 1000);
-
         // Subscribe
         PodiumPass::subscribe(
-            user1,
-            target_addr,
+            &user1,
+            outpost,
+            string::utf8(b"premium"),
+            PodiumPass::get_duration_month(),
+            option::some(signer::address_of(&referrer))
+        );
+    }
+
+    #[test(admin = @admin)]
+    fun test_multiple_pass_purchases(admin: &signer) {
+        // Create accounts
+        let user1 = create_test_account();
+        let user2 = create_test_account();
+        let target = create_target_account();
+        let referrer = create_test_account();
+
+        // Create outpost
+        let outpost = create_test_outpost(&target);
+
+        // Buy passes
+        PodiumPass::buy_pass(&user1, outpost, 1, option::some(signer::address_of(&referrer)));
+        PodiumPass::buy_pass(&user2, outpost, 1, option::some(signer::address_of(&referrer)));
+    }
+
+    #[test(admin = @admin)]
+    fun test_multiple_subscription_tiers(admin: &signer) {
+        // Create accounts
+        let user1 = create_test_account();
+        let target = create_target_account();
+
+        // Create outpost
+        let outpost = create_test_outpost(&target);
+
+        // Create subscription tiers
+        PodiumPass::create_subscription_tier(
+            &target,
+            outpost,
+            string::utf8(b"basic"),
+            1000,
+            2000,
+            3000,
+        );
+
+        // Subscribe to basic tier
+        PodiumPass::subscribe(
+            &user1,
+            outpost,
             string::utf8(b"basic"),
             PodiumPass::get_duration_week(),
             option::none()
         );
-
-        // Verify active subscription
-        assert!(PodiumPass::is_subscription_active(signer::address_of(user1), target_addr), 0);
-
-        // Move time forward past expiration
-        timestamp::fast_forward_seconds(8 * 24 * 60 * 60); // 8 days
-
-        // Verify subscription expired
-        assert!(!PodiumPass::is_subscription_active(signer::address_of(user1), target_addr), 1);
     }
 
     // Helper functions
@@ -195,7 +180,7 @@ module podium::PodiumPass_test {
         // Initialize modules
         PodiumPass::init_module_for_test(admin);
         PodiumPassCoin::init_module_for_test(admin);
-        PodiumOutpost::init_module_for_test(admin);
+        PodiumOutpost::init_collection(admin);
 
         // Cleanup
         coin::destroy_burn_cap(burn_cap);

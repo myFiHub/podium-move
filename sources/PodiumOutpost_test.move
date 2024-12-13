@@ -2,108 +2,182 @@
 module podium::PodiumOutpost_test {
     use std::string;
     use std::signer;
+    use std::vector;
+    use aptos_framework::object::{Self, Object};
     use aptos_framework::account;
-    use aptos_framework::coin;
-    use aptos_framework::aptos_coin::AptosCoin;
-    use podium::PodiumOutpost;
+    use aptos_framework::event;
+    use podium::PodiumOutpost::{Self, OutpostData};
 
-    // Test addresses
-    const ADMIN: address = @podium;
-    const FIHUB: address = @fihub;
-    const USER1: address = @0x456;
+    // Test constants
+    const OUTPOST_NAME: vector<u8> = b"Test Outpost";
+    const OUTPOST_DESCRIPTION: vector<u8> = b"Test Description";
+    const OUTPOST_URI: vector<u8> = b"https://test.uri";
+    const INITIAL_PRICE: u64 = 1000;
+    const INITIAL_FEE_SHARE: u64 = 500; // 5%
+    const UPDATED_PRICE: u64 = 2000;
+    const UPDATED_FEE_SHARE: u64 = 1000; // 10%
 
-    // Test error codes
-    const ENOT_AUTHORIZED: u64 = 1;
-    const EINVALID_PRICE: u64 = 2;
+    // Error constants for testing
+    const INVALID_PRICE: u64 = 0;
+    const INVALID_FEE_SHARE: u64 = 15000; // 150%
 
-    #[test(aptos_framework = @0x1, admin = @podium, fihub = @fihub, user1 = @0x456)]
-    fun test_create_outpost(
-        aptos_framework: &signer,
-        admin: &signer,
-        fihub: &signer,
-        user1: &signer,
-    ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, fihub, user1);
-
-        // Set default price
-        PodiumOutpost::set_default_price(admin, 1000);
-
-        // Create outpost
-        let outpost_name = string::utf8(b"test_outpost");
-        let description = string::utf8(b"Test Outpost");
-        let metadata_uri = string::utf8(b"https://example.com/metadata");
-
-        // Fund user account
-        coin::register<AptosCoin>(user1);
-        coin::transfer<AptosCoin>(admin, signer::address_of(user1), 2000);
-
-        PodiumOutpost::create_outpost(user1, outpost_name, description, metadata_uri);
-
-        // Verify ownership
-        assert!(PodiumOutpost::is_outpost_owner(signer::address_of(user1), outpost_name), 0);
-        
-        // Verify payment
-        assert!(coin::balance<AptosCoin>(FIHUB) == 1000, 1);
+    // Test helper function to create test accounts
+    fun create_test_account(): signer {
+        account::create_account_for_test(@0x123)
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, fihub = @fihub, user1 = @0x456)]
-    fun test_custom_pricing(
-        aptos_framework: &signer,
-        admin: &signer,
-        fihub: &signer,
-        user1: &signer,
-    ) {
-        setup_test(aptos_framework, admin, fihub, user1);
-
-        // Set default and custom prices in $MOVE
-        let outpost_name = string::utf8(b"premium_outpost");
-        PodiumOutpost::set_default_price(admin, 1000);
-        PodiumOutpost::set_custom_price(admin, outpost_name, 2000);
-
-        // Fund user account
-        coin::register<AptosCoin>(user1);
-        coin::transfer<AptosCoin>(admin, signer::address_of(user1), 3000);
-
-        // Create outpost with custom price
-        let description = string::utf8(b"Premium Outpost");
-        let metadata_uri = string::utf8(b"https://example.com/premium");
-        
-        PodiumOutpost::create_outpost(user1, outpost_name, description, metadata_uri);
-
-        // Verify payment amount
-        assert!(coin::balance<AptosCoin>(FIHUB) == 2000, 0);
+    // Test helper function to create unauthorized account
+    fun create_unauthorized_account(): signer {
+        account::create_account_for_test(@0x789)
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, fihub = @fihub, user1 = @0x456)]
-    #[expected_failure(abort_code = ENOT_AUTHORIZED)]
-    fun test_unauthorized_price_setting(
-        aptos_framework: &signer,
-        admin: &signer,
-        fihub: &signer,
-        user1: &signer,
-    ) {
-        setup_test(aptos_framework, admin, fihub, user1);
+    // Test helper to create an outpost
+    fun create_test_outpost(admin: &signer, creator: &signer, name: string::String): Object<OutpostData> {
+        // Initialize collection if needed
+        PodiumOutpost::init_collection(admin);
         
-        // Try to set price with unauthorized user
-        PodiumOutpost::set_default_price(user1, 1000);
+        PodiumOutpost::create_outpost_internal(
+            creator,
+            name,
+            string::utf8(OUTPOST_DESCRIPTION),
+            string::utf8(OUTPOST_URI),
+            INITIAL_PRICE,
+            INITIAL_FEE_SHARE,
+        )
     }
 
-    // Helper functions
-    fun setup_test(aptos_framework: &signer, admin: &signer, fihub: &signer, user1: &signer) {
-        // Create test accounts
-        account::create_account_for_test(@podium);
-        account::create_account_for_test(@fihub);
-        account::create_account_for_test(signer::address_of(user1));
+    #[test(admin = @admin)]
+    /// Test successful outpost creation
+    fun test_create_outpost_success(admin: &signer) {
+        // Create test account and outpost
+        let creator = create_test_account();
+        let outpost = create_test_outpost(admin, &creator, string::utf8(OUTPOST_NAME));
 
-        // Setup coin for testing
-        let (burn_cap, mint_cap) = aptos_framework::aptos_coin::initialize_for_test(aptos_framework);
-        coin::register<AptosCoin>(admin);
-        coin::register<AptosCoin>(fihub);
-        coin::deposit(signer::address_of(admin), coin::mint<AptosCoin>(10000, &mint_cap));
-        
-        // Cleanup
-        coin::destroy_burn_cap(burn_cap);
-        coin::destroy_mint_cap(mint_cap);
+        // Verify outpost data
+        assert!(PodiumOutpost::get_price(outpost) == INITIAL_PRICE, 5002);
+        assert!(PodiumOutpost::get_fee_share(outpost) == INITIAL_FEE_SHARE, 5003);
+        assert!(!PodiumOutpost::is_paused(outpost), 5004);
+        assert!(object::is_owner(outpost, signer::address_of(&creator)), 5005);
     }
-} 
+
+    #[test(admin = @admin)]
+    #[expected_failure(abort_code = 0x10005)] // EINVALID_PRICE
+    fun test_create_outpost_invalid_price(admin: &signer) {
+        let creator = create_test_account();
+        
+        PodiumOutpost::init_collection(admin);
+        PodiumOutpost::create_outpost(
+            &creator,
+            string::utf8(OUTPOST_NAME),
+            string::utf8(OUTPOST_DESCRIPTION),
+            string::utf8(OUTPOST_URI),
+            INVALID_PRICE,
+            INITIAL_FEE_SHARE,
+        );
+    }
+
+    #[test(admin = @admin)]
+    #[expected_failure(abort_code = 0x10006)] // EINVALID_FEE
+    fun test_create_outpost_invalid_fee(admin: &signer) {
+        let creator = create_test_account();
+        
+        PodiumOutpost::init_collection(admin);
+        PodiumOutpost::create_outpost(
+            &creator,
+            string::utf8(OUTPOST_NAME),
+            string::utf8(OUTPOST_DESCRIPTION),
+            string::utf8(OUTPOST_URI),
+            INITIAL_PRICE,
+            INVALID_FEE_SHARE,
+        );
+    }
+
+    #[test(admin = @admin)]
+    fun test_update_price_success(admin: &signer) {
+        let creator = create_test_account();
+        let outpost = create_test_outpost(admin, &creator, string::utf8(OUTPOST_NAME));
+
+        // Update price
+        PodiumOutpost::update_price(&creator, outpost, UPDATED_PRICE);
+
+        // Verify price was updated
+        assert!(PodiumOutpost::get_price(outpost) == UPDATED_PRICE, 5006);
+        
+        // Verify event was emitted
+        let events = event::emitted_events<PodiumOutpost::PriceUpdateEvent>();
+        assert!(vector::length(&events) == 1, 5007);
+    }
+
+    #[test(admin = @admin)]
+    #[expected_failure(abort_code = 0x10004)] // ENOT_OWNER
+    fun test_update_price_unauthorized(admin: &signer) {
+        // Create test account and outpost
+        let creator = create_test_account();
+        let unauthorized = create_unauthorized_account();
+        
+        // Create outpost with creator account
+        let outpost = create_test_outpost(admin, &creator, string::utf8(OUTPOST_NAME));
+
+        // Try to update price with unauthorized account
+        PodiumOutpost::update_price(&unauthorized, outpost, UPDATED_PRICE);
+    }
+
+    #[test(admin = @admin)]
+    fun test_update_fee_share_success(admin: &signer) {
+        let creator = create_test_account();
+        let outpost = create_test_outpost(admin, &creator, string::utf8(OUTPOST_NAME));
+
+        // Update fee share
+        PodiumOutpost::update_fee_share(&creator, outpost, UPDATED_FEE_SHARE);
+
+        // Verify fee share was updated
+        assert!(PodiumOutpost::get_fee_share(outpost) == UPDATED_FEE_SHARE, 5008);
+        
+        // Verify event was emitted
+        let events = event::emitted_events<PodiumOutpost::FeeUpdateEvent>();
+        assert!(vector::length(&events) == 1, 5009);
+    }
+
+    #[test(admin = @admin)]
+    fun test_emergency_pause(admin: &signer) {
+        let creator = create_test_account();
+        let outpost = create_test_outpost(admin, &creator, string::utf8(OUTPOST_NAME));
+
+        // Toggle emergency pause
+        PodiumOutpost::toggle_emergency_pause(&creator, outpost);
+        assert!(PodiumOutpost::is_paused(outpost), 5010);
+        assert!(!PodiumOutpost::verify_access(outpost), 5011);
+
+        // Verify event was emitted
+        let events = event::emitted_events<PodiumOutpost::EmergencyPauseEvent>();
+        assert!(vector::length(&events) == 1, 5012);
+
+        // Test that price updates fail when paused
+        PodiumOutpost::toggle_emergency_pause(&creator, outpost);
+        assert!(!PodiumOutpost::is_paused(outpost), 5013);
+        assert!(PodiumOutpost::verify_access(outpost), 5014);
+    }
+
+    #[test(admin = @admin)]
+    #[expected_failure(abort_code = 0x10007)] // EEMERGENCY_PAUSE
+    fun test_update_during_emergency_pause(admin: &signer) {
+        let creator = create_test_account();
+        let outpost = create_test_outpost(admin, &creator, string::utf8(OUTPOST_NAME));
+
+        // Enable emergency pause
+        PodiumOutpost::toggle_emergency_pause(&creator, outpost);
+        
+        // Try to update price while paused
+        PodiumOutpost::update_price(&creator, outpost, UPDATED_PRICE);
+    }
+
+    #[test(admin = @admin)]
+    #[expected_failure(abort_code = 0x10001)] // ENOT_ADMIN
+    fun test_collection_creation_unauthorized(admin: &signer) {
+        // Try to initialize collection with non-admin account
+        let creator = create_unauthorized_account();
+        
+        // Collection should not exist yet, and creator is not admin
+        PodiumOutpost::init_collection(&creator);
+    }
+}
