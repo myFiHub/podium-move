@@ -170,7 +170,7 @@ module podium::PodiumPass_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @admin, user1 = @0x456, user2 = @0x789, target = @0x123)]
-    #[expected_failure(abort_code = 393228)] // EPASS_NOT_FOUND
+    #[expected_failure(abort_code = 393225)] // ETIER_NOT_FOUND
     fun test_subscribe_to_nonexistent_tier(
         aptos_framework: &signer,
         admin: &signer,
@@ -180,6 +180,16 @@ module podium::PodiumPass_test {
     ) {
         setup_test(aptos_framework, admin, user1, user2, target);
         let outpost = create_test_outpost(target);
+
+        // Create a subscription tier first
+        PodiumPass::create_subscription_tier(
+            target,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            SUBSCRIPTION_MONTH_PRICE,
+            SUBSCRIPTION_YEAR_PRICE,
+        );
 
         // Try to subscribe to non-existent tier
         PodiumPass::subscribe(
@@ -211,12 +221,7 @@ module podium::PodiumPass_test {
         object::transfer(target, outpost, signer::address_of(user1));
         debug::print(&string::utf8(b"Step 3: Outpost transferred to user1"));
 
-        // Step 4: Re-initialize configs after transfer
-        PodiumPass::init_pass_config(user1, outpost);
-        PodiumPass::init_subscription_config(user1, outpost);
-        debug::print(&string::utf8(b"Step 4: Configs re-initialized"));
-
-        // Step 5: User1 (new owner) creates subscription tiers
+        // Step 4: User1 (new owner) creates subscription tiers
         PodiumPass::create_subscription_tier(
             user1,
             outpost,
@@ -233,17 +238,17 @@ module podium::PodiumPass_test {
             SUBSCRIPTION_MONTH_PRICE,
             SUBSCRIPTION_YEAR_PRICE,
         );
-        debug::print(&string::utf8(b"Step 5: Subscription tiers created"));
+        debug::print(&string::utf8(b"Step 4: Subscription tiers created"));
 
-        // Step 6: User2 buys a pass
+        // Step 5: User2 buys a pass
         PodiumPass::buy_pass(user2, outpost, PASS_AMOUNT, option::none());
-        debug::print(&string::utf8(b"Step 6: User2 bought pass"));
+        debug::print(&string::utf8(b"Step 5: User2 bought pass"));
 
-        // Step 7: Verify pass ownership
+        // Step 6: Verify pass ownership
         assert!(PodiumPass::verify_pass_ownership(signer::address_of(user2), outpost), EPASS_NOT_FOUND);
-        debug::print(&string::utf8(b"Step 7: Pass ownership verified"));
+        debug::print(&string::utf8(b"Step 6: Pass ownership verified"));
 
-        // Step 8: User2 subscribes to basic tier
+        // Step 7: User2 subscribes to basic tier
         PodiumPass::subscribe(
             user2,
             outpost,
@@ -251,17 +256,17 @@ module podium::PodiumPass_test {
             PodiumPass::get_duration_month(),
             option::none(),
         );
-        debug::print(&string::utf8(b"Step 8: User2 subscribed to basic tier"));
+        debug::print(&string::utf8(b"Step 7: User2 subscribed to basic tier"));
 
-        // Step 9: Verify subscription
+        // Step 8: Verify subscription
         assert!(PodiumPass::verify_subscription(
             signer::address_of(user2),
             outpost,
             string::utf8(b"basic")
         ), ESUBSCRIPTION_NOT_FOUND);
-        debug::print(&string::utf8(b"Step 9: Subscription verified"));
+        debug::print(&string::utf8(b"Step 8: Subscription verified"));
 
-        // Step 10: User2 upgrades to premium tier
+        // Step 9: User2 upgrades to premium tier
         PodiumPass::subscribe(
             user2,
             outpost,
@@ -269,14 +274,14 @@ module podium::PodiumPass_test {
             PodiumPass::get_duration_month(),
             option::none(),
         );
-        debug::print(&string::utf8(b"Step 10: User2 upgraded to premium tier"));
+        debug::print(&string::utf8(b"Step 9: User2 upgraded to premium tier"));
 
-        // Step 11: Verify premium subscription
+        // Step 10: Verify premium subscription
         assert!(PodiumPass::verify_subscription(
             signer::address_of(user2),
             outpost,
             string::utf8(b"premium")
         ), ESUBSCRIPTION_NOT_FOUND);
-        debug::print(&string::utf8(b"Step 11: Premium subscription verified"));
+        debug::print(&string::utf8(b"Step 10: Premium subscription verified"));
     }
 }
