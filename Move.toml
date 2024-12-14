@@ -1,6 +1,6 @@
 [package]
 name = "PodiumProtocol"
-version = "1.0.0"
+version = "0.0.1"
 authors = ["FiHub"]
 
 [addresses]
@@ -12,12 +12,14 @@ fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
 podium = "_"
 admin = "_"
 treasury = "_"
+passcoin = "_"
 
 [dev-addresses]
 CheerOrBooV2 = "0x345"
 podium = "0x456"
 admin = "0x123"
 treasury = "0x234"
+passcoin = "0x567"
 
 [dependencies]
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework/", rev = "mainnet" }

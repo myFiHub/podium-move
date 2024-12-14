@@ -1,4 +1,6 @@
 module podium::PodiumPassCoin {
+    friend podium::PodiumPass;
+
     use std::error;
     use std::signer;
     use std::string::{Self, String};
@@ -231,7 +233,7 @@ module podium::PodiumPassCoin {
     /// Generates a standardized symbol for target account assets
     /// @param target_id: The target account identifier
     /// @return The formatted asset symbol
-    fun generate_target_symbol(target_id: String): String {
+    public(friend) fun generate_target_symbol(target_id: String): String {
         let prefix = string::utf8(b"TARGET_");
         let result = string::utf8(vector::empty());
         string::append(&mut result, prefix);

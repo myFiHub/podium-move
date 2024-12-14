@@ -17,6 +17,7 @@ module podium::PodiumPass {
     use aptos_framework::event::{Self, EventHandle};
     use aptos_token_objects::token;
     use aptos_framework::debug;
+    use std::bcs::to_bytes;
 
     /// Error codes
     const ENOT_AUTHORIZED: u64 = 1;
@@ -38,6 +39,7 @@ module podium::PodiumPass {
     const EINVALID_SUBSCRIPTION_DURATION: u64 = 17;
     const EINVALID_SUBSCRIPTION_TIER: u64 = 18;
     const ENOT_ADMIN: u64 = 19;
+    const EINVALID_PASSCOIN_AUTHORITY: u64 = 12;
 
     /// Fee constants
     const MAX_REFERRAL_FEE_PERCENT: u64 = 2; // 2%
@@ -377,12 +379,9 @@ module podium::PodiumPass {
     }
 
     /// Helper function to get asset symbol
-    fun get_asset_symbol(target_or_outpost: address): String {
-        if (PodiumOutpost::has_outpost_data(object::address_to_object<OutpostData>(target_or_outpost))) {
-            string::utf8(b"OUTPOST")
-        } else {
-            string::utf8(b"TARGET")
-        }
+    public fun get_asset_symbol(target_addr: address): String {
+        let target_id = string::utf8(to_bytes(&target_addr));
+        PodiumPassCoin::generate_target_symbol(target_id)
     }
 
     /// Safely transfers $MOVE coins with recipient account verification
@@ -403,18 +402,42 @@ module podium::PodiumPass {
     /// Buy a pass for a target/outpost
     public fun buy_pass(
         buyer: &signer,
-        target_or_outpost: Object<OutpostData>,
-        amount: u64,
-        referrer: Option<address>
+        target_addr: address,
+        tier_id: u64,
+        duration: u64,
+        referrer: Option<address>,
     ) acquires Config, PassConfig {
-        assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-        
-        let target_addr = object::object_address(&target_or_outpost);
+        // Debug print using string::utf8
+        debug::print(&string::utf8(b"[buy_pass] Checking PassConfig for target:"));
+        debug::print(&target_addr);
+
+        // Initialize config if it doesn't exist
+        if (!exists<PassConfig>(target_addr)) {
+            // Create the fungible asset for this target first
+            let target_id = string::utf8(to_bytes(&target_addr)); // Convert address to string
+            PodiumPassCoin::create_target_asset(
+                buyer,
+                target_id,
+                string::utf8(b"Podium Pass"), 
+                string::utf8(b""), // icon_uri
+                string::utf8(b"https://podium.fi/pass/"), // project_uri
+            );
+
+            // Now create the pass config
+            move_to(buyer, PassConfig {
+                supply: 0,
+                last_price: INITIAL_PRICE,
+            });
+
+            debug::print(&string::utf8(b"[buy_pass] PassConfig created for new target"));
+        };
+
+        // Original assertion now happens after potential initialization
         assert!(exists<PassConfig>(target_addr), error::not_found(EPASS_NOT_FOUND));
 
         let pass_config = borrow_global_mut<PassConfig>(target_addr);
         let base_price = calculate_price(pass_config.supply, false);
-        let base_cost = base_price * amount;
+        let base_cost = base_price * duration;
 
         // Calculate fees on top of base price
         let config = borrow_global<Config>(@admin);
@@ -438,11 +461,11 @@ module podium::PodiumPass {
 
         // Mint pass tokens
         let asset_symbol = get_asset_symbol(target_addr);
-        let fa = PodiumPassCoin::mint(buyer, asset_symbol, amount);
+        let fa = PodiumPassCoin::mint(buyer, asset_symbol, duration);
         primary_fungible_store::deposit(signer::address_of(buyer), fa);
 
         // Update supply and price
-        pass_config.supply = pass_config.supply + amount;
+        pass_config.supply = pass_config.supply + duration;
         pass_config.last_price = base_price;
 
         // Emit event
@@ -451,7 +474,7 @@ module podium::PodiumPass {
             PassPurchaseEvent {
                 buyer: signer::address_of(buyer),
                 target_or_outpost: target_addr,
-                amount,
+                amount: duration,
                 price: base_price,
                 referrer,
             },
