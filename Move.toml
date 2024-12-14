@@ -13,6 +13,10 @@ podium = "_"
 admin = "_"
 treasury = "_"
 passcoin = "_"
+std = "0x1"
+aptos_framework = "0x1"
+aptos_std = "0x1"
+aptos_token = "0x3"
 
 [dev-addresses]
 CheerOrBooV2 = "0x345"
@@ -26,5 +30,6 @@ AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir 
 AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-stdlib/", rev = "mainnet" }
 AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token/", rev = "mainnet" }
 AptosTokenObjects = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token-objects/", rev = "mainnet" }
+MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib/", rev = "mainnet" }
 
 [dev-dependencies]

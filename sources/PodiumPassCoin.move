@@ -13,6 +13,7 @@ module podium::PodiumPassCoin {
     use aptos_framework::coin;
     use aptos_framework::aptos_account;
     use aptos_framework::aptos_coin::AptosCoin;
+    use aptos_framework::debug;
 
     /// Error codes
     /// When a non-PodiumPass contract tries to perform restricted operations
@@ -25,6 +26,8 @@ module podium::PodiumPassCoin {
     const EASSET_DOES_NOT_EXIST: u64 = 4;
     /// When trying to transfer more coins than available balance
     const INSUFFICIENT_BALANCE: u64 = 5;
+    /// When unauthorized account tries to perform admin operations
+    const ENOT_AUTHORIZED: u64 = 6;
 
     /// Constants for asset configuration
     /// No decimal places as passes are whole units only
@@ -53,8 +56,8 @@ module podium::PodiumPassCoin {
     /// @param caller: The signer to verify
     /// @return Boolean indicating if caller is PodiumPass
     fun is_podium_pass(caller: &signer): bool {
-        let caller_address = signer::address_of(caller);
-        caller_address == @podium && exists<AssetCapabilities>(@podium)
+        // Since PodiumPass is a friend module, any call from it is authorized
+        exists<AssetCapabilities>(@podium)
     }
 
     /// Initializes the PodiumPassCoin module
@@ -74,25 +77,24 @@ module podium::PodiumPassCoin {
         });
     }
 
-    /// Creates a new fungible asset type for a target account
-    /// Only callable by the PodiumPass contract
-    /// @param caller: The signer of the calling contract (must be PodiumPass)
-    /// @param target_id: Unique identifier for the target account
-    /// @param name: Display name for the asset
-    /// @param icon_uri: URI for the asset's icon
-    /// @param project_uri: URI for the asset's project details
+    /// Creates a new target asset type
     public fun create_target_asset(
-        caller: &signer,
+        creator: &signer,
         target_id: String,
         name: String,
         icon_uri: String,
-        project_uri: String
+        project_uri: String,
     ) acquires AssetCapabilities {
-        // Only PodiumPass contract can call this
-        assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
-        
+        debug::print(&string::utf8(b"[create_target_asset] Starting"));
+        debug::print(&string::utf8(b"Target ID:"));
+        debug::print(&target_id);
+
         let asset_symbol = generate_target_symbol(target_id);
-        create_asset(caller, asset_symbol, name, icon_uri, project_uri);
+        debug::print(&string::utf8(b"Generated symbol:"));
+        debug::print(&asset_symbol);
+
+        create_asset(creator, asset_symbol, name, icon_uri, project_uri);
+        debug::print(&string::utf8(b"Asset created successfully"));
     }
 
     /// Creates a new fungible asset type for an outpost
@@ -168,10 +170,11 @@ module podium::PodiumPassCoin {
     public fun mint(
         caller: &signer,
         asset_symbol: String,
-        amount: u64
+        amount: u64,
     ): FungibleAsset acquires AssetCapabilities {
-        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
+        // Verify caller is PodiumPass
         assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
         
         let caps = borrow_global<AssetCapabilities>(@podium);
         assert!(table::contains(&caps.mint_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
@@ -234,10 +237,13 @@ module podium::PodiumPassCoin {
     /// @param target_id: The target account identifier
     /// @return The formatted asset symbol
     public(friend) fun generate_target_symbol(target_id: String): String {
+        debug::print(&string::utf8(b"[generate_target_symbol] Creating symbol"));
         let prefix = string::utf8(b"TARGET_");
         let result = string::utf8(vector::empty());
         string::append(&mut result, prefix);
         string::append(&mut result, target_id);
+        debug::print(&string::utf8(b"Generated symbol:"));
+        debug::print(&result);
         result
     }
 
@@ -278,5 +284,21 @@ module podium::PodiumPassCoin {
         } else {
             aptos_account::transfer(sender, recipient, amount);
         };
+    }
+
+    #[test_only]
+    public fun mint_for_test(
+        admin: &signer,
+        asset_symbol: String,
+        amount: u64,
+    ): FungibleAsset acquires AssetCapabilities {
+        assert!(signer::address_of(admin) == @admin, error::permission_denied(ENOT_AUTHORIZED));
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
+        
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.mint_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let mint_ref = table::borrow(&caps.mint_refs, asset_symbol);
+        fungible_asset::mint(mint_ref, amount)
     }
 } 

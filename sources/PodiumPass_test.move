@@ -4,7 +4,7 @@ module podium::PodiumPass_test {
     use std::signer;
     use std::option;
     use std::debug;
-    use aptos_framework::object::Object;
+    use aptos_framework::object::{Self, Object};
     use aptos_framework::account;
     use aptos_framework::coin;
     use aptos_framework::timestamp;
@@ -44,6 +44,7 @@ module podium::PodiumPass_test {
         target: &signer,
     ) {
         // Create test accounts
+        account::create_account_for_test(@0x1);
         account::create_account_for_test(@admin);
         account::create_account_for_test(signer::address_of(user1));
         account::create_account_for_test(signer::address_of(user2));
@@ -88,7 +89,6 @@ module podium::PodiumPass_test {
             OUTPOST_FEE_SHARE,
         );
         debug::print(&string::utf8(b"Initializing outpost configs"));
-        PodiumPass::init_pass_config(creator, outpost);
         PodiumPass::init_subscription_config(creator, outpost);
         debug::print(&string::utf8(b"Test outpost created"));
         outpost
@@ -100,13 +100,31 @@ module podium::PodiumPass_test {
         buyer: &signer,
         target: &signer,
     ) {
-        // Use PodiumPassCoin instead
-        PodiumPassCoin::init_module_for_test(buyer);
+        // Get admin signer and setup test environment
+        let admin = account::create_signer_for_test(@admin);
+        setup_test(&account::create_signer_for_test(@0x1), &admin, buyer, target, creator);
         
-        let target_addr = signer::address_of(target);
+        // Create and setup outpost following the standard pattern
+        let outpost = create_test_outpost(&admin);
+        let target_addr = object::object_address(&outpost);
+        debug::print(&string::utf8(b"Outpost address:"));
+        debug::print(&target_addr);
+        
+        // Create a subscription tier (required for pass purchase)
+        PodiumPass::create_subscription_tier(
+            &admin,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            PodiumPass::get_duration_week(),
+        );
+        
+        debug::print(&string::utf8(b"Attempting to buy pass at address:"));
+        debug::print(&target_addr);
+        // Now we can buy a pass
         PodiumPass::buy_pass(buyer, target_addr, 1, 30, option::none());
         
-        // Verify pass was created using PodiumPassCoin balance check instead
+        // Verify pass was created using PodiumPassCoin balance check
         let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
         assert!(PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol) > 0, 0);
     }
@@ -147,17 +165,35 @@ module podium::PodiumPass_test {
         ), 1);
     }
 
-    #[test(creator = @0x123, buyer = @0x456, target = @0x789)]
+    #[test(aptos_framework = @0x1, admin = @admin, buyer = @0x456, target = @0x789)]
     public fun test_pass_trading(
-        creator: &signer,
+        aptos_framework: &signer,
+        admin: &signer,
         buyer: &signer,
         target: &signer,
     ) {
-        // Setup PodiumPassCoin instead of PassCoin
-        PodiumPassCoin::init_module_for_test(buyer);
+        // Setup test environment
+        setup_test(aptos_framework, admin, buyer, target, target);
         
-        // Rest of test remains the same
-        // ...
+        // Create and setup outpost
+        let outpost = create_test_outpost(admin);
+        let target_addr = object::object_address(&outpost);
+        
+        // Create subscription tier
+        PodiumPass::create_subscription_tier(
+            admin,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            PodiumPass::get_duration_week(),
+        );
+        
+        // Try to buy a pass
+        PodiumPass::buy_pass(buyer, target_addr, 1, 30, option::none());
+        
+        // Verify pass was created
+        let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
+        assert!(PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol) > 0, 0);
     }
 
     #[test(aptos_framework = @0x1, admin = @admin, user1 = @0x456, user2 = @0x789, target = @0x123)]
