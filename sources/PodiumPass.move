@@ -16,6 +16,7 @@ module podium::PodiumPass {
     use aptos_framework::account;
     use aptos_framework::event::{Self, EventHandle};
     use aptos_token_objects::token;
+    use aptos_framework::debug;
 
     /// Error codes
     const ENOT_AUTHORIZED: u64 = 1;
@@ -36,6 +37,7 @@ module podium::PodiumPass {
     const ESUBSCRIPTION_ALREADY_EXISTS: u64 = 16;
     const EINVALID_SUBSCRIPTION_DURATION: u64 = 17;
     const EINVALID_SUBSCRIPTION_TIER: u64 = 18;
+    const ENOT_ADMIN: u64 = 19;
 
     /// Fee constants
     const MAX_REFERRAL_FEE_PERCENT: u64 = 2; // 2%
@@ -84,6 +86,38 @@ module podium::PodiumPass {
         referrer: Option<address>,
     }
 
+    /// Event emitted when a new subscription is created
+    struct SubscriptionCreatedEvent has drop, store {
+        outpost_addr: address,
+        subscriber: address,
+        tier_id: u64,
+        timestamp: u64
+    }
+
+    /// Event emitted when a subscription is cancelled
+    struct SubscriptionCancelledEvent has drop, store {
+        outpost_addr: address,
+        subscriber: address,
+        tier_id: u64,
+        timestamp: u64
+    }
+
+    /// Event emitted when a subscription tier is updated
+    struct TierUpdatedEvent has drop, store {
+        outpost_addr: address,
+        tier_id: u64,
+        price: u64,
+        duration: u64,
+        timestamp: u64
+    }
+
+    /// Event emitted when subscription configuration changes
+    struct ConfigUpdatedEvent has drop, store {
+        outpost_addr: address,
+        max_tiers: u64,
+        timestamp: u64
+    }
+
     /// Global configuration
     struct Config has key {
         /// Fee percentages
@@ -100,27 +134,32 @@ module podium::PodiumPass {
         pass_purchase_events: EventHandle<PassPurchaseEvent>,
         pass_sell_events: EventHandle<PassSellEvent>,
         subscription_events: EventHandle<SubscriptionEvent>,
+        subscription_configs: Table<address, SubscriptionConfig>, // outpost_addr -> config
+        subscription_created_events: EventHandle<SubscriptionCreatedEvent>,
+        subscription_cancelled_events: EventHandle<SubscriptionCancelledEvent>,
+        tier_updated_events: EventHandle<TierUpdatedEvent>,
+        config_updated_events: EventHandle<ConfigUpdatedEvent>
     }
 
     /// Subscription tier configuration
     struct SubscriptionTier has store, copy, drop {
         name: String,
-        week_price: u64,
-        month_price: u64,
-        year_price: u64,
+        price: u64,
+        duration: u64,
     }
 
     /// Tracks active subscriptions
     struct Subscription has store, copy, drop {
-        tier: String,
+        tier_id: u64,
         start_time: u64,
         end_time: u64,
     }
 
     /// Stores subscription data for a target/outpost
-    struct SubscriptionConfig has key {
+    struct SubscriptionConfig has key, store {
         tiers: vector<SubscriptionTier>,
         subscriptions: Table<address, Subscription>, // subscriber -> subscription
+        max_tiers: u64,
     }
 
     /// Tracks pass supply and pricing for targets/outposts
@@ -160,6 +199,11 @@ module podium::PodiumPass {
             pass_purchase_events: account::new_event_handle<PassPurchaseEvent>(admin),
             pass_sell_events: account::new_event_handle<PassSellEvent>(admin),
             subscription_events: account::new_event_handle<SubscriptionEvent>(admin),
+            subscription_configs: table::new(),
+            subscription_created_events: account::new_event_handle<SubscriptionCreatedEvent>(admin),
+            subscription_cancelled_events: account::new_event_handle<SubscriptionCancelledEvent>(admin),
+            tier_updated_events: account::new_event_handle<TierUpdatedEvent>(admin),
+            config_updated_events: account::new_event_handle<ConfigUpdatedEvent>(admin)
         });
     }
 
@@ -189,27 +233,27 @@ module podium::PodiumPass {
     }
 
     /// Initialize subscription configuration for a new outpost
-    public fun init_subscription_config(creator: &signer, target_or_outpost: Object<OutpostData>) {
+    public fun init_subscription_config(creator: &signer, target_or_outpost: Object<OutpostData>) acquires Config {
         let target_addr = object::object_address(&target_or_outpost);
+        debug::print(&string::utf8(b"[init_subscription_config] Target address:"));
+        debug::print(&target_addr);
+        debug::print(&string::utf8(b"[init_subscription_config] Creator address:"));
+        debug::print(&signer::address_of(creator));
+        
         assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
         
-        if (!exists<SubscriptionConfig>(target_addr)) {
-            // Create a named token for the subscription config
-            let constructor_ref = token::create_named_token(
-                creator,
-                string::utf8(b"PodiumOutposts"),
-                string::utf8(b"Subscription Config"),
-                string::utf8(b"Subscription Config"),
-                option::none(),
-                string::utf8(b""),
-            );
-            let outpost_signer = object::generate_signer(&constructor_ref);
-            
-            // Move the config directly to the outpost address
-            move_to(&outpost_signer, SubscriptionConfig {
+        let config = borrow_global_mut<Config>(@admin);
+        debug::print(&string::utf8(b"[init_subscription_config] Checking if config exists..."));
+        if (!table::contains(&config.subscription_configs, target_addr)) {
+            debug::print(&string::utf8(b"[init_subscription_config] Creating new config"));
+            table::add(&mut config.subscription_configs, target_addr, SubscriptionConfig {
                 tiers: vector::empty(),
                 subscriptions: table::new(),
+                max_tiers: 0,
             });
+            debug::print(&string::utf8(b"[init_subscription_config] Config created"));
+        } else {
+            debug::print(&string::utf8(b"[init_subscription_config] Config already exists"));
         };
     }
 
@@ -250,100 +294,61 @@ module podium::PodiumPass {
         creator: &signer,
         target_or_outpost: Object<OutpostData>,
         tier_name: String,
-        week_price: u64,
-        month_price: u64,
-        year_price: u64,
-    ) acquires SubscriptionConfig {
+        price: u64,
+        duration: u64,
+    ) acquires Config {
         let target_addr = object::object_address(&target_or_outpost);
-        assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), ENOT_OWNER);
-        assert!(exists<SubscriptionConfig>(target_addr), error::not_found(ETIER_NOT_FOUND));
+        debug::print(&string::utf8(b"[create_subscription_tier] Target address:"));
+        debug::print(&target_addr);
+        debug::print(&string::utf8(b"[create_subscription_tier] Creator address:"));
+        debug::print(&signer::address_of(creator));
+        
+        assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
+        debug::print(&string::utf8(b"[create_subscription_tier] Ownership verified"));
+        
+        let config = borrow_global_mut<Config>(@admin);
+        debug::print(&string::utf8(b"[create_subscription_tier] Checking if config exists..."));
+        assert!(table::contains(&config.subscription_configs, target_addr), error::not_found(ETIER_NOT_FOUND));
+        debug::print(&string::utf8(b"[create_subscription_tier] Config exists"));
 
-        let config = borrow_global_mut<SubscriptionConfig>(target_addr);
+        let sub_config = table::borrow_mut(&mut config.subscription_configs, target_addr);
+        debug::print(&string::utf8(b"[create_subscription_tier] Current number of tiers:"));
+        debug::print(&vector::length(&sub_config.tiers));
         
         // Verify tier doesn't already exist
         let i = 0;
-        let len = vector::length(&config.tiers);
+        let len = vector::length(&sub_config.tiers);
         while (i < len) {
-            let tier = vector::borrow(&config.tiers, i);
+            let tier = vector::borrow(&sub_config.tiers, i);
             assert!(tier.name != tier_name, error::already_exists(ETIER_EXISTS));
             i = i + 1;
         };
 
         // Add new tier
-        vector::push_back(&mut config.tiers, SubscriptionTier {
+        vector::push_back(&mut sub_config.tiers, SubscriptionTier {
             name: tier_name,
-            week_price,
-            month_price,
-            year_price,
+            price,
+            duration,
         });
-    }
-
-    /// Update an existing subscription tier
-    public fun update_subscription_tier(
-        admin: &signer,
-        target_or_outpost: Object<OutpostData>,
-        tier_name: String,
-        new_week_price: u64,
-        new_month_price: u64,
-        new_year_price: u64,
-    ) acquires SubscriptionConfig {
-        let target_addr = object::object_address(&target_or_outpost);
-        assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(admin)), ENOT_OWNER);
-        assert!(exists<SubscriptionConfig>(target_addr), error::not_found(ETIER_NOT_FOUND));
-
-        let config = borrow_global_mut<SubscriptionConfig>(target_addr);
-        let found = false;
-        let i = 0;
-        let len = vector::length(&config.tiers);
-        
-        while (i < len) {
-            let tier = vector::borrow_mut(&mut config.tiers, i);
-            if (tier.name == tier_name) {
-                tier.week_price = new_week_price;
-                tier.month_price = new_month_price;
-                tier.year_price = new_year_price;
-                found = true;
-                break
-            };
-            i = i + 1;
-        };
-
-        assert!(found, error::not_found(ETIER_NOT_FOUND));
-    }
-
-    /// Cancel an active subscription
-    public fun cancel_subscription(
-        subscriber: &signer,
-        target_or_outpost: Object<OutpostData>,
-    ) acquires SubscriptionConfig {
-        let target_addr = object::object_address(&target_or_outpost);
-        let subscriber_addr = signer::address_of(subscriber);
-        
-        assert!(exists<SubscriptionConfig>(target_addr), error::not_found(ESUBSCRIPTION_NOT_FOUND));
-        let config = borrow_global_mut<SubscriptionConfig>(target_addr);
-        
-        assert!(table::contains(&config.subscriptions, subscriber_addr), error::not_found(ESUBSCRIPTION_NOT_FOUND));
-        table::remove(&mut config.subscriptions, subscriber_addr);
+        debug::print(&string::utf8(b"[create_subscription_tier] Tier added successfully"));
     }
 
     /// Verify if a subscription is valid
     public fun verify_subscription(
         subscriber: address,
         target_or_outpost: Object<OutpostData>,
-        tier: String
-    ): bool acquires SubscriptionConfig {
+        tier_id: u64
+    ): bool acquires Config {
         let target_addr = object::object_address(&target_or_outpost);
-        if (!exists<SubscriptionConfig>(target_addr)) {
+        let config = borrow_global<Config>(@admin);
+        let sub_config = table::borrow(&config.subscription_configs, target_addr);
+        
+        if (!table::contains(&sub_config.subscriptions, subscriber)) {
             return false
         };
         
-        let config = borrow_global<SubscriptionConfig>(target_addr);
-        if (!table::contains(&config.subscriptions, subscriber)) {
-            return false
-        };
-        
-        let subscription = table::borrow(&config.subscriptions, subscriber);
-        subscription.tier == tier && subscription.end_time > timestamp::now_seconds()
+        let subscription = table::borrow(&sub_config.subscriptions, subscriber);
+        subscription.tier_id == tier_id && subscription.end_time > timestamp::now_seconds()
     }
 
     /// Verify pass ownership
@@ -457,80 +462,59 @@ module podium::PodiumPass {
     public fun subscribe(
         subscriber: &signer,
         target_or_outpost: Object<OutpostData>,
-        tier_name: String,
-        duration: u64,
+        tier_id: u64,
         referrer: Option<address>
-    ) acquires Config, SubscriptionConfig {
+    ) acquires Config {
         let target_addr = object::object_address(&target_or_outpost);
-        assert!(exists<SubscriptionConfig>(target_addr), error::not_found(ETIER_NOT_FOUND));
+        debug::print(&string::utf8(b"[subscribe] Target address:"));
+        debug::print(&target_addr);
+        debug::print(&string::utf8(b"[subscribe] Subscriber address:"));
+        debug::print(&signer::address_of(subscriber));
         
-        let config = borrow_global_mut<SubscriptionConfig>(target_addr);
+        let config = borrow_global_mut<Config>(@admin);
+        debug::print(&string::utf8(b"[subscribe] Checking if config exists..."));
+        assert!(table::contains(&config.subscription_configs, target_addr), error::not_found(ETIER_NOT_FOUND));
+        debug::print(&string::utf8(b"[subscribe] Config exists"));
+        
+        let sub_config = table::borrow_mut(&mut config.subscription_configs, target_addr);
         let subscriber_addr = signer::address_of(subscriber);
 
-        // Find tier and price
-        let tier_found = false;
-        let price = 0u64;
-        let i = 0;
-        let len = vector::length(&config.tiers);
-        
-        while (i < len) {
-            let tier = vector::borrow(&config.tiers, i);
-            if (tier.name == tier_name) {
-                price = if (duration == DURATION_WEEK) {
-                    tier.week_price
-                } else if (duration == DURATION_MONTH) {
-                    tier.month_price
-                } else if (duration == DURATION_YEAR) {
-                    tier.year_price
-                } else {
-                    abort error::invalid_argument(EINVALID_SUBSCRIPTION_DURATION)
-                };
-                tier_found = true;
-                break
-            };
-            i = i + 1;
-        };
+        // Get tier and price
+        assert!(tier_id < vector::length(&sub_config.tiers), error::invalid_argument(EINVALID_SUBSCRIPTION_TIER));
+        let tier = vector::borrow(&sub_config.tiers, tier_id);
+        let price = tier.price;
+        let duration = tier.duration;
+        let tier_name = tier.name;
 
-        assert!(tier_found, error::not_found(EINVALID_SUBSCRIPTION_TIER));
-        assert!(!table::contains(&config.subscriptions, subscriber_addr), error::already_exists(ESUBSCRIPTION_ALREADY_EXISTS));
+        assert!(!table::contains(&sub_config.subscriptions, subscriber_addr), error::already_exists(ESUBSCRIPTION_ALREADY_EXISTS));
 
         // Handle fee distribution
-        let global_config = borrow_global<Config>(@admin);
-        let protocol_fee = (price * global_config.protocol_fee_percent) / 100;
-        let subject_fee = (price * global_config.subject_fee_percent) / 100;
+        let protocol_fee = (price * config.protocol_fee_percent) / 100;
+        let subject_fee = (price * config.subject_fee_percent) / 100;
         let referral_fee = if (option::is_some(&referrer)) {
-            (price * global_config.referral_fee_percent) / 100
+            (price * config.referral_fee_percent) / 100
         } else {
             0
         };
 
         // Transfer fees
-        transfer_with_check(subscriber, global_config.treasury, protocol_fee);
+        transfer_with_check(subscriber, config.treasury, protocol_fee);
         transfer_with_check(subscriber, target_addr, subject_fee);
         if (option::is_some(&referrer)) {
             transfer_with_check(subscriber, option::extract(&mut referrer), referral_fee);
         };
 
-        // Calculate subscription duration
-        let duration_seconds = if (duration == DURATION_WEEK) {
-            SECONDS_PER_WEEK
-        } else if (duration == DURATION_MONTH) {
-            SECONDS_PER_MONTH
-        } else {
-            SECONDS_PER_YEAR
-        };
-
         // Create subscription
         let now = timestamp::now_seconds();
-        table::add(&mut config.subscriptions, subscriber_addr, Subscription {
-            tier: tier_name,
+        table::add(&mut sub_config.subscriptions, subscriber_addr, Subscription {
+            tier_id,
             start_time: now,
-            end_time: now + duration_seconds,
+            end_time: now + duration,
         });
 
-        // Emit event
+        // Emit events
         event::emit_event(
-            &mut borrow_global_mut<Config>(@admin).subscription_events,
+            &mut config.subscription_events,
             SubscriptionEvent {
                 subscriber: subscriber_addr,
                 target_or_outpost: target_addr,
@@ -539,6 +523,16 @@ module podium::PodiumPass {
                 price,
                 referrer,
             },
+        );
+
+        event::emit_event(
+            &mut config.subscription_created_events,
+            SubscriptionCreatedEvent {
+                outpost_addr: target_addr,
+                subscriber: subscriber_addr,
+                tier_id,
+                timestamp: now,
+            }
         );
     }
 
@@ -596,20 +590,32 @@ module podium::PodiumPass {
     }
 
     #[test_only]
-    public fun assert_subscription_exists(
+    public fun assert_pass_balance(
+        holder: address,
+        target_or_outpost: Object<OutpostData>,
+        expected_balance: u64,
+    ) {
+        let target_addr = object::object_address(&target_or_outpost);
+        let asset_symbol = get_asset_symbol(target_addr);
+        assert!(PodiumPassCoin::balance(holder, asset_symbol) == expected_balance, 4);
+    }
+
+    #[test_only]
+    public fun assert_subscription_test(
         subscriber: address,
         target_or_outpost: Object<OutpostData>,
-        expected_tier: String,
+        tier_id: u64,
         expected_duration: u64,
-    ) acquires SubscriptionConfig {
+    ) acquires Config {
         let target_addr = object::object_address(&target_or_outpost);
         assert!(exists<SubscriptionConfig>(target_addr), 0);
         
-        let config = borrow_global<SubscriptionConfig>(target_addr);
-        assert!(table::contains(&config.subscriptions, subscriber), 1);
+        let config = borrow_global<Config>(@admin);
+        let sub_config = table::borrow(&config.subscription_configs, target_addr);
+        assert!(table::contains(&sub_config.subscriptions, subscriber), 1);
         
-        let subscription = table::borrow(&config.subscriptions, subscriber);
-        assert!(subscription.tier == expected_tier, 2);
+        let subscription = table::borrow(&sub_config.subscriptions, subscriber);
+        assert!(subscription.tier_id == tier_id, 2);
         
         let duration = subscription.end_time - subscription.start_time;
         let expected_seconds = if (expected_duration == DURATION_WEEK) {
@@ -622,15 +628,70 @@ module podium::PodiumPass {
         assert!(duration == expected_seconds, 3);
     }
 
-    #[test_only]
-    public fun assert_pass_balance(
-        holder: address,
-        target_or_outpost: Object<OutpostData>,
-        expected_balance: u64,
-    ) {
-        let target_addr = object::object_address(&target_or_outpost);
-        let asset_symbol = get_asset_symbol(target_addr);
-        assert!(PodiumPassCoin::balance(holder, asset_symbol) == expected_balance, 4);
+    /// Verify subscription exists
+    public fun assert_subscription_exists(target_addr: address) acquires Config {
+        let config = borrow_global<Config>(@admin);
+        assert!(table::contains(&config.subscription_configs, target_addr), error::not_found(ESUBSCRIPTION_NOT_FOUND));
+    }
+
+    /// Update subscription configuration
+    public entry fun update_subscription_config(
+        admin: &signer,
+        outpost_addr: address,
+        max_tiers: u64
+    ) acquires Config {
+        // Verify admin
+        assert!(signer::address_of(admin) == @admin, error::permission_denied(ENOT_ADMIN));
+        
+        // Verify subscription exists
+        assert_subscription_exists(outpost_addr);
+        
+        let config = borrow_global_mut<Config>(@admin);
+        let subscription_config = table::borrow_mut(&mut config.subscription_configs, outpost_addr);
+        
+        // Update config
+        subscription_config.max_tiers = max_tiers;
+
+        // Emit config updated event
+        event::emit_event(
+            &mut config.config_updated_events,
+            ConfigUpdatedEvent {
+                outpost_addr,
+                max_tiers,
+                timestamp: timestamp::now_seconds(),
+            }
+        );
+    }
+
+    public entry fun cancel_subscription(
+        subscriber: &signer,
+        outpost_addr: address
+    ) acquires Config {
+        let subscriber_addr = signer::address_of(subscriber);
+        
+        // Verify subscription exists
+        assert_subscription_exists(outpost_addr);
+        
+        let config = borrow_global_mut<Config>(@admin);
+        let subscription_config = table::borrow_mut(&mut config.subscription_configs, outpost_addr);
+        
+        // Verify subscriber has an active subscription
+        assert!(table::contains(&subscription_config.subscriptions, subscriber_addr), 
+            error::not_found(ESUBSCRIPTION_NOT_FOUND));
+        
+        let subscription = table::remove(&mut subscription_config.subscriptions, subscriber_addr);
+        let tier_id = subscription.tier_id;
+
+        // Emit subscription cancelled event
+        event::emit_event(
+            &mut config.subscription_cancelled_events,
+            SubscriptionCancelledEvent {
+                outpost_addr,
+                subscriber: subscriber_addr,
+                tier_id,
+                timestamp: timestamp::now_seconds(),
+            }
+        );
     }
 }
    
