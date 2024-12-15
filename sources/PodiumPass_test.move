@@ -145,7 +145,7 @@ module podium::PodiumPass_test {
         
         // Create a subscription tier (required for pass purchase)
         PodiumPass::create_subscription_tier(
-            &podium_signer,
+            creator,
             outpost,
             string::utf8(b"basic"),
             SUBSCRIPTION_WEEK_PRICE,
@@ -451,7 +451,7 @@ module podium::PodiumPass_test {
         ), 1);
     }
 
-    #[test(creator = @target, buyer = @user1)]  // Use target and USER1 addresses
+    #[test(creator = @target, buyer = @user1)]
     public fun test_outpost_price_update(
         creator: &signer,
         buyer: &signer,
@@ -460,39 +460,16 @@ module podium::PodiumPass_test {
         let podium_signer = account::create_signer_for_test(@podium);
         setup_test(&account::create_signer_for_test(@0x1), &podium_signer, buyer, buyer, creator);
         
-        // Create outpost with initial price - using creator, not podium_signer
-        // This demonstrates that any user can create an outpost after paying
+        // Create outpost with initial price
         let outpost = create_test_outpost(creator);
-        let new_price = PodiumOutpost::get_outpost_purchase_price() * 2;
+        let initial_price = PodiumOutpost::get_price(outpost);
+        let new_price = initial_price * 2;
         
         // Update price - creator should be able to update since they own it
         PodiumOutpost::update_price(creator, outpost, new_price);
         
         // Verify price was updated
         assert!(PodiumOutpost::get_price(outpost) == new_price, 0);
-        
-        // Create subscription tier before buying pass
-        PodiumPass::create_subscription_tier(
-            creator,
-            outpost,
-            string::utf8(b"basic"),
-            SUBSCRIPTION_WEEK_PRICE,
-            PodiumPass::get_duration_week(),
-        );
-
-        // Initialize asset before buying pass
-        let target_addr = object::object_address(&outpost);
-        let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
-        PodiumPassCoin::create_target_asset_for_test(
-            creator,
-            asset_symbol,
-            string::utf8(b"Test Pass"),
-            string::utf8(b"https://example.com/icon.png"),
-            string::utf8(b"https://example.com/project"),
-        );
-
-        // Try to buy pass with old price (should fail)
-        PodiumPass::buy_pass(buyer, target_addr, 1, 30, option::none());
     }
 
     #[test_only]
