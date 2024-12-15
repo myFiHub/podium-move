@@ -16,29 +16,34 @@ This breaks the traditional passive consumption model, empowering users to becom
 
 ## Smart Contracts
 
-### PodiumPass
-Core subscription and lifetime access management system.
-- Manages lifetime passes and temporary subscriptions
-- Handles buying/selling of passes
-- Controls fee distribution
-- Implements bonding curve for pass pricing
-- Verifies access rights
+## Protocol Architecture
 
-### PodiumPassCoin
-Token implementation for lifetime passes.
-- Creates fungible tokens for lifetime access
-- Handles minting and burning logic
-- Manages trading/transferability of passes
-- Tracks pass ownership and balances
+### Component Hierarchy
 
-### PodiumOutpost
-Outpost management and access control system.
-- Creates and manages named outposts
-- Stores metadata (name, description, URI)
-- Tracks ownership and permissions
-- Handles access verification
-- Supports custom pricing
-- Provides administrative controls
+1. **PodiumOutpost (Base Layer)**
+   - Collection and outpost management
+   - Deterministic addressing
+   - Access control foundation
+
+2. **PodiumPassCoin (Token Layer)**
+   - Fungible asset implementation
+   - Pass token management
+   - Balance and transfer logic
+
+3. **PodiumPass (Business Logic Layer)**
+   - Subscription management
+   - Pass trading mechanics
+   - Fee distribution
+   - Access verification
+
+### Key Features
+
+- **Deterministic Addressing**: Predictable outpost addresses based on creator and name
+- **Flexible Subscriptions**: Support for both temporary and lifetime access
+- **Dynamic Pricing**: Bonding curve for pass prices
+- **Referral System**: Built-in referral rewards
+- **Emergency Controls**: Pause functionality for security
+- **Fee Distribution**: Automated fee splitting between protocol, creators, and referrers
 
 ### CheerOrBooV2
 Social tipping and reward distribution system.
