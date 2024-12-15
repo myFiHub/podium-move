@@ -4,9 +4,13 @@ module podium::PodiumOutpost {
     use std::option::Self;
     use aptos_framework::object::{Self, Object};
     use aptos_framework::event;
+    use aptos_framework::error;
     use aptos_token_objects::collection;
     use aptos_token_objects::token;
     use aptos_framework::table::{Self, Table};
+    use aptos_framework::coin;
+    use aptos_framework::aptos_coin::AptosCoin;
+    use std::debug;
     
     // Error codes
     const ENOT_ADMIN: u64 = 0x10001;  // 65537
@@ -17,15 +21,24 @@ module podium::PodiumOutpost {
     const EINVALID_FEE: u64 = 0x10006;  // 65542
     const EEMERGENCY_PAUSE: u64 = 0x10007;  // 65543
 
-    // Constants
-    const COLLECTION_NAME: vector<u8> = b"PodiumOutposts";
-    const COLLECTION_DESCRIPTION: vector<u8> = b"Podium Protocol Outposts";
-    const COLLECTION_URI: vector<u8> = b"https://podium.fi/outposts";
+    // Constants - internal to module
+    const COLLECTION_NAME_BYTES: vector<u8> = b"PodiumOutposts";
+    const COLLECTION_DESCRIPTION_BYTES: vector<u8> = b"Podium Protocol Outposts";
+    const COLLECTION_URI_BYTES: vector<u8> = b"https://podium.fi/outposts";
     const MAX_FEE_PERCENTAGE: u64 = 10000; // 100% = 10000 basis points
+
+    // Constants for outpost pricing and fees
+    const OUTPOST_FEE_SHARE: u64 = 500;
+
+    public fun get_outpost_fee_share(): u64 {
+        OUTPOST_FEE_SHARE
+    }
 
     /// Struct to store outpost-specific data
     #[resource_group_member(group = aptos_framework::object::ObjectGroup)]
     struct OutpostData has key, store {
+        /// The collection this outpost belongs to
+        collection: Object<collection::Collection>,
         /// The outpost's name
         name: String,
         /// The outpost's description
@@ -136,53 +149,70 @@ module podium::PodiumOutpost {
         name: String,
         description: String,
         uri: String,
-        price: u64,
-        fee_share: u64,
-    ): Object<OutpostData> {
-        // Validate inputs
-        assert!(fee_share <= MAX_FEE_PERCENTAGE, EINVALID_FEE);
-        assert!(price > 0, EINVALID_PRICE);
+    ): Object<OutpostData> acquires OutpostCollection {
+        debug::print(&string::utf8(b"=== Starting create_outpost_internal ==="));
+        
+        // Handle payment and print
+        debug::print(&string::utf8(b"Processing payment of:"));
+        let purchase_price = get_outpost_purchase_price();
+        debug::print(&purchase_price);
+        coin::transfer<AptosCoin>(creator, @podium, purchase_price);
+        debug::print(&string::utf8(b"Payment processed"));
+        
+        // Print creator info
+        debug::print(&string::utf8(b"Creator address:"));
+        debug::print(&signer::address_of(creator));
 
-        // Get collection address and verify it exists
-        let collection_addr = collection::create_collection_address(&@podium, &string::utf8(COLLECTION_NAME));
-        assert!(object::is_object(collection_addr), EOUTPOST_NOT_FOUND);
+        // Get collection data
+        assert!(exists<OutpostCollection>(@podium), error::not_found(EOUTPOST_NOT_FOUND));
+        let collection_data = borrow_global_mut<OutpostCollection>(@podium);
+        
+        debug::print(&string::utf8(b"Collection address:"));
+        debug::print(&collection_data.collection_addr);
 
-        // Create outpost token
+        // Create token using collection name
         let constructor_ref = token::create_named_token(
             creator,
-            string::utf8(COLLECTION_NAME),
+            get_collection_name(),  // Use collection name directly
             description,
             name,
             option::none(),
             uri,
         );
 
-        // Generate signer and extend the token object
-        let outpost_signer = object::generate_signer(&constructor_ref);
-        
         // Initialize outpost data
+        let outpost_signer = object::generate_signer(&constructor_ref);
+        let token = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
+        let collection = object::address_to_object<collection::Collection>(collection_data.collection_addr);
+
         move_to(&outpost_signer, OutpostData {
+            collection,
             name,
             description,
             uri,
-            price,
-            fee_share,
+            price: purchase_price,
+            fee_share: OUTPOST_FEE_SHARE,
             emergency_pause: false,
         });
 
-        // Get the object reference
-        let object = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
+        let token_addr = object::object_address(&token);
+        debug::print(&string::utf8(b"Token created at address:"));
+        debug::print(&token_addr);
+
+        // Store outpost in collection
+        table::add(&mut collection_data.outposts, token_addr, token);
 
         // Emit creation event
         event::emit(OutpostCreatedEvent {
             creator: signer::address_of(creator),
-            outpost_address: object::object_address<OutpostData>(&object),
+            outpost_address: token_addr,
             name,
-            price,
-            fee_share,
+            price: purchase_price,
+            fee_share: OUTPOST_FEE_SHARE,
         });
 
-        object
+        debug::print(&string::utf8(b"=== Finished create_outpost_internal ==="));
+        token
     }
 
     /// Entry function to create a new outpost
@@ -191,23 +221,8 @@ module podium::PodiumOutpost {
         name: String,
         description: String,
         uri: String,
-        price: u64,
-        fee_share: u64,
-    ) {
-        create_outpost_internal(creator, name, description, uri, price, fee_share);
-    }
-
-    /// Create the Podium Outposts collection (admin only)
-    public fun create_podium_collection(creator: &signer) {
-        assert!(signer::address_of(creator) == @podium, ENOT_ADMIN);
-        
-        collection::create_unlimited_collection(
-            creator,
-            string::utf8(COLLECTION_DESCRIPTION),
-            string::utf8(COLLECTION_NAME),
-            option::none(), // No royalty
-            string::utf8(COLLECTION_URI),
-        );
+    ) acquires OutpostCollection {
+        let _outpost = create_outpost_internal(creator, name, description, uri);
     }
 
     /// Update outpost price (owner only)
@@ -236,14 +251,14 @@ module podium::PodiumOutpost {
         outpost_data.price = new_price;
     }
 
-    /// Update fee share (owner only)
+    /// Update fee share (admin only)
     public entry fun update_fee_share(
-        owner: &signer,
+        admin: &signer,
         outpost: Object<OutpostData>,
         new_fee_share: u64,
     ) acquires OutpostData {
-        // Validate owner and input
-        assert!(object::is_owner(outpost, signer::address_of(owner)), ENOT_OWNER);
+        // Validate admin and input
+        assert!(signer::address_of(admin) == @podium, ENOT_ADMIN);
         assert!(new_fee_share <= MAX_FEE_PERCENTAGE, EINVALID_FEE);
         
         let outpost_addr = object::object_address(&outpost);
@@ -301,35 +316,41 @@ module podium::PodiumOutpost {
         !borrow_global<OutpostData>(object::object_address(&outpost)).emergency_pause
     }
 
-    /// Collection data for outposts
+    /// Collection data for outposts - now includes a capability
     struct OutpostCollection has key {
-        collection: Object<collection::Collection>,
+        collection_addr: address,
         outposts: Table<address, Object<OutpostData>>,
+        purchase_price: u64,
+    }
+
+    /// Capability to manage outposts
+    struct OutpostManagerCap has key, store {
+        collection_addr: address,
     }
 
     /// Initialize the collection for outposts
     public fun init_collection(creator: &signer) {
-        // Only admin can initialize collection
         assert!(signer::address_of(creator) == @podium, ENOT_ADMIN);
 
         if (!exists<OutpostCollection>(@podium)) {
-            // Create collection
-            collection::create_unlimited_collection(
+            debug::print(&string::utf8(b"Creating collection..."));
+            
+            let constructor_ref = collection::create_unlimited_collection(
                 creator,
-                string::utf8(COLLECTION_DESCRIPTION),
-                string::utf8(COLLECTION_NAME),
+                string::utf8(COLLECTION_DESCRIPTION_BYTES),
+                string::utf8(COLLECTION_NAME_BYTES),
                 option::none(),
-                string::utf8(COLLECTION_URI),
+                string::utf8(COLLECTION_URI_BYTES),
             );
 
-            // Get collection address and object
-            let collection_addr = collection::create_collection_address(&@podium, &string::utf8(COLLECTION_NAME));
-            let collection_object = object::address_to_object<collection::Collection>(collection_addr);
-            
-            // Store collection data
+            let collection_addr = object::address_from_constructor_ref(&constructor_ref);
+            debug::print(&string::utf8(b"Collection created at address:"));
+            debug::print(&collection_addr);
+
             move_to(creator, OutpostCollection {
-                collection: collection_object,
+                collection_addr,
                 outposts: table::new(),
+                purchase_price: 1000,
             });
         };
     }
@@ -380,5 +401,83 @@ module podium::PodiumOutpost {
         outpost_data.name = new_name;
         outpost_data.description = new_description;
         outpost_data.uri = new_uri;
+    }
+
+    /// Get the expected token address for a given creator and token name
+    public fun get_token_address(creator: address, name: String): address {
+        // Create seed by concatenating collection name and token name
+        let seed = token::create_token_seed(
+            &string::utf8(COLLECTION_NAME_BYTES),
+            &name,
+        );
+        
+        // Create object address using creator and seed
+        object::create_object_address(&creator, seed)
+    }
+
+    /// Verify that a token exists at the expected address
+    public fun verify_token_address(creator: address, name: String, token: Object<OutpostData>): bool {
+        let expected_address = get_token_address(creator, name);
+        object::object_address(&token) == expected_address
+    }
+
+    // Public functions to access collection constants
+    public fun get_collection_name(): String {
+        string::utf8(COLLECTION_NAME_BYTES)
+    }
+
+    public fun get_collection_description(): String {
+        string::utf8(COLLECTION_DESCRIPTION_BYTES)
+    }
+
+    public fun get_collection_uri(): String {
+        string::utf8(COLLECTION_URI_BYTES)
+    }
+
+    /// Get the collection address
+    public fun get_collection_address(): address acquires OutpostCollection {
+        let collection_data = borrow_global<OutpostCollection>(@podium);
+        collection_data.collection_addr
+    }
+
+    #[view]
+    /// Get the collection object
+    public fun get_collection(): Object<collection::Collection> acquires OutpostCollection {
+        let collection_data = borrow_global<OutpostCollection>(@podium);
+        object::address_to_object<collection::Collection>(collection_data.collection_addr)
+    }
+
+    #[view]
+    /// Get collection object from an outpost
+    public fun collection_object(outpost: Object<OutpostData>): Object<collection::Collection> acquires OutpostData {
+        borrow_global<OutpostData>(object::object_address(&outpost)).collection
+    }
+
+    #[view]
+    /// Get the collection data
+    public fun get_collection_data(): address acquires OutpostCollection {
+        let collection_data = borrow_global<OutpostCollection>(@podium);
+        collection_data.collection_addr
+    }
+
+    #[view]
+    /// Check if outpost exists in collection
+    public fun contains_outpost(outpost_addr: address): bool acquires OutpostCollection {
+        let collection_data = borrow_global<OutpostCollection>(@podium);
+        table::contains(&collection_data.outposts, outpost_addr)
+    }
+
+    /// Add function to update purchase price (admin only)
+    public entry fun update_outpost_price(admin: &signer, new_price: u64) acquires OutpostCollection {
+        assert!(signer::address_of(admin) == @podium, ENOT_ADMIN);
+        assert!(new_price > 0, EINVALID_PRICE);
+        
+        let collection_data = borrow_global_mut<OutpostCollection>(@podium);
+        collection_data.purchase_price = new_price;
+    }
+
+    /// Add getter for outpost purchase price
+    public fun get_outpost_purchase_price(): u64 acquires OutpostCollection {
+        borrow_global<OutpostCollection>(@podium).purchase_price
     }
 }
