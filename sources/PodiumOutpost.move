@@ -1,16 +1,18 @@
 module podium::PodiumOutpost {
     use std::string::{Self, String};
     use std::signer;
-    use std::option::Self;
-    use aptos_framework::object::{Self, Object};
+    use std::option::{Self, Option};
+    use aptos_framework::object::{Self, Object, ConstructorRef};
     use aptos_framework::event;
     use aptos_framework::error;
     use aptos_token_objects::collection;
     use aptos_token_objects::token;
+    use aptos_token_objects::royalty::{Self, Royalty};
     use aptos_framework::table::{Self, Table};
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
     use std::debug;
+    use aptos_framework::aggregator_v2;
     
     // Error codes
     const ENOT_ADMIN: u64 = 0x10001;  // 65537
@@ -143,6 +145,64 @@ module podium::PodiumOutpost {
         event.fee_share
     }
 
+    /// Our custom token struct that maintains compatibility with token module interface
+    struct PodiumToken has key, store {
+        collection: Object<collection::Collection>,
+        description: String,
+        name: String,
+        uri: String,
+        mutation_events: event::EventHandle<token::MutationEvent>,
+        royalty: Option<Object<royalty::Royalty>>,
+        index: Option<aggregator_v2::AggregatorSnapshot<u64>>,  // Add index field to match token module
+    }
+
+    /// Creates a new token with a deterministic address based on creator and token name,
+    /// but allows specifying a separate collection object.
+    /// This is similar to create_named_token but works with an existing collection object
+    /// rather than requiring the collection to be at the creator's address.
+    fun create_named_token_with_collection(
+        creator: &signer,
+        collection: Object<collection::Collection>,
+        description: String,
+        name: String,
+        royalty: Option<Royalty>,
+        uri: String,
+    ): ConstructorRef {
+        // Create seed by concatenating collection name and token name
+        let seed = token::create_token_seed(&collection::name(collection), &name);
+        
+        // Create object with deterministic address
+        let constructor_ref = object::create_named_object(creator, seed);
+        let object_signer = object::generate_signer(&constructor_ref);
+
+        // Initialize royalty if provided
+        let royalty_object = if (option::is_some(&royalty)) {
+            // Initialize royalty directly on the token object
+            royalty::init(&constructor_ref, option::extract(&mut royalty));
+            // Get the royalty object from the token object
+            let creator_addr = signer::address_of(creator);
+            option::some(object::address_to_object<royalty::Royalty>(
+                object::create_object_address(&creator_addr, seed)
+            ))
+        } else {
+            option::none()
+        };
+
+        // Initialize our custom token data
+        let token = PodiumToken {
+            collection,
+            description,
+            name,
+            uri,
+            mutation_events: object::new_event_handle(&object_signer),
+            royalty: royalty_object,
+            index: option::none(),  // Initialize index as none since we don't need it
+        };
+        move_to(&object_signer, token);
+
+        constructor_ref
+    }
+
     /// Internal function to create an outpost and return the object
     public fun create_outpost_internal(
         creator: &signer,
@@ -170,21 +230,36 @@ module podium::PodiumOutpost {
         debug::print(&string::utf8(b"Collection address:"));
         debug::print(&collection_data.collection_addr);
 
-        // Create token using collection name
-        let constructor_ref = token::create_named_token(
+        // Print collection details before token creation
+        let collection_name = get_collection_name();
+        debug::print(&string::utf8(b"Collection name:"));
+        debug::print(&collection_name);
+        
+        // Print seed calculation for deterministic address
+        let seed = token::create_token_seed(&collection_name, &name);
+        debug::print(&string::utf8(b"Token seed:"));
+        debug::print(&seed);
+        
+        // Print expected object address
+        let expected_obj_addr = object::create_object_address(&signer::address_of(creator), seed);
+        debug::print(&string::utf8(b"Expected object address:"));
+        debug::print(&expected_obj_addr);
+
+        // Get collection object
+        let collection = object::address_to_object<collection::Collection>(collection_data.collection_addr);
+        
+        // Create token using our custom function that handles collection properly
+        let constructor_ref = create_named_token_with_collection(
             creator,
-            get_collection_name(),  // Use collection name directly
+            collection,
             description,
             name,
-            option::none(),
+            option::none<Royalty>(), // Explicitly specify type
             uri,
         );
 
         // Initialize outpost data
         let outpost_signer = object::generate_signer(&constructor_ref);
-        let token = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
-        let collection = object::address_to_object<collection::Collection>(collection_data.collection_addr);
-
         move_to(&outpost_signer, OutpostData {
             collection,
             name,
@@ -195,6 +270,8 @@ module podium::PodiumOutpost {
             emergency_pause: false,
         });
 
+        // Now get the object reference after data is initialized
+        let token = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
         let token_addr = object::object_address(&token);
         debug::print(&string::utf8(b"Token created at address:"));
         debug::print(&token_addr);

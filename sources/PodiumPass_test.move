@@ -90,7 +90,6 @@ module podium::PodiumPass_test {
         let podium_signer = account::create_signer_for_test(@podium);
         
         // For tests, we don't verify the exact target address
-        // Instead, we just verify it's the creator
         let creator_addr = signer::address_of(creator);
         debug::print(&string::utf8(b"Creator address:"));
         debug::print(&creator_addr);
@@ -111,20 +110,16 @@ module podium::PodiumPass_test {
         debug::print(&string::utf8(b"Expected token address:"));
         debug::print(&expected_addr);
         
-        // Create outpost
-        debug::print(&string::utf8(b"Creating outpost..."));
-        let outpost = PodiumOutpost::create_outpost_internal(
+        // Create outpost using public function
+        PodiumOutpost::create_outpost(
             creator,
             name,
             string::utf8(b"Test Description"),
             string::utf8(b"https://test.uri"),
         );
 
-        // Verify token was created at expected address
-        let actual_addr = object::object_address(&outpost);
-        debug::print(&string::utf8(b"Actual token address:"));
-        debug::print(&actual_addr);
-        assert!(actual_addr == expected_addr, 0);
+        // Get outpost object
+        let outpost = PodiumOutpost::get_outpost_from_token_address(expected_addr);
 
         // Initialize subscription config
         debug::print(&string::utf8(b"Initializing subscription config"));
@@ -573,5 +568,41 @@ module podium::PodiumPass_test {
         let new_price = 2000;
         PodiumOutpost::update_outpost_price(admin, new_price);
         assert!(PodiumOutpost::get_outpost_purchase_price() == new_price, 1);
+    }
+
+    #[test(admin = @podium, creator = @target)]
+    public fun test_outpost_purchase_flow(
+        admin: &signer,
+        creator: &signer,
+    ) {
+        // Setup
+        setup_test(
+            &account::create_signer_for_test(@0x1),
+            admin,
+            creator,
+            creator,
+            creator
+        );
+
+        // Record initial balances
+        let creator_initial_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        let podium_initial_balance = coin::balance<AptosCoin>(@podium);
+
+        // Admin sets purchase price
+        let purchase_price = 1000;
+        PodiumOutpost::update_outpost_price(admin, purchase_price);
+        assert!(PodiumOutpost::get_outpost_purchase_price() == purchase_price, 0);
+
+        // Creator purchases outpost
+        PodiumOutpost::create_outpost(
+            creator,
+            string::utf8(b"Test Outpost"),
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Verify payment was processed correctly
+        assert!(coin::balance<AptosCoin>(signer::address_of(creator)) == creator_initial_balance - purchase_price, 1);
+        assert!(coin::balance<AptosCoin>(@podium) == podium_initial_balance + purchase_price, 2);
     }
 }
