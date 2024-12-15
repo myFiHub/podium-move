@@ -4,6 +4,7 @@ module podium::PodiumPass {
     use std::string::{Self, String};
     use std::vector;
     use std::option::{Self, Option};
+    use aptos_framework::debug;
     use aptos_framework::coin;
     use aptos_framework::timestamp;
     use aptos_framework::aptos_coin::AptosCoin;
@@ -15,7 +16,6 @@ module podium::PodiumPass {
     use aptos_framework::object::{Self, Object};
     use aptos_framework::account;
     use aptos_framework::event::{Self, EventHandle};
-    use aptos_framework::debug;
 
     /// Error codes
     const ENOT_AUTHORIZED: u64 = 1;
@@ -186,14 +186,14 @@ module podium::PodiumPass {
 
     /// Initialize module with default configuration
     public fun initialize(admin: &signer) {
-        assert!(signer::address_of(admin) == @admin, error::permission_denied(ENOT_AUTHORIZED));
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
         
-        if (!exists<Config>(@admin)) {
+        if (!exists<Config>(@podium)) {
             move_to(admin, Config {
                 protocol_fee_percent: MAX_PROTOCOL_FEE_PERCENT,
                 subject_fee_percent: MAX_SUBJECT_FEE_PERCENT,
                 referral_fee_percent: MAX_REFERRAL_FEE_PERCENT,
-                treasury: @admin,
+                treasury: @podium,
                 weight_a: DEFAULT_WEIGHT_A,
                 weight_b: DEFAULT_WEIGHT_B,
                 weight_c: DEFAULT_WEIGHT_C,
@@ -226,7 +226,7 @@ module podium::PodiumPass {
         };
         
         // Initialize subscription config
-        let config = borrow_global_mut<Config>(@admin);
+        let config = borrow_global_mut<Config>(@podium);
         if (!table::contains(&config.subscription_configs, target_addr)) {
             table::add(&mut config.subscription_configs, target_addr, SubscriptionConfig {
                 tiers: vector::empty(),
@@ -239,7 +239,7 @@ module podium::PodiumPass {
     /// Calculate price based on bonding curve
     /// price = initial_price * (1 + weight_a * supply^weight_c / weight_b)
     fun calculate_price(supply: u64, is_sell: bool): u64 acquires Config {
-        let config = borrow_global<Config>(@admin);
+        let config = borrow_global<Config>(@podium);
         
         let base_price = INITIAL_PRICE;
         if (supply == 0) {
@@ -285,7 +285,7 @@ module podium::PodiumPass {
         assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
         debug::print(&string::utf8(b"[create_subscription_tier] Ownership verified"));
         
-        let config = borrow_global_mut<Config>(@admin);
+        let config = borrow_global_mut<Config>(@podium);
         debug::print(&string::utf8(b"[create_subscription_tier] Checking if config exists..."));
         assert!(table::contains(&config.subscription_configs, target_addr), error::not_found(ETIER_NOT_FOUND));
         debug::print(&string::utf8(b"[create_subscription_tier] Config exists"));
@@ -319,7 +319,7 @@ module podium::PodiumPass {
         tier_id: u64
     ): bool acquires Config {
         let target_addr = object::object_address(&target_or_outpost);
-        let config = borrow_global<Config>(@admin);
+        let config = borrow_global<Config>(@podium);
         let sub_config = table::borrow(&config.subscription_configs, target_addr);
         
         if (!table::contains(&sub_config.subscriptions, subscriber)) {
@@ -358,7 +358,7 @@ module podium::PodiumPass {
     /// Helper function to get asset symbol
     public fun get_asset_symbol(_target_addr: address): String {
         debug::print(&string::utf8(b"[get_asset_symbol] Creating symbol"));
-        let symbol = string::utf8(b"TARGET_T1");
+        let symbol = string::utf8(b"T1");
         debug::print(&string::utf8(b"Generated symbol:"));
         debug::print(&symbol);
         symbol
@@ -387,6 +387,11 @@ module podium::PodiumPass {
         duration: u64,
         referrer: Option<address>
     ) acquires Config, PassStats {
+        // Get and verify outpost price (must be valid for outpost to be active)
+        let outpost = PodiumOutpost::get_outpost_from_token_address(target_addr);
+        let outpost_price = PodiumOutpost::get_price(outpost);
+        assert!(outpost_price > 0, error::invalid_argument(EINVALID_PRICE));
+
         // Calculate price using bonding curve
         let price = calculate_price(get_total_supply(target_addr), false);
         let total_cost = price * duration;
@@ -399,8 +404,19 @@ module podium::PodiumPass {
         debug::print(&string::utf8(b"Generated asset symbol:"));
         debug::print(&asset_symbol);
 
+        // Create the asset type if it doesn't exist yet
+        if (!PodiumPassCoin::asset_exists(asset_symbol)) {
+            PodiumPassCoin::create_target_asset(
+                buyer,
+                asset_symbol,
+                string::utf8(b"Podium Pass"),
+                string::utf8(b"https://podium.fi/icon.png"),
+                string::utf8(b"https://podium.fi"),
+            );
+        };
+
         debug::print(&string::utf8(b"Creating pass with PodiumPassCoin"));
-        // Since we're in the PodiumPass module, we can call mint directly
+
         let fa = PodiumPassCoin::mint(buyer, asset_symbol, duration);
         debug::print(&string::utf8(b"Pass minted successfully"));
 
@@ -450,7 +466,7 @@ module podium::PodiumPass {
         debug::print(&string::utf8(b"[subscribe] Subscriber address:"));
         debug::print(&signer::address_of(subscriber));
         
-        let config = borrow_global_mut<Config>(@admin);
+        let config = borrow_global_mut<Config>(@podium);
         debug::print(&string::utf8(b"[subscribe] Checking if config exists..."));
         assert!(table::contains(&config.subscription_configs, target_addr), error::not_found(ETIER_NOT_FOUND));
         debug::print(&string::utf8(b"[subscribe] Config exists"));
@@ -534,7 +550,7 @@ module podium::PodiumPass {
         let base_payment = base_price * amount;
 
         // Calculate fees to be deducted from payment
-        let config = borrow_global<Config>(@admin);
+        let config = borrow_global<Config>(@podium);
         let protocol_fee = (base_payment * config.protocol_fee_percent) / 100;
         let subject_fee = (base_payment * config.subject_fee_percent) / 100;
         
@@ -558,7 +574,7 @@ module podium::PodiumPass {
 
         // Emit event
         event::emit_event(
-            &mut borrow_global_mut<Config>(@admin).pass_sell_events,
+            &mut borrow_global_mut<Config>(@podium).pass_sell_events,
             PassSellEvent {
                 seller: seller_addr,
                 target_or_outpost: target_addr,
@@ -589,7 +605,7 @@ module podium::PodiumPass {
         let target_addr = object::object_address(&target_or_outpost);
         assert!(exists<SubscriptionConfig>(target_addr), 0);
         
-        let config = borrow_global<Config>(@admin);
+        let config = borrow_global<Config>(@podium);
         let sub_config = table::borrow(&config.subscription_configs, target_addr);
         assert!(table::contains(&sub_config.subscriptions, subscriber), 1);
         
@@ -609,7 +625,7 @@ module podium::PodiumPass {
 
     /// Verify subscription exists
     public fun assert_subscription_exists(target_addr: address) acquires Config {
-        let config = borrow_global<Config>(@admin);
+        let config = borrow_global<Config>(@podium);
         assert!(table::contains(&config.subscription_configs, target_addr), error::not_found(ESUBSCRIPTION_NOT_FOUND));
     }
 
@@ -620,12 +636,12 @@ module podium::PodiumPass {
         max_tiers: u64
     ) acquires Config {
         // Verify admin
-        assert!(signer::address_of(admin) == @admin, error::permission_denied(ENOT_ADMIN));
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
         
         // Verify subscription exists
         assert_subscription_exists(outpost_addr);
         
-        let config = borrow_global_mut<Config>(@admin);
+        let config = borrow_global_mut<Config>(@podium);
         let subscription_config = table::borrow_mut(&mut config.subscription_configs, outpost_addr);
         
         // Update config
@@ -651,7 +667,7 @@ module podium::PodiumPass {
         // Verify subscription exists
         assert_subscription_exists(outpost_addr);
         
-        let config = borrow_global_mut<Config>(@admin);
+        let config = borrow_global_mut<Config>(@podium);
         let subscription_config = table::borrow_mut(&mut config.subscription_configs, outpost_addr);
         
         // Verify subscriber has an active subscription
@@ -692,7 +708,7 @@ module podium::PodiumPass {
         total_cost: u64,
         referrer: Option<address>
     ) acquires Config {
-        let config = borrow_global<Config>(@admin);
+        let config = borrow_global<Config>(@podium);
         
         // Calculate fees
         let protocol_fee = (total_cost * config.protocol_fee_percent) / 100;
@@ -723,7 +739,7 @@ module podium::PodiumPass {
         referrer: Option<address>
     ) acquires Config {
         event::emit_event(
-            &mut borrow_global_mut<Config>(@admin).pass_purchase_events,
+            &mut borrow_global_mut<Config>(@podium).pass_purchase_events,
             PassPurchaseEvent {
                 buyer: buyer_addr,
                 target_or_outpost: target_addr,
@@ -732,6 +748,23 @@ module podium::PodiumPass {
                 referrer,
             },
         );
+    }
+
+    #[test_only]
+    public fun create_asset_for_test(
+        creator: &signer,
+        target_id: String,
+        name: String,
+        icon_uri: String,
+        project_uri: String,
+    ) {
+        PodiumPassCoin::create_target_asset(
+            creator,
+            target_id,
+            name,
+            icon_uri,
+            project_uri,
+        )
     }
 }
    

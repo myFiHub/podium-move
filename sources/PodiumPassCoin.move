@@ -52,11 +52,11 @@ module podium::PodiumPassCoin {
     }
 
     /// Verifies if the caller is the PodiumPass contract
-    /// Checks both address and presence of AssetCapabilities resource
     /// @param caller: The signer to verify
     /// @return Boolean indicating if caller is PodiumPass
     fun is_podium_pass(caller: &signer): bool {
-        // Since PodiumPass is a friend module, any call from it is authorized
+        // The friend relationship ensures only PodiumPass can call this function
+        // We just need to verify the module is initialized
         exists<AssetCapabilities>(@podium)
     }
 
@@ -64,7 +64,16 @@ module podium::PodiumPassCoin {
     /// Creates the central storage for managing all pass types
     /// @param admin: The signer of the module creator (podium address)
     public fun init_module_for_test(admin: &signer) {
-        init_module(admin)
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
+        
+        if (!exists<AssetCapabilities>(@podium)) {
+            move_to(admin, AssetCapabilities {
+                mint_refs: table::new(),
+                burn_refs: table::new(),
+                transfer_refs: table::new(),
+                metadata_objects: table::new(),
+            });
+        }
     }
 
     /// Internal initialization function
@@ -78,7 +87,7 @@ module podium::PodiumPassCoin {
     }
 
     /// Creates a new target asset type
-    public fun create_target_asset(
+    public(friend) fun create_target_asset(
         creator: &signer,
         target_id: String,
         name: String,
@@ -172,7 +181,6 @@ module podium::PodiumPassCoin {
         asset_symbol: String,
         amount: u64,
     ): FungibleAsset acquires AssetCapabilities {
-        // Verify caller is PodiumPass
         assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
         assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
         
@@ -238,10 +246,7 @@ module podium::PodiumPassCoin {
     /// @return The formatted asset symbol
     public(friend) fun generate_target_symbol(target_id: String): String {
         debug::print(&string::utf8(b"[generate_target_symbol] Creating symbol"));
-        let prefix = string::utf8(b"TARGET_");
-        let result = string::utf8(vector::empty());
-        string::append(&mut result, prefix);
-        string::append(&mut result, target_id);
+        let result = target_id;
         debug::print(&string::utf8(b"Generated symbol:"));
         debug::print(&result);
         result
@@ -292,7 +297,7 @@ module podium::PodiumPassCoin {
         asset_symbol: String,
         amount: u64,
     ): FungibleAsset acquires AssetCapabilities {
-        assert!(signer::address_of(admin) == @admin, error::permission_denied(ENOT_AUTHORIZED));
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
         assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
         
         let caps = borrow_global<AssetCapabilities>(@podium);
@@ -300,5 +305,22 @@ module podium::PodiumPassCoin {
         
         let mint_ref = table::borrow(&caps.mint_refs, asset_symbol);
         fungible_asset::mint(mint_ref, amount)
+    }
+
+    /// Check if an asset type exists
+    public fun asset_exists(asset_symbol: String): bool acquires AssetCapabilities {
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        table::contains(&caps.mint_refs, asset_symbol)
+    }
+
+    #[test_only]
+    public fun create_target_asset_for_test(
+        creator: &signer,
+        target_id: String,
+        name: String,
+        icon_uri: String,
+        project_uri: String,
+    ) acquires AssetCapabilities {
+        create_target_asset(creator, target_id, name, icon_uri, project_uri)
     }
 } 

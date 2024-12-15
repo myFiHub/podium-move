@@ -6,6 +6,7 @@ module podium::PodiumOutpost {
     use aptos_framework::event;
     use aptos_token_objects::collection;
     use aptos_token_objects::token;
+    use aptos_framework::table::{Self, Table};
     
     // Error codes
     const ENOT_ADMIN: u64 = 0x10001;  // 65537
@@ -142,11 +143,8 @@ module podium::PodiumOutpost {
         assert!(fee_share <= MAX_FEE_PERCENTAGE, EINVALID_FEE);
         assert!(price > 0, EINVALID_PRICE);
 
-        // Initialize collection if needed
-        init_collection(creator);
-
-        // Verify collection exists and creator has permission
-        let collection_addr = collection::create_collection_address(&@admin, &string::utf8(COLLECTION_NAME));
+        // Get collection address and verify it exists
+        let collection_addr = collection::create_collection_address(&@podium, &string::utf8(COLLECTION_NAME));
         assert!(object::is_object(collection_addr), EOUTPOST_NOT_FOUND);
 
         // Create outpost token
@@ -200,8 +198,8 @@ module podium::PodiumOutpost {
     }
 
     /// Create the Podium Outposts collection (admin only)
-    fun create_podium_collection(creator: &signer) {
-        assert!(signer::address_of(creator) == @admin, ENOT_ADMIN);
+    public fun create_podium_collection(creator: &signer) {
+        assert!(signer::address_of(creator) == @podium, ENOT_ADMIN);
         
         collection::create_unlimited_collection(
             creator,
@@ -303,21 +301,37 @@ module podium::PodiumOutpost {
         !borrow_global<OutpostData>(object::object_address(&outpost)).emergency_pause
     }
 
-    /// Create a new outpost collection if it doesn't exist
+    /// Collection data for outposts
+    struct OutpostCollection has key {
+        collection: Object<collection::Collection>,
+        outposts: Table<address, Object<OutpostData>>,
+    }
+
+    /// Initialize the collection for outposts
     public fun init_collection(creator: &signer) {
         // Only admin can initialize collection
-        assert!(signer::address_of(creator) == @admin, ENOT_ADMIN);
-        
-        let collection_addr = collection::create_collection_address(&@admin, &string::utf8(COLLECTION_NAME));
-        if (!object::is_object(collection_addr)) {
+        assert!(signer::address_of(creator) == @podium, ENOT_ADMIN);
+
+        if (!exists<OutpostCollection>(@podium)) {
+            // Create collection
             collection::create_unlimited_collection(
                 creator,
                 string::utf8(COLLECTION_DESCRIPTION),
                 string::utf8(COLLECTION_NAME),
-                option::none(), // No royalty
+                option::none(),
                 string::utf8(COLLECTION_URI),
             );
-        }
+
+            // Get collection address and object
+            let collection_addr = collection::create_collection_address(&@podium, &string::utf8(COLLECTION_NAME));
+            let collection_object = object::address_to_object<collection::Collection>(collection_addr);
+            
+            // Store collection data
+            move_to(creator, OutpostCollection {
+                collection: collection_object,
+                outposts: table::new(),
+            });
+        };
     }
 
     /// Verify ownership of an outpost

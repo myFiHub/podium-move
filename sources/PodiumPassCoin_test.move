@@ -28,7 +28,7 @@ module podium::PodiumPassCoin_test {
         user2: &signer,
     ) {
         // Setup test environment
-        setup_test(aptos_framework, admin, user1, user2);
+        setup_test(admin, user1, user2);
         debug::print(&string::utf8(b"Test environment setup complete"));
 
         // Create a target asset with shorter symbol
@@ -40,7 +40,7 @@ module podium::PodiumPassCoin_test {
         debug::print(&string::utf8(b"Creating target asset with ID:"));
         debug::print(&target_id);
 
-        PodiumPassCoin::create_target_asset(admin, target_id, name, icon_uri, project_uri);
+        PodiumPassCoin::create_target_asset_for_test(admin, target_id, name, icon_uri, project_uri);
         debug::print(&string::utf8(b"Target asset created"));
 
         // Generate and print the asset symbol for debugging
@@ -75,7 +75,7 @@ module podium::PodiumPassCoin_test {
         user1: &signer,
         user2: &signer,
     ) {
-        setup_test(aptos_framework, admin, user1, user2);
+        setup_test(admin, user1, user2);
         debug::print(&string::utf8(b"Test environment setup complete for unauthorized mint test"));
 
         let asset_symbol = string::utf8(b"T_NONEXISTENT");
@@ -93,7 +93,7 @@ module podium::PodiumPassCoin_test {
         user1: &signer,
         user2: &signer,
     ) {
-        setup_test(aptos_framework, admin, user1, user2);
+        setup_test(admin, user1, user2);
         debug::print(&string::utf8(b"Test environment setup complete for mint and transfer test"));
 
         let target_id = string::utf8(b"T2");
@@ -141,23 +141,23 @@ module podium::PodiumPassCoin_test {
     }
 
     // Helper functions
-    fun setup_test(_aptos_framework: &signer, admin: &signer, user1: &signer, user2: &signer) {
+    fun setup_test(admin: &signer, user1: &signer, user2: &signer) {
         debug::print(&string::utf8(b"Creating test accounts"));
         account::create_account_for_test(@podium);
         account::create_account_for_test(signer::address_of(user1));
         account::create_account_for_test(signer::address_of(user2));
         
         debug::print(&string::utf8(b"Initializing PodiumPassCoin module"));
-        PodiumPassCoin::init_module_for_test(admin);
+        PodiumPassCoin::init_module_for_test(&account::create_signer_for_test(@podium));
         
         debug::print(&string::utf8(b"Initializing PodiumPass module"));
-        PodiumPass::init_module_for_test(admin);
+        PodiumPass::init_module_for_test(&account::create_signer_for_test(@podium));
     }
 
     fun create_test_asset(admin: &signer, target_id: String) {
         debug::print(&string::utf8(b"Creating test asset with target_id:"));
         debug::print(&target_id);
-        PodiumPassCoin::create_target_asset(
+        PodiumPassCoin::create_target_asset_for_test(
             admin,
             target_id,
             string::utf8(b"Test Pass"),
@@ -174,5 +174,41 @@ module podium::PodiumPassCoin_test {
         debug::print(&string::utf8(b"Generated symbol:"));
         debug::print(&result);
         result
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium)]
+    public fun test_asset_creation(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+    ) {
+        // Initialize module
+        PodiumPassCoin::init_module_for_test(podium_signer);
+        
+        // Create test asset
+        let asset_symbol = string::utf8(b"TEST");
+        PodiumPassCoin::create_target_asset_for_test(
+            podium_signer,
+            asset_symbol,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"https://example.com/icon.png"),
+            string::utf8(b"https://example.com/project"),
+        );
+        
+        // Verify asset exists
+        assert!(PodiumPassCoin::balance(signer::address_of(podium_signer), asset_symbol) >= 0, 0);
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium)]
+    #[expected_failure(abort_code = 393220)] // EASSET_DOES_NOT_EXIST
+    public fun test_nonexistent_asset(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+    ) {
+        // Initialize module
+        PodiumPassCoin::init_module_for_test(podium_signer);
+        
+        // Try to get balance of nonexistent asset
+        let asset_symbol = string::utf8(b"NONEXISTENT");
+        PodiumPassCoin::balance(signer::address_of(podium_signer), asset_symbol);
     }
 } 

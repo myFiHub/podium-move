@@ -33,3 +33,4 @@ AptosTokenObjects = { git = "https://github.com/aptos-labs/aptos-core.git", subd
 MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib/", rev = "mainnet" }
 
 [dev-dependencies]
+
