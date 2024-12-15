@@ -316,7 +316,7 @@ module podium::PodiumPass_test {
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @0x456, user2 = @0x789, target = @target)]
-    #[expected_failure(abort_code = ESUBSCRIPTION_ALREADY_EXISTS)]
+    #[expected_failure(abort_code = ESUBSCRIPTION_ALREADY_EXISTS, location = 0x456::PodiumPass)]
     public fun test_duplicate_subscription(
         aptos_framework: &signer,
         podium_signer: &signer,
@@ -354,7 +354,7 @@ module podium::PodiumPass_test {
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @0x456, user2 = @0x789, target = @target)]
-    #[expected_failure(abort_code = ETIER_EXISTS)]
+    #[expected_failure(abort_code = ETIER_EXISTS, location = 0x456::PodiumPass)]
     public fun test_duplicate_tier_creation(
         aptos_framework: &signer,
         podium_signer: &signer,
@@ -385,7 +385,7 @@ module podium::PodiumPass_test {
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @0x456, user2 = @0x789, target = @target)]
-    #[expected_failure(abort_code = EINVALID_SUBSCRIPTION_TIER)]
+    #[expected_failure(abort_code = EINVALID_SUBSCRIPTION_TIER, location = 0x456::PodiumPass)]
     public fun test_subscribe_nonexistent_tier(
         aptos_framework: &signer,
         podium_signer: &signer,
@@ -471,8 +471,27 @@ module podium::PodiumPass_test {
         // Verify price was updated
         assert!(PodiumOutpost::get_price(outpost) == new_price, 0);
         
-        // Try to buy pass with old price (should fail)
+        // Create subscription tier before buying pass
+        PodiumPass::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            PodiumPass::get_duration_week(),
+        );
+
+        // Initialize asset before buying pass
         let target_addr = object::object_address(&outpost);
+        let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
+        PodiumPassCoin::create_target_asset_for_test(
+            creator,
+            asset_symbol,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"https://example.com/icon.png"),
+            string::utf8(b"https://example.com/project"),
+        );
+
+        // Try to buy pass with old price (should fail)
         PodiumPass::buy_pass(buyer, target_addr, 1, 30, option::none());
     }
 
