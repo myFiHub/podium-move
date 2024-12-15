@@ -138,15 +138,15 @@ module podium::PodiumPassCoin {
         let caps = borrow_global_mut<AssetCapabilities>(@podium);
         assert!(!table::contains(&caps.metadata_objects, asset_symbol), error::already_exists(EASSET_ALREADY_EXISTS));
 
-        // Create metadata object
-        let constructor_ref = &object::create_named_object(
+        // Create metadata object using admin's signer
+        let constructor_ref = object::create_named_object(
             admin,
             *string::bytes(&asset_symbol)
         );
 
         // Initialize the fungible asset with metadata
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
-            constructor_ref,
+            &constructor_ref,
             option::none(), // No maximum supply
             name,
             asset_symbol,
@@ -156,13 +156,11 @@ module podium::PodiumPassCoin {
         );
 
         // Generate and store capabilities
-        let mint_ref = fungible_asset::generate_mint_ref(constructor_ref);
-        let burn_ref = fungible_asset::generate_burn_ref(constructor_ref);
-        let transfer_ref = fungible_asset::generate_transfer_ref(constructor_ref);
+        let mint_ref = fungible_asset::generate_mint_ref(&constructor_ref);
+        let burn_ref = fungible_asset::generate_burn_ref(&constructor_ref);
+        let transfer_ref = fungible_asset::generate_transfer_ref(&constructor_ref);
         
-        let metadata = object::address_to_object<Metadata>(
-            object::create_object_address(&@podium, *string::bytes(&asset_symbol))
-        );
+        let metadata = object::object_from_constructor_ref<Metadata>(&constructor_ref);
 
         table::add(&mut caps.mint_refs, asset_symbol, mint_ref);
         table::add(&mut caps.burn_refs, asset_symbol, burn_ref);
