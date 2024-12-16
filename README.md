@@ -1,52 +1,125 @@
 # Podium Protocol & CheerOrBoo
 
-A decentralized protocol suite built on Movement, including subscription management and social tipping features.
+A decentralized protocol suite built on Movement, including subscription management, pass trading, and social tipping features.
 
 ## Overview
 
 ### Podium
-Podium's foundation is simple yet transformative: content creators and audiences should actively shape and own the conversations they engage in. Our "Showtime at Apollo"-style moderation system allows listeners to influence speaker time by paying to adjust it in real-time, creating an organic attention economy where creators and participants are rewarded for their contributions.
+Podium's foundation enables content creators and audiences to actively shape and own their conversations. The protocol implements:
+1. Pass trading with bonding curve pricing
+2. Flexible subscription management
+3. Outpost creation and management
+4. Fee distribution with referral incentives
 
-This breaks the traditional passive consumption model, empowering users to become part of the content itself. In the future, social media will shift from passive listening to active participation. Platforms like Podium will allow users to influence conversations, while Web3 technology enables decentralized ownership of engagement.
+### CheerOrBoo
+A social tipping system that allows audience participation through positive (Cheer) or negative (Boo) feedback, with automatic reward distribution.
 
-**Key Assumptions:**
-- Users want more control over conversations
-- Creators need better monetization tools
-- Web3 adoption will continue to grow
+## Smart Contract Architecture
 
-## Smart Contracts
+### 1. PodiumPass
+Core business logic handling pass trading and subscriptions.
 
-## Protocol Architecture
+**Key Features:**
+- Bonding curve-based pass pricing
+- Multi-tier subscription management
+- Automated fee distribution
+- Vault system for pass redemption
+- Referral system integration
 
-### Component Hierarchy
+**Test Coverage:**
+1. **Pass Operations**
+   - `test_buy_pass`: Pass purchase and minting
+   - `test_pass_sell`: Pass redemption mechanics
+   - `test_pass_trading`: Trading between users
+   - `test_account_pass_operations`: Account-specific pass handling
+   - `test_outpost_pass_operations`: Outpost-specific pass operations
 
-1. **PodiumOutpost (Base Layer)**
-   - Collection and outpost management
-   - Deterministic addressing
-   - Access control foundation
+2. **Subscription Management**
+   - `test_subscription`: Basic subscription creation/verification
+   - `test_subscription_flow`: Complete subscription lifecycle
+   - `test_subscription_expiration`: Time-based expiration
+   - `test_duplicate_subscription`: Duplicate prevention
+   - `test_subscription_with_referral`: Referral system
+   - `test_subscribe_nonexistent_tier`: Error handling
 
-2. **PodiumPassCoin (Token Layer)**
-   - Fungible asset implementation
-   - Pass token management
-   - Balance and transfer logic
+3. **Administrative Controls**
+   - `test_admin_price_control`: Price management
+   - `test_outpost_price_permissions`: Access control
+   - `test_outpost_creation_flow`: Outpost initialization
 
-3. **PodiumPass (Business Logic Layer)**
-   - Subscription management
-   - Pass trading mechanics
-   - Fee distribution
-   - Access verification
+### 2. PodiumOutpost
+Handles outpost (creator space) management.
 
-### Key Features
+**Key Features:**
+- Deterministic addressing
+- Collection management
+- Metadata handling
+- Emergency controls
 
-- **Deterministic Addressing**: Predictable outpost addresses based on creator and name
-- **Flexible Subscriptions**: Support for both temporary and lifetime access
-- **Dynamic Pricing**: Bonding curve for pass prices
-- **Referral System**: Built-in referral rewards
-- **Emergency Controls**: Pause functionality for security
-- **Fee Distribution**: Automated fee splitting between protocol, creators, and referrers
+**Test Coverage:**
+- Outpost creation and initialization
+- Price updates and permissions
+- Metadata management
+- Emergency pause functionality
 
-### CheerOrBooV2
-Social tipping and reward distribution system.
+### 3. PodiumPassCoin
+Fungible asset implementation for passes.
+
+**Key Features:**
+- Custom token implementation
+- Balance tracking
+- Transfer management
+- Mint/burn capabilities
+
+### 4. CheerOrBooV2
+A social tipping system that enables real-time audience feedback through financial incentives.
+
+**Key Features:**
+- Dual action system (Cheer/Boo)
+- Configurable fee distribution
+- Multi-participant reward splitting
+- Event emission for tracking
+
+**Implementation Details:**
+```move
+cheer_or_boo(
+    sender: &signer,
+    target: address,
+    participants: vector<address>,
+    is_cheer: bool,
+    amount: u64,
+    target_allocation: u64,
+    unique_identifier: vector<u8>
+)
+```
+
+**Core Functionality:**
+- Flexible reward distribution between target and participants
+- Protocol fee handling (5% default)
+- Automatic account registration and coin store initialization
+- Event emission for analytics
+
+**Test Coverage:**
+1. **Basic Operations (`test_cheer`, `test_boo`)**
+   - Verifies correct fee calculations (5%)
+   - Validates reward distribution
+   - Checks balance updates for all parties
+   - Tests both positive and negative interactions
+
+2. **Economic Security (`test_insufficient_balance`)**
+   - Validates balance checks
+   - Tests failure conditions
+   - Verifies error handling
+
+3. **Distribution Logic**
+   - Tests multi-participant splitting
+   - Verifies target allocation percentages
+   - Validates rounding behavior
+
+4. **Event Emission**
+   - CheerEvent and BooEvent verification
+   - Unique identifier tracking
+   - Participant list handling
 
 ## Subscription Model
 
@@ -108,3 +181,47 @@ npm install
 ### Test Setup
 
 #### Prerequisites
+
+### Key Test Files
+- `PodiumPass_test.move`: Core protocol tests
+- `PodiumOutpost_test.move`: Outpost management tests
+- `PodiumPassCoin_test.move`: Token implementation tests
+- `CheerOrBooV2_test.move`: Tipping system tests
+
+## Security Features
+
+1. **Access Control**
+   - Role-based permissions
+   - Owner-only operations
+   - Admin controls
+
+2. **Economic Security**
+   - Fee limits
+   - Price controls
+   - Vault system for redemptions
+
+3. **Emergency Controls**
+   - Pause functionality
+   - Admin override capabilities
+   - Error handling
+
+## Events and Monitoring
+
+The protocol emits events for:
+- Pass purchases and sales
+- Subscription changes
+- Outpost updates
+- Cheer/Boo interactions
+- Administrative actions
+
+## Integration Points
+
+1. **Frontend Integration**
+   - Pass trading interface
+   - Subscription management
+   - Tipping functionality
+
+2. **Analytics Integration**
+   - Event monitoring
+   - Price tracking
+   - User activity analysis
