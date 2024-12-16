@@ -145,6 +145,39 @@ Subscriptions are implemented as pure data resources rather than transferable as
 ### Installation
 npm install
 
+### Deployment
+
+The deployment script supports selective deployment of components and a dry-run mode for testing:
+
+```bash
+# Deploy CheerOrBoo only
+npm run deploy cheerorboo
+
+# Deploy Podium Protocol only (PodiumOutpost, PodiumPassCoin, PodiumPass)
+npm run deploy podium
+
+# Deploy everything
+npm run deploy all
+
+# Test deployment without making transactions (dry-run)
+npm run deploy podium --dry-run
+npm run deploy cheerorboo --dry-run
+npm run deploy all --dry-run
+```
+
+### Deployment Order
+When deploying Podium Protocol, modules are deployed and initialized in this order:
+1. PodiumOutpost - Handles outpost (creator space) management
+2. PodiumPassCoin - Fungible asset implementation for passes
+3. PodiumPass - Core business logic for pass trading and subscriptions
+
+### Initial Configuration
+During deployment, the system is initialized with:
+- PodiumOutpost collection creation
+- Initial outpost price set to 1000 APT
+- PodiumPassCoin module initialization
+- PodiumPass module initialization with default parameters
+
 ## Testing Framework
 
 ### PodiumPass Test Coverage

@@ -11,15 +11,36 @@ const __dirname = dirname(__filename);
 
 // Load config function
 function loadConfig() {
-    const configFile = fs.readFileSync(path.join(__dirname, '../.movement/config.yaml'), 'utf8');
-    const config = yaml.parse(configFile);
-    return config.profiles.deployer; // Use deployer profile
+    try {
+        const configFile = fs.readFileSync(path.join(__dirname, '../.movement/config.yaml'), 'utf8');
+        const config = yaml.parse(configFile);
+        
+        // Validate private key format
+        const privateKey = config.profiles.deployer.private_key;
+        if (!privateKey.match(/^0x[0-9a-fA-F]{64}$/)) {
+            throw new Error('Invalid private key format. Must be 0x-prefixed 32-byte hex string');
+        }
+        
+        return config.profiles.deployer;
+    } catch (error: any) {
+        console.error('Error loading config:', error?.message || error);
+        process.exit(1);
+    }
 }
 
 async function main() {
     // Get command line arguments
     const args = process.argv.slice(2);
-    const deployTarget = args[0] || 'all'; // Default to 'all' if no argument provided
+    const deployTarget = args[0];
+    // Fix dry-run detection - it was being ignored
+    const isDryRun = args.includes('--dry-run') || args[2] === '--dry-run';
+
+    if (!deployTarget) {
+        console.error("Please specify deployment target: 'cheerorboo', 'podium', or 'all'");
+        process.exit(1);
+    }
+
+    console.log(`Mode: ${isDryRun ? 'Dry Run' : 'Live'}`);
 
     // Load configuration and setup client
     const config = loadConfig();
@@ -38,21 +59,21 @@ async function main() {
     try {
         switch(deployTarget.toLowerCase()) {
             case 'cheerorboo':
-                console.log("\nChecking CheerOrBooV2 deployment...");
-                await deployIfNeeded(aptos, account, "CheerOrBooV2.move");
+                console.log("\nSimulating CheerOrBooV2 deployment...");
+                await deployIfNeeded(aptos, account, "CheerOrBooV2.move", isDryRun);
                 break;
 
             case 'podium':
                 console.log("\nDeploying Podium System...");
-                await deployPodiumSystem(aptos, account);
+                await deployPodiumSystem(aptos, account, isDryRun);
                 break;
 
             case 'all':
                 console.log("\nChecking CheerOrBooV2 deployment...");
-                await deployIfNeeded(aptos, account, "CheerOrBooV2.move");
+                await deployIfNeeded(aptos, account, "CheerOrBooV2.move", isDryRun);
                 
                 console.log("\nDeploying Podium System...");
-                await deployPodiumSystem(aptos, account);
+                await deployPodiumSystem(aptos, account, isDryRun);
                 break;
 
             default:
@@ -67,11 +88,19 @@ async function main() {
     }
 }
 
-async function deployModule(aptos: Aptos, account: Account, moduleName: string) {
+async function deployModule(aptos: Aptos, account: Account, moduleName: string, isDryRun = false) {
+    console.log(`${isDryRun ? '[DRY RUN] Would deploy' : 'Deploying'} ${moduleName}...`);
+    
     const moduleHex = fs.readFileSync(
         path.join(__dirname, "../sources/", moduleName),
         "utf8"
     );
+
+    if (isDryRun) {
+        console.log(`Would deploy module ${moduleName} from address: ${account.accountAddress}`);
+        console.log(`Module content length: ${moduleHex.length} bytes`);
+        return;
+    }
 
     const transaction = await aptos.publishPackageTransaction({
         account: account.accountAddress,
@@ -80,10 +109,8 @@ async function deployModule(aptos: Aptos, account: Account, moduleName: string) 
     });
 
     const committedTxn = await aptos.signAndSubmitTransaction({ signer: account, transaction });
-
     console.log(`Submitted transaction for ${moduleName}: ${committedTxn.hash}`);
     
-    // Wait for transaction completion
     const response = await aptos.waitForTransaction({ 
         transactionHash: committedTxn.hash 
     });
@@ -92,54 +119,70 @@ async function deployModule(aptos: Aptos, account: Account, moduleName: string) 
     return response;
 }
 
-async function deployPodiumSystem(aptos: Aptos, account: Account) {
+async function deployPodiumSystem(aptos: Aptos, account: Account, isDryRun = false) {
+    // Deploy in correct order
     const modules = [
+        "PodiumOutpost.move",
         "PodiumPassCoin.move",
-        "PodiumPass.move",
-        "PodiumOutpost.move"
+        "PodiumPass.move"
     ];
 
     for (const module of modules) {
-        console.log(`Deploying ${module}...`);
-        await deployModule(aptos, account, module);
+        await deployModule(aptos, account, module, isDryRun);
     }
 
     // Initialize the system
-    await initializeSystem(aptos, account);
+    await initializePodiumSystem(aptos, account, isDryRun);
 }
 
-async function initializeSystem(aptos: Aptos, account: Account) {
+async function initializePodiumSystem(aptos: Aptos, account: Account, isDryRun = false) {
+    console.log(`\n${isDryRun ? '[DRY RUN] Would initialize' : 'Initializing'} Podium System...`);
+
     const initTxns = [
+        // Initialize PodiumOutpost first
         {
-            function: `${account.accountAddress.toString()}::PodiumPassCoin::initialize`,
-            arguments: []
+            function: `${account.accountAddress.toString()}::PodiumOutpost::init_collection`,
+            arguments: [],
+            typeArguments: []
         },
+        // Set initial outpost price
+        {
+            function: `${account.accountAddress.toString()}::PodiumOutpost::update_outpost_price`,
+            arguments: ["1000"], // 1000 APT initial price
+            typeArguments: []
+        },
+        // Initialize PodiumPassCoin
+        {
+            function: `${account.accountAddress.toString()}::PodiumPassCoin::init_module_for_test`,
+            arguments: [],
+            typeArguments: []
+        },
+        // Initialize PodiumPass with default parameters
         {
             function: `${account.accountAddress.toString()}::PodiumPass::initialize`,
-            arguments: [
-                account.accountAddress,
-                4,
-                8,
-                2
-            ]
-        },
-        {
-            function: `${account.accountAddress.toString()}::PodiumOutpost::initialize`,
-            arguments: [1000000]
+            arguments: [],
+            typeArguments: []
         }
     ];
 
     for (const txn of initTxns) {
+        if (isDryRun) {
+            console.log(`Would execute: ${txn.function}`);
+            console.log(`With arguments:`, txn.arguments);
+            continue;
+        }
+        console.log(`Executing ${txn.function}...`);
+        
         const transaction = await aptos.transaction.build.simple({
             sender: account.accountAddress,
             data: {
                 function: txn.function as `${string}::${string}::${string}`,
                 functionArguments: txn.arguments,
-                typeArguments: [],
+                typeArguments: txn.typeArguments,
             }
         });
 
-        const signature = aptos.transaction.sign({ 
+        const signature = await aptos.transaction.sign({ 
             signer: account, 
             transaction 
         });
@@ -157,18 +200,7 @@ async function initializeSystem(aptos: Aptos, account: Account) {
     }
 }
 
-async function verifyDeployment(aptos: Aptos, account: Account, moduleName: string) {
-    try {
-        const resources = await aptos.getAccountResources({ 
-            accountAddress: account.accountAddress 
-        });
-        return resources.some(r => r.type.includes(moduleName));
-    } catch {
-        return false;
-    }
-}
-
-async function deployIfNeeded(aptos: Aptos, account: Account, moduleName: string) {
+async function deployIfNeeded(aptos: Aptos, account: Account, moduleName: string, isDryRun = false) {
     const isDeployed = await isContractDeployed(aptos, CHEERORBOO_ADDRESS);
     
     if (isDeployed) {
@@ -177,7 +209,7 @@ async function deployIfNeeded(aptos: Aptos, account: Account, moduleName: string
     }
 
     console.log(`Deploying contract to ${account.accountAddress}...`);
-    return await deployModule(aptos, account, moduleName);
+    return await deployModule(aptos, account, moduleName, isDryRun);
 }
 
 // Run deployment
