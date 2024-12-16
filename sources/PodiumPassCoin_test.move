@@ -151,7 +151,7 @@ module podium::PodiumPassCoin_test {
         PodiumPassCoin::init_module_for_test(&account::create_signer_for_test(@podium));
         
         debug::print(&string::utf8(b"Initializing PodiumPass module"));
-        PodiumPass::init_module_for_test(&account::create_signer_for_test(@podium));
+        PodiumPass::initialize(&account::create_signer_for_test(@podium));
     }
 
     fun create_test_asset(admin: &signer, target_id: String) {

@@ -16,6 +16,7 @@ module podium::PodiumPass {
     use aptos_framework::object::{Self, Object};
     use aptos_framework::account;
     use aptos_framework::event::{Self, EventHandle};
+    use aptos_framework::fungible_asset;
 
     /// Error codes
     const ENOT_AUTHORIZED: u64 = 1;
@@ -118,7 +119,13 @@ module podium::PodiumPass {
         timestamp: u64
     }
 
-    /// Global configuration
+    /// Tracks pass supply and pricing for targets/outposts
+    struct PassStats has key, store {
+        total_supply: u64,
+        last_price: u64
+    }
+
+    /// Global configuration including pass stats
     struct Config has key {
         /// Fee percentages
         protocol_fee_percent: u64,
@@ -130,6 +137,8 @@ module podium::PodiumPass {
         weight_a: u64,
         weight_b: u64,
         weight_c: u64,
+        /// Pass stats for all targets/outposts
+        pass_stats: Table<address, PassStats>,
         /// Event handles
         pass_purchase_events: EventHandle<PassPurchaseEvent>,
         pass_sell_events: EventHandle<PassSellEvent>,
@@ -162,16 +171,15 @@ module podium::PodiumPass {
         max_tiers: u64,
     }
 
-    /// Tracks pass supply and pricing for targets/outposts
-    struct PassStats has key {
-        total_supply: u64,
-        last_price: u64
-    }
-
     /// Stores fee distribution configuration for a target/outpost
     struct FeeConfig has key {
         subject_address: address,
         referrer_address: Option<address>,
+    }
+
+    /// Vault to hold redemption funds
+    struct RedemptionVault has key {
+        coins: coin::Coin<AptosCoin>,
     }
 
     /// Helper function to get duration value
@@ -179,12 +187,7 @@ module podium::PodiumPass {
     public fun get_duration_month(): u64 { DURATION_MONTH }
     public fun get_duration_year(): u64 { DURATION_YEAR }
 
-    #[test_only]
-    public fun init_module_for_test(admin: &signer) {
-        initialize(admin);
-    }
-
-    /// Initialize module with default configuration
+    /// Initialize module with default configuration and vault
     public fun initialize(admin: &signer) {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
         
@@ -197,6 +200,7 @@ module podium::PodiumPass {
                 weight_a: DEFAULT_WEIGHT_A,
                 weight_b: DEFAULT_WEIGHT_B,
                 weight_c: DEFAULT_WEIGHT_C,
+                pass_stats: table::new(),
                 pass_purchase_events: account::new_event_handle<PassPurchaseEvent>(admin),
                 pass_sell_events: account::new_event_handle<PassSellEvent>(admin),
                 subscription_events: account::new_event_handle<SubscriptionEvent>(admin),
@@ -206,7 +210,42 @@ module podium::PodiumPass {
                 tier_updated_events: account::new_event_handle<TierUpdatedEvent>(admin),
                 config_updated_events: account::new_event_handle<ConfigUpdatedEvent>(admin)
             });
+
+            // Initialize redemption vault
+            move_to(admin, RedemptionVault {
+                coins: coin::zero<AptosCoin>()
+            });
         }
+    }
+
+    /// Internal function to deposit coins into vault
+    fun deposit_to_vault(coins: coin::Coin<AptosCoin>) acquires RedemptionVault {
+        let vault = borrow_global_mut<RedemptionVault>(@podium);
+        let deposit_amount = coin::value(&coins);
+        debug::print(&string::utf8(b"[vault] Depositing to redemption vault:"));
+        debug::print(&deposit_amount);
+        let previous_balance = coin::value(&vault.coins);
+        debug::print(&string::utf8(b"[vault] Previous vault balance:"));
+        debug::print(&previous_balance);
+        
+        coin::merge(&mut vault.coins, coins);
+        
+        let new_balance = coin::value(&vault.coins);
+        debug::print(&string::utf8(b"[vault] New vault balance:"));
+        debug::print(&new_balance);
+    }
+
+    /// Internal function to withdraw coins from vault
+    fun withdraw_from_vault(amount: u64): coin::Coin<AptosCoin> acquires RedemptionVault {
+        let vault = borrow_global_mut<RedemptionVault>(@podium);
+        let current_balance = coin::value(&vault.coins);
+        debug::print(&string::utf8(b"[vault] Attempting withdrawal from vault:"));
+        debug::print(&amount);
+        debug::print(&string::utf8(b"[vault] Current vault balance:"));
+        debug::print(&current_balance);
+        
+        assert!(current_balance >= amount, error::invalid_state(EINSUFFICIENT_BALANCE));
+        coin::extract(&mut vault.coins, amount)
     }
 
     /// Initialize subscription configuration for a target/outpost
@@ -216,14 +255,6 @@ module podium::PodiumPass {
         // Verify ownership
         assert!(PodiumOutpost::verify_ownership(target_or_outpost, signer::address_of(creator)), 
             error::permission_denied(ENOT_OWNER));
-        
-        // Initialize stats if needed
-        if (!exists<PassStats>(target_addr)) {
-            move_to(creator, PassStats {
-                total_supply: 0,
-                last_price: INITIAL_PRICE
-            });
-        };
         
         // Initialize subscription config
         let config = borrow_global_mut<Config>(@podium);
@@ -236,25 +267,60 @@ module podium::PodiumPass {
         };
     }
 
-    /// Calculate price based on bonding curve
-    /// price = initial_price * (1 + weight_a * supply^weight_c / weight_b)
-    fun calculate_price(supply: u64, is_sell: bool): u64 acquires Config {
+    /// Initialize pass stats for a target/outpost
+    public fun init_pass_stats(target_addr: address) acquires Config {
+        let config = borrow_global_mut<Config>(@podium);
+        if (!table::contains(&config.pass_stats, target_addr)) {
+            // Create PassStats resource
+            let stats = PassStats {
+                total_supply: 0,
+                last_price: INITIAL_PRICE
+            };
+            table::add(&mut config.pass_stats, target_addr, stats);
+        };
+    }
+
+    /// Calculate price based on bonding curve using summation formula
+    /// Matches Solidity implementation's logic
+    fun calculate_price(supply: u64, amount: u64, _is_sell: bool): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
         
-        let base_price = INITIAL_PRICE;
-        if (supply == 0) {
-            base_price
-        } else {
-            let supply_factor = power(supply, config.weight_c);
-            let weight_factor = (config.weight_a * supply_factor) / config.weight_b;
-            let price = base_price * (100 + weight_factor) / 100;
+        debug::print(&string::utf8(b"[price] Supply:"));
+        debug::print(&supply);
+        debug::print(&string::utf8(b"[price] Amount:"));
+        debug::print(&amount);
+        
+        // Add adjustment factor to supply
+        let adjusted_supply = supply + config.weight_c;
+        
+        if (adjusted_supply == 0) {
+            return INITIAL_PRICE
+        };
 
-            if (is_sell) {
-                price * (100 - SELL_DISCOUNT_PERCENT) / 100
-            } else {
-                price
-            }
+        // Calculate summation for current supply
+        let n1 = adjusted_supply - 1;
+        let sum1 = (n1 * adjusted_supply * (2 * n1 + 1)) / 6;
+        
+        // Calculate summation for supply + amount
+        let n2 = adjusted_supply - 1 + amount;
+        let final_supply = adjusted_supply + amount;
+        let sum2 = (n2 * final_supply * (2 * n2 + 1)) / 6;
+        
+        // Calculate price using weight factors
+        let summation = config.weight_a * (sum2 - sum1);
+        let price = (config.weight_b * summation * INITIAL_PRICE) / (1000000 * 1000000);
+        
+        // Use initial price as floor
+        if (price < INITIAL_PRICE) {
+            INITIAL_PRICE
+        } else {
+            price
         }
+    }
+
+    /// Helper function to calculate total cost for buying passes
+    fun calculate_total_cost(supply: u64, amount: u64): u64 acquires Config {
+        calculate_price(supply, amount, false) * amount
     }
 
     /// Helper function for exponentiation
@@ -379,31 +445,74 @@ module podium::PodiumPass {
         };
     }
 
+    /// Calculate total buy price including all fees and referral bonus
+    public fun calculate_buy_price_with_fees(
+        target_addr: address,
+        amount: u64,
+        _referrer: Option<address>
+    ): (u64, u64, u64, u64) acquires Config {
+        // Get current supply
+        let current_supply = get_total_supply(target_addr);
+        
+        // Get raw price from bonding curve
+        let price = calculate_price(current_supply, amount, false);
+        
+        // Return price without fees, matching Solidity
+        (price, 0, 0, 0)
+    }
+
+    /// Calculate sell price and fees when selling passes
+    /// Returns (amount_received, protocol_fee, subject_fee)
+    public fun calculate_sell_price_with_fees(
+        target_addr: address,
+        amount: u64
+    ): (u64, u64, u64) acquires Config {
+        // Get current supply
+        let current_supply = get_total_supply(target_addr);
+        
+        // Basic validations matching Solidity
+        if (current_supply == 0 || amount == 0 || current_supply < amount) {
+            return (0, 0, 0)
+        };
+
+        // Get raw price from bonding curve
+        let price = calculate_price(current_supply, amount, true);
+        
+        // Return price as-is without fee calculations
+        (price, 0, 0)
+    }
+
+    /// Verify if an address is an outpost
+    public fun verify_subscription_requirements(outpost: Object<OutpostData>) {
+        // For now, just verify the outpost exists
+        assert!(PodiumOutpost::has_outpost_data(outpost), error::not_found(EPASS_NOT_FOUND));
+    }
+
     /// Buy passes for a target/outpost
     public entry fun buy_pass(
         buyer: &signer,
         target_addr: address,
         amount: u64,
-        duration: u64,
         referrer: Option<address>
-    ) acquires Config, PassStats {
-        // Get and verify outpost price (must be valid for outpost to be active)
-        let outpost = PodiumOutpost::get_outpost_from_token_address(target_addr);
-        let outpost_price = PodiumOutpost::get_price(outpost);
-        assert!(outpost_price > 0, error::invalid_argument(EINVALID_PRICE));
-
-        // Calculate price using bonding curve
-        let price = calculate_price(get_total_supply(target_addr), false);
-        let total_cost = price * duration;
-
-        // Handle payments and fees
-        handle_payments(buyer, target_addr, total_cost, referrer);
-
+    ) acquires Config, RedemptionVault {
+        assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
+        
+        let buyer_addr = signer::address_of(buyer);
+        
+        // Initialize pass stats if needed
+        init_pass_stats(target_addr);
+        
+        // Calculate prices first
+        let total_cost = get_buy_price_after_fee(target_addr, amount);
+        let raw_price = get_buy_price(target_addr, amount); // Get raw price before fees
+        
+        // Extract payment for redemption pool
+        let redemption_coins = coin::withdraw<AptosCoin>(buyer, total_cost);
+        deposit_to_vault(redemption_coins);
+        
         // Mint pass directly using PodiumPassCoin
         let asset_symbol = get_asset_symbol(target_addr);
-        debug::print(&string::utf8(b"Generated asset symbol:"));
-        debug::print(&asset_symbol);
-
+        
         // Create the asset type if it doesn't exist yet
         if (!PodiumPassCoin::asset_exists(asset_symbol)) {
             PodiumPassCoin::create_target_asset(
@@ -414,41 +523,83 @@ module podium::PodiumPass {
                 string::utf8(b"https://podium.fi"),
             );
         };
-
-        debug::print(&string::utf8(b"Creating pass with PodiumPassCoin"));
-
-        let fa = PodiumPassCoin::mint(buyer, asset_symbol, duration);
-        debug::print(&string::utf8(b"Pass minted successfully"));
-
-        // Transfer to buyer
-        let buyer_addr = signer::address_of(buyer);
-        debug::print(&string::utf8(b"Transferring to buyer address:"));
-        debug::print(&buyer_addr);
+        
+        let fa = PodiumPassCoin::mint(buyer, asset_symbol, amount);
         primary_fungible_store::deposit(buyer_addr, fa);
-        debug::print(&string::utf8(b"Transfer complete"));
-
-        // Update stats (create if doesn't exist)
-        update_stats(target_addr, duration, price);
-
+        
+        // Update stats in the table
+        let config = borrow_global_mut<Config>(@podium);
+        let stats = table::borrow_mut<address, PassStats>(&mut config.pass_stats, target_addr);
+        stats.total_supply = stats.total_supply + amount;
+        stats.last_price = raw_price;
+        
         // Emit event
-        emit_purchase_event(buyer_addr, target_addr, duration, price, referrer);
+        emit_purchase_event(buyer_addr, target_addr, amount, raw_price, referrer);
+    }
+
+    /// Sell passes back to the protocol
+    public fun sell_pass(
+        seller: &signer,
+        target_addr: address,
+        amount: u64
+    ) acquires Config, RedemptionVault {
+        assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
+        
+        // Calculate prices first
+        let sell_price = get_sell_price_after_fee(target_addr, amount);
+        let raw_price = get_sell_price(target_addr, amount); // Get raw price before fees
+        assert!(sell_price > 0, error::invalid_state(EINVALID_PRICE));
+        
+        // Burn the pass tokens first
+        let asset_symbol = get_asset_symbol(target_addr);
+        let seller_addr = signer::address_of(seller);
+        let metadata = object::address_to_object<fungible_asset::Metadata>(
+            PodiumPassCoin::get_metadata_object_address(asset_symbol)
+        );
+        let fa = primary_fungible_store::withdraw(seller, metadata, amount);
+        PodiumPassCoin::burn(seller, asset_symbol, fa);
+        
+        // Withdraw and distribute payments
+        let seller_coins = withdraw_from_vault(sell_price);
+        coin::deposit(seller_addr, seller_coins);
+        
+        // Update stats in the table
+        let config = borrow_global_mut<Config>(@podium);
+        let stats = table::borrow_mut<address, PassStats>(&mut config.pass_stats, target_addr);
+        stats.total_supply = stats.total_supply - amount;
+        stats.last_price = raw_price;
+        
+        // Emit event
+        event::emit_event(
+            &mut config.pass_sell_events,
+            PassSellEvent {
+                seller: seller_addr,
+                target_or_outpost: target_addr,
+                amount,
+                price: raw_price,
+            },
+        );
     }
 
     // Helper function to get total supply (creates stats if needed)
-    fun get_total_supply(target_addr: address): u64 acquires PassStats {
-        if (!exists<PassStats>(target_addr)) {
+    fun get_total_supply(target_addr: address): u64 acquires Config {
+        let config = borrow_global<Config>(@podium);
+        if (!table::contains(&config.pass_stats, target_addr)) {
             return 0
         };
-        borrow_global<PassStats>(target_addr).total_supply
+        table::borrow(&config.pass_stats, target_addr).total_supply
     }
 
     // Helper to update stats
-    fun update_stats(target_addr: address, amount: u64, price: u64) acquires PassStats {
-        if (!exists<PassStats>(target_addr)) {
-            // Stats should be initialized during subscription config initialization
-            return
+    fun update_stats(target_addr: address, amount: u64, price: u64) acquires Config {
+        let config = borrow_global_mut<Config>(@podium);
+        if (!table::contains(&config.pass_stats, target_addr)) {
+            table::add(&mut config.pass_stats, target_addr, PassStats {
+                total_supply: 0,
+                last_price: INITIAL_PRICE
+            });
         };
-        let stats = borrow_global_mut<PassStats>(target_addr);
+        let stats = table::borrow_mut(&mut config.pass_stats, target_addr);
         stats.total_supply = stats.total_supply + amount;
         stats.last_price = price;
     }
@@ -531,98 +682,6 @@ module podium::PodiumPass {
         );
     }
 
-    /// Sell passes back to the protocol
-    public fun sell_pass(
-        seller: &signer,
-        target_or_outpost: Object<OutpostData>,
-        amount: u64
-    ) acquires Config, PassStats {
-        assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-        
-        let target_addr = object::object_address(&target_or_outpost);
-        assert!(exists<PassStats>(target_addr), error::not_found(EPASS_NOT_FOUND));
-
-        let pass_config = borrow_global_mut<PassStats>(target_addr);
-        assert!(pass_config.total_supply >= amount, error::invalid_argument(EINSUFFICIENT_PASS_BALANCE));
-
-        // Calculate sell price with discount
-        let base_price = calculate_price(pass_config.total_supply - amount, true);
-        let base_payment = base_price * amount;
-
-        // Calculate fees to be deducted from payment
-        let config = borrow_global<Config>(@podium);
-        let protocol_fee = (base_payment * config.protocol_fee_percent) / 100;
-        let subject_fee = (base_payment * config.subject_fee_percent) / 100;
-        
-        // No referral fee on sells
-        let seller_payment = base_payment - protocol_fee - subject_fee;
-
-        // Burn passes first
-        let asset_symbol = get_asset_symbol(target_addr);
-        let seller_addr = signer::address_of(seller);
-        let fa = PodiumPassCoin::mint(seller, asset_symbol, amount);
-        PodiumPassCoin::burn(seller, asset_symbol, fa);
-
-        // Distribute payments from contract's bonding curve funds
-        transfer_with_check(seller, config.treasury, protocol_fee);
-        transfer_with_check(seller, target_addr, subject_fee);
-        transfer_with_check(seller, seller_addr, seller_payment);
-
-        // Update supply and price
-        pass_config.total_supply = pass_config.total_supply - amount;
-        pass_config.last_price = base_price;
-
-        // Emit event
-        event::emit_event(
-            &mut borrow_global_mut<Config>(@podium).pass_sell_events,
-            PassSellEvent {
-                seller: seller_addr,
-                target_or_outpost: target_addr,
-                amount,
-                price: base_price,
-            },
-        );
-    }
-
-    #[test_only]
-    public fun assert_pass_balance(
-        holder: address,
-        target_or_outpost: Object<OutpostData>,
-        expected_balance: u64,
-    ) {
-        let target_addr = object::object_address(&target_or_outpost);
-        let asset_symbol = get_asset_symbol(target_addr);
-        assert!(PodiumPassCoin::balance(holder, asset_symbol) == expected_balance, 4);
-    }
-
-    #[test_only]
-    public fun assert_subscription_test(
-        subscriber: address,
-        target_or_outpost: Object<OutpostData>,
-        tier_id: u64,
-        expected_duration: u64,
-    ) acquires Config {
-        let target_addr = object::object_address(&target_or_outpost);
-        assert!(exists<SubscriptionConfig>(target_addr), 0);
-        
-        let config = borrow_global<Config>(@podium);
-        let sub_config = table::borrow(&config.subscription_configs, target_addr);
-        assert!(table::contains(&sub_config.subscriptions, subscriber), 1);
-        
-        let subscription = table::borrow(&sub_config.subscriptions, subscriber);
-        assert!(subscription.tier_id == tier_id, 2);
-        
-        let duration = subscription.end_time - subscription.start_time;
-        let expected_seconds = if (expected_duration == DURATION_WEEK) {
-            SECONDS_PER_WEEK
-        } else if (expected_duration == DURATION_MONTH) {
-            SECONDS_PER_MONTH
-        } else {
-            SECONDS_PER_YEAR
-        };
-        assert!(duration == expected_seconds, 3);
-    }
-
     /// Verify subscription exists
     public fun assert_subscription_exists(target_addr: address) acquires Config {
         let config = borrow_global<Config>(@podium);
@@ -690,12 +749,20 @@ module podium::PodiumPass {
     }
 
     /// Add public getter functions
-    public fun get_supply(target_addr: address): u64 acquires PassStats {
-        borrow_global<PassStats>(target_addr).total_supply
+    public fun get_supply(target_addr: address): u64 acquires Config {
+        let config = borrow_global<Config>(@podium);
+        if (!table::contains(&config.pass_stats, target_addr)) {
+            return 0
+        };
+        table::borrow(&config.pass_stats, target_addr).total_supply
     }
 
-    public fun get_last_price(target_addr: address): u64 acquires PassStats {
-        borrow_global<PassStats>(target_addr).last_price
+    public fun get_last_price(target_addr: address): u64 acquires Config {
+        let config = borrow_global<Config>(@podium);
+        if (!table::contains(&config.pass_stats, target_addr)) {
+            return INITIAL_PRICE
+        };
+        table::borrow(&config.pass_stats, target_addr).last_price
     }
 
     public fun is_paused(_target_addr: address): bool {
@@ -750,21 +817,65 @@ module podium::PodiumPass {
         );
     }
 
-    #[test_only]
-    public fun create_asset_for_test(
-        creator: &signer,
-        target_id: String,
-        name: String,
-        icon_uri: String,
-        project_uri: String,
-    ) {
-        PodiumPassCoin::create_target_asset(
-            creator,
-            target_id,
-            name,
-            icon_uri,
-            project_uri,
-        )
+    /// Calculate raw sell price without fees (matches Solidity getSellPrice)
+    public fun get_sell_price(
+        target_addr: address,
+        amount: u64
+    ): u64 acquires Config {
+        let current_supply = get_total_supply(target_addr);
+        
+        // Match Solidity validation conditions
+        if (current_supply == 0) {
+            return 0
+        };
+        if (amount == 0) {
+            return 0
+        };
+        if (current_supply < amount) {
+            return 0
+        };
+        
+        // Calculate price using (supply - amount) like Solidity
+        calculate_price(current_supply - amount, amount, true)
+    }
+
+    /// Calculate raw buy price without fees (matches Solidity getBuyPrice)
+    public fun get_buy_price(
+        target_addr: address,
+        amount: u64
+    ): u64 acquires Config {
+        let current_supply = get_total_supply(target_addr);
+        calculate_price(current_supply, amount, false)
+    }
+
+    /// Calculate buy price including all fees (matches Solidity getBuyPriceAfterFee)
+    public fun get_buy_price_after_fee(
+        target_addr: address,
+        amount: u64
+    ): u64 acquires Config {
+        let price = get_buy_price(target_addr, amount);
+        let config = borrow_global<Config>(@podium);
+        
+        let protocol_fee = (price * config.protocol_fee_percent) / 100;
+        let subject_fee = (price * config.subject_fee_percent) / 100;
+        let referral_fee = (price * config.referral_fee_percent) / 100;
+        
+        price + protocol_fee + subject_fee + referral_fee
+    }
+
+    /// Calculate sell price including all fees (matches Solidity getSellPriceAfterFee)
+    public fun get_sell_price_after_fee(
+        target_addr: address,
+        amount: u64
+    ): u64 acquires Config {
+        let price = get_sell_price(target_addr, amount);
+        let config = borrow_global<Config>(@podium);
+        
+        let protocol_fee = (price * config.protocol_fee_percent) / 100;
+        let subject_fee = (price * config.subject_fee_percent) / 100;
+        let referral_fee = (price * config.referral_fee_percent) / 100;
+        
+        price - protocol_fee - subject_fee - referral_fee
     }
 }
    

@@ -13,7 +13,6 @@ module podium::PodiumPass_test {
     use podium::PodiumPassCoin;
     use podium::PodiumOutpost::{Self, OutpostData};
     use aptos_token_objects::collection;
-    use std::table;
 
     // Test addresses - with clear roles
     const TREASURY: address = @podium;
@@ -64,7 +63,7 @@ module podium::PodiumPass_test {
         coin::deposit(signer::address_of(target), coin::mint<AptosCoin>(100000, &mint_cap));
 
         // Initialize modules in correct order
-        PodiumPass::init_module_for_test(podium_signer);
+        PodiumPass::initialize(podium_signer);
         PodiumPassCoin::init_module_for_test(podium_signer);
 
         // Initialize outpost collection
@@ -128,7 +127,7 @@ module podium::PodiumPass_test {
         outpost
     }
 
-    #[test(creator = @target, buyer = @user1)]  // Use target instead of target
+    #[test(creator = @target, buyer = @user1)]
     public fun test_buy_pass(
         creator: &signer,
         buyer: &signer,
@@ -152,14 +151,210 @@ module podium::PodiumPass_test {
             PodiumPass::get_duration_week(),
         );
         
+        // Create asset for pass
+        create_test_asset(creator, PodiumPass::get_asset_symbol(target_addr));
+        
         debug::print(&string::utf8(b"Attempting to buy pass at address:"));
         debug::print(&target_addr);
         // Now we can buy a pass
-        PodiumPass::buy_pass(buyer, target_addr, 1, 30, option::none());
+        PodiumPass::buy_pass(buyer, target_addr, PASS_AMOUNT, option::none<address>());
         
         // Verify pass was created using PodiumPassCoin balance check
         let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
         assert!(PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol) > 0, 0);
+    }
+    
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, buyer = @user1)]
+    public fun test_outpost_pass_operations(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, buyer, buyer, creator);
+        
+        // Fund protocol treasury for redemptions
+        coin::transfer<AptosCoin>(podium_signer, @podium, 100000);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        // Create subscription tier (required for pass operations)
+        PodiumPass::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            PodiumPass::get_duration_week(),
+        );
+        
+        // Create asset for pass
+        create_test_asset(creator, PodiumPass::get_asset_symbol(target_addr));
+        
+        // Buy pass - PassStats will be initialized automatically
+        PodiumPass::buy_pass(buyer, target_addr, PASS_AMOUNT, option::none<address>());
+        
+        // Verify pass was created
+        let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
+        let initial_balance = PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol);
+        assert!(initial_balance == PASS_AMOUNT, 0);
+        
+        // Record initial balances
+        let initial_coin_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let initial_contract_balance = coin::balance<AptosCoin>(@podium);
+        
+        // Verify contract has sufficient funds
+        let (sell_price, _, _) = PodiumPass::calculate_sell_price_with_fees(target_addr, PASS_AMOUNT);
+        assert!(initial_contract_balance >= sell_price, 1);
+        
+        // Sell pass
+        PodiumPass::sell_pass(buyer, target_addr, PASS_AMOUNT);
+        
+        // Verify:
+        // 1. Pass balance decreased
+        assert!(PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol) == 0, 2);
+        // 2. Supply updated correctly
+        assert!(PodiumPass::get_supply(target_addr) == 0, 3);
+        // 3. Received payment
+        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_coin_balance, 4);
+        // 4. Contract balance decreased
+        assert!(coin::balance<AptosCoin>(@podium) < initial_contract_balance, 5);
+
+        debug::print(&string::utf8(b"[test] Initial buyer balance:"));
+        debug::print(&initial_coin_balance);
+        debug::print(&string::utf8(b"[test] Initial vault balance:"));
+        debug::print(&initial_contract_balance);
+        debug::print(&string::utf8(b"[test] Final buyer balance:"));
+        debug::print(&coin::balance<AptosCoin>(signer::address_of(buyer)));
+        debug::print(&string::utf8(b"[test] Final vault balance:"));
+        debug::print(&coin::balance<AptosCoin>(@podium));
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, buyer = @user1)]
+    public fun test_account_pass_operations(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, buyer, buyer, creator);
+        
+        let creator_addr = signer::address_of(creator);
+        
+        // Fund protocol treasury for redemptions
+        coin::transfer<AptosCoin>(podium_signer, @podium, 100000);
+        
+        // Create asset for account pass (no outpost needed for regular target accounts)
+        create_test_asset(creator, PodiumPass::get_asset_symbol(creator_addr));
+        
+        // Initialize pass stats for the target account
+        PodiumPass::init_pass_stats(creator_addr);
+        
+        // Buy account pass
+        PodiumPass::buy_pass(buyer, creator_addr, PASS_AMOUNT, option::none<address>());
+        
+        // Verify pass was created
+        let asset_symbol = PodiumPass::get_asset_symbol(creator_addr);
+        let initial_balance = PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol);
+        assert!(initial_balance == PASS_AMOUNT, 0);
+        
+        // Record initial balances
+        let initial_coin_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let initial_contract_balance = coin::balance<AptosCoin>(@podium);
+        
+        // Verify contract has sufficient funds
+        let (sell_price, _, _) = PodiumPass::calculate_sell_price_with_fees(creator_addr, PASS_AMOUNT);
+        assert!(initial_contract_balance >= sell_price, 1);
+        
+        // Sell pass
+        PodiumPass::sell_pass(buyer, creator_addr, PASS_AMOUNT);
+        
+        // Verify:
+        // 1. Pass balance decreased
+        assert!(PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol) == 0, 2);
+        // 2. Supply updated correctly
+        assert!(PodiumPass::get_supply(creator_addr) == 0, 3);
+        // 3. Received payment
+        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_coin_balance, 4);
+        // 4. Contract balance decreased
+        assert!(coin::balance<AptosCoin>(@podium) < initial_contract_balance, 5);
+
+        debug::print(&string::utf8(b"[test] Initial buyer balance:"));
+        debug::print(&initial_coin_balance);
+        debug::print(&string::utf8(b"[test] Initial vault balance:"));
+        debug::print(&initial_contract_balance);
+        debug::print(&string::utf8(b"[test] Final buyer balance:"));
+        debug::print(&coin::balance<AptosCoin>(signer::address_of(buyer)));
+        debug::print(&string::utf8(b"[test] Final vault balance:"));
+        debug::print(&coin::balance<AptosCoin>(@podium));
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, buyer = @user1)]
+    public fun test_pass_sell(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, buyer, buyer, creator);
+        
+        // Fund protocol treasury for redemptions
+        coin::transfer<AptosCoin>(podium_signer, @podium, 100000);
+        
+        // Create and setup outpost
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        // Create subscription tier (required for pass operations)
+        PodiumPass::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            PodiumPass::get_duration_week(),
+        );
+        
+        // Create asset for pass
+        create_test_asset(creator, PodiumPass::get_asset_symbol(target_addr));
+        
+        // First buy a pass
+        PodiumPass::buy_pass(buyer, target_addr, PASS_AMOUNT, option::none<address>());
+        let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
+        
+        // Record initial balances
+        let initial_balance = PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol);
+        let initial_coin_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let initial_contract_balance = coin::balance<AptosCoin>(@podium);
+        
+        // Verify contract has sufficient funds for redemption
+        let (sell_price, _, _) = PodiumPass::calculate_sell_price_with_fees(target_addr, PASS_AMOUNT);
+        assert!(initial_contract_balance >= sell_price, 0);
+        
+        // Sell pass back
+        PodiumPass::sell_pass(buyer, target_addr, PASS_AMOUNT);
+        
+        // Verify:
+        // 1. Pass balance decreased
+        assert!(PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol) == initial_balance - PASS_AMOUNT, 0);
+        // 2. Received correct APT amount based on bonding curve
+        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_coin_balance, 1);
+        // 3. Supply updated correctly
+        assert!(PodiumPass::get_supply(target_addr) == initial_balance - PASS_AMOUNT, 2);
+        // 4. Contract balance decreased by sell amount
+        assert!(coin::balance<AptosCoin>(@podium) < initial_contract_balance, 3);
+
+        debug::print(&string::utf8(b"[test] Initial buyer balance:"));
+        debug::print(&initial_coin_balance);
+        debug::print(&string::utf8(b"[test] Initial vault balance:"));
+        debug::print(&initial_contract_balance);
+        debug::print(&string::utf8(b"[test] Final buyer balance:"));
+        debug::print(&coin::balance<AptosCoin>(signer::address_of(buyer)));
+        debug::print(&string::utf8(b"[test] Final vault balance:"));
+        debug::print(&coin::balance<AptosCoin>(@podium));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @user1, user2 = @user2, target = @target)]
@@ -194,7 +389,7 @@ module podium::PodiumPass_test {
         assert!(PodiumPass::verify_subscription(
             signer::address_of(user1),
             outpost,
-            0
+            0 // premium tier ID
         ), 1);
     }
 
@@ -221,8 +416,11 @@ module podium::PodiumPass_test {
             PodiumPass::get_duration_week(),
         );
         
+        // Create asset for pass
+        create_test_asset(target, PodiumPass::get_asset_symbol(target_addr));
+        
         // Try to buy a pass
-        PodiumPass::buy_pass(buyer, target_addr, 1, 30, option::none());
+        PodiumPass::buy_pass(buyer, target_addr, PASS_AMOUNT, option::none<address>());
         
         // Verify pass was created
         let asset_symbol = PodiumPass::get_asset_symbol(target_addr);
@@ -267,7 +465,7 @@ module podium::PodiumPass_test {
         assert!(PodiumPass::verify_subscription(
             signer::address_of(user2),
             outpost,
-            0
+            0 // premium tier ID
         ), 1);
     }
 
@@ -416,6 +614,9 @@ module podium::PodiumPass_test {
         setup_test(aptos_framework, podium_signer, user1, user2, target);
         let outpost = create_test_outpost(target);
 
+        // Initialize timestamp
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+
         // Create subscription tier
         PodiumPass::create_subscription_tier(
             target,
@@ -474,6 +675,7 @@ module podium::PodiumPass_test {
 
     #[test_only]
     public fun create_test_asset(creator: &signer, asset_symbol: String) {
+        let podium_signer = account::create_signer_for_test(@podium);
         PodiumPassCoin::create_target_asset_for_test(
             creator,
             asset_symbol,

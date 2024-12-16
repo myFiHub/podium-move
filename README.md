@@ -71,3 +71,40 @@ Subscriptions are implemented as pure data resources rather than transferable as
 
 ### Installation
 npm install
+
+## Testing Framework
+
+### PodiumPass Test Coverage
+
+#### Core Pass Operations
+1. **Pass Creation & Purchase (`test_buy_pass`)**
+   - Validates pass minting process
+   - Verifies token creation and ownership
+   - Checks correct balance updates
+   - Tests deterministic address derivation
+
+2. **Subscription Management**
+   - `test_subscription`: Basic subscription creation and verification
+   - `test_subscription_flow`: Complete subscription lifecycle
+   - `test_subscription_expiration`: Time-based expiration mechanics
+   - `test_duplicate_subscription`: Duplicate prevention
+
+3. **Pass Trading System**
+   - `test_pass_trading`: Pass transfers between users
+   - `test_unauthorized_mint`: Security checks
+   - `test_mint_and_transfer`: Complete trading flow
+
+4. **Referral System**
+   - `test_subscription_with_referral`: Referral fee distribution
+   - Validates correct fee calculations
+   - Verifies payment distributions
+
+5. **Administrative Controls**
+   - `test_outpost_creation_flow`: Outpost initialization
+   - `test_admin_price_control`: Price management
+   - `test_outpost_price_permissions`: Access control
+   - `test_outpost_purchase_flow`: Purchase process validation
+
+### Test Setup
+
+#### Prerequisites

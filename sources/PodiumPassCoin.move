@@ -321,4 +321,13 @@ module podium::PodiumPassCoin {
     ) acquires AssetCapabilities {
         create_target_asset(creator, target_id, name, icon_uri, project_uri)
     }
+
+    /// Get the metadata object address for a given asset symbol
+    public fun get_metadata_object_address(asset_symbol: String): address acquires AssetCapabilities {
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
+        object::object_address(metadata)
+    }
 } 

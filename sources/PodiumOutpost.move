@@ -557,4 +557,11 @@ module podium::PodiumOutpost {
     public fun get_outpost_purchase_price(): u64 acquires OutpostCollection {
         borrow_global<OutpostCollection>(@podium).purchase_price
     }
+
+    /// Check if an address belongs to an outpost
+    #[view]
+    public fun is_outpost(addr: address): bool acquires OutpostCollection {
+        let collection_data = borrow_global<OutpostCollection>(@podium);
+        table::contains(&collection_data.outposts, addr)
+    }
 }
