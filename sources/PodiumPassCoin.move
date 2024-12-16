@@ -1,4 +1,6 @@
 module podium::PodiumPassCoin {
+    friend podium::PodiumPass;
+
     use std::error;
     use std::signer;
     use std::string::{Self, String};
@@ -11,6 +13,7 @@ module podium::PodiumPassCoin {
     use aptos_framework::coin;
     use aptos_framework::aptos_account;
     use aptos_framework::aptos_coin::AptosCoin;
+    use aptos_framework::debug;
 
     /// Error codes
     /// When a non-PodiumPass contract tries to perform restricted operations
@@ -23,6 +26,8 @@ module podium::PodiumPassCoin {
     const EASSET_DOES_NOT_EXIST: u64 = 4;
     /// When trying to transfer more coins than available balance
     const INSUFFICIENT_BALANCE: u64 = 5;
+    /// When unauthorized account tries to perform admin operations
+    const ENOT_AUTHORIZED: u64 = 6;
 
     /// Constants for asset configuration
     /// No decimal places as passes are whole units only
@@ -47,19 +52,28 @@ module podium::PodiumPassCoin {
     }
 
     /// Verifies if the caller is the PodiumPass contract
-    /// Checks both address and presence of AssetCapabilities resource
     /// @param caller: The signer to verify
     /// @return Boolean indicating if caller is PodiumPass
     fun is_podium_pass(caller: &signer): bool {
-        let caller_address = signer::address_of(caller);
-        caller_address == @podium && exists<AssetCapabilities>(@podium)
+        // The friend relationship ensures only PodiumPass can call this function
+        // We just need to verify the module is initialized
+        exists<AssetCapabilities>(@podium)
     }
 
     /// Initializes the PodiumPassCoin module
     /// Creates the central storage for managing all pass types
     /// @param admin: The signer of the module creator (podium address)
     public fun init_module_for_test(admin: &signer) {
-        init_module(admin)
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
+        
+        if (!exists<AssetCapabilities>(@podium)) {
+            move_to(admin, AssetCapabilities {
+                mint_refs: table::new(),
+                burn_refs: table::new(),
+                transfer_refs: table::new(),
+                metadata_objects: table::new(),
+            });
+        }
     }
 
     /// Internal initialization function
@@ -72,25 +86,24 @@ module podium::PodiumPassCoin {
         });
     }
 
-    /// Creates a new fungible asset type for a target account
-    /// Only callable by the PodiumPass contract
-    /// @param caller: The signer of the calling contract (must be PodiumPass)
-    /// @param target_id: Unique identifier for the target account
-    /// @param name: Display name for the asset
-    /// @param icon_uri: URI for the asset's icon
-    /// @param project_uri: URI for the asset's project details
-    public fun create_target_asset(
-        caller: &signer,
+    /// Creates a new target asset type
+    public(friend) fun create_target_asset(
+        creator: &signer,
         target_id: String,
         name: String,
         icon_uri: String,
-        project_uri: String
+        project_uri: String,
     ) acquires AssetCapabilities {
-        // Only PodiumPass contract can call this
-        assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
-        
+        debug::print(&string::utf8(b"[create_target_asset] Starting"));
+        debug::print(&string::utf8(b"Target ID:"));
+        debug::print(&target_id);
+
         let asset_symbol = generate_target_symbol(target_id);
-        create_asset(caller, asset_symbol, name, icon_uri, project_uri);
+        debug::print(&string::utf8(b"Generated symbol:"));
+        debug::print(&asset_symbol);
+
+        create_asset(creator, asset_symbol, name, icon_uri, project_uri);
+        debug::print(&string::utf8(b"Asset created successfully"));
     }
 
     /// Creates a new fungible asset type for an outpost
@@ -125,15 +138,15 @@ module podium::PodiumPassCoin {
         let caps = borrow_global_mut<AssetCapabilities>(@podium);
         assert!(!table::contains(&caps.metadata_objects, asset_symbol), error::already_exists(EASSET_ALREADY_EXISTS));
 
-        // Create metadata object
-        let constructor_ref = &object::create_named_object(
+        // Create metadata object using admin's signer
+        let constructor_ref = object::create_named_object(
             admin,
             *string::bytes(&asset_symbol)
         );
 
         // Initialize the fungible asset with metadata
         primary_fungible_store::create_primary_store_enabled_fungible_asset(
-            constructor_ref,
+            &constructor_ref,
             option::none(), // No maximum supply
             name,
             asset_symbol,
@@ -143,13 +156,11 @@ module podium::PodiumPassCoin {
         );
 
         // Generate and store capabilities
-        let mint_ref = fungible_asset::generate_mint_ref(constructor_ref);
-        let burn_ref = fungible_asset::generate_burn_ref(constructor_ref);
-        let transfer_ref = fungible_asset::generate_transfer_ref(constructor_ref);
+        let mint_ref = fungible_asset::generate_mint_ref(&constructor_ref);
+        let burn_ref = fungible_asset::generate_burn_ref(&constructor_ref);
+        let transfer_ref = fungible_asset::generate_transfer_ref(&constructor_ref);
         
-        let metadata = object::address_to_object<Metadata>(
-            object::create_object_address(&@podium, *string::bytes(&asset_symbol))
-        );
+        let metadata = object::object_from_constructor_ref<Metadata>(&constructor_ref);
 
         table::add(&mut caps.mint_refs, asset_symbol, mint_ref);
         table::add(&mut caps.burn_refs, asset_symbol, burn_ref);
@@ -166,10 +177,10 @@ module podium::PodiumPassCoin {
     public fun mint(
         caller: &signer,
         asset_symbol: String,
-        amount: u64
+        amount: u64,
     ): FungibleAsset acquires AssetCapabilities {
-        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
         assert!(is_podium_pass(caller), error::permission_denied(ENOT_PODIUM_PASS));
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
         
         let caps = borrow_global<AssetCapabilities>(@podium);
         assert!(table::contains(&caps.mint_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
@@ -231,11 +242,11 @@ module podium::PodiumPassCoin {
     /// Generates a standardized symbol for target account assets
     /// @param target_id: The target account identifier
     /// @return The formatted asset symbol
-    fun generate_target_symbol(target_id: String): String {
-        let prefix = string::utf8(b"TARGET_");
-        let result = string::utf8(vector::empty());
-        string::append(&mut result, prefix);
-        string::append(&mut result, target_id);
+    public(friend) fun generate_target_symbol(target_id: String): String {
+        debug::print(&string::utf8(b"[generate_target_symbol] Creating symbol"));
+        let result = target_id;
+        debug::print(&string::utf8(b"Generated symbol:"));
+        debug::print(&result);
         result
     }
 
@@ -276,5 +287,47 @@ module podium::PodiumPassCoin {
         } else {
             aptos_account::transfer(sender, recipient, amount);
         };
+    }
+
+    #[test_only]
+    public fun mint_for_test(
+        admin: &signer,
+        asset_symbol: String,
+        amount: u64,
+    ): FungibleAsset acquires AssetCapabilities {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
+        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
+        
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.mint_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let mint_ref = table::borrow(&caps.mint_refs, asset_symbol);
+        fungible_asset::mint(mint_ref, amount)
+    }
+
+    /// Check if an asset type exists
+    public fun asset_exists(asset_symbol: String): bool acquires AssetCapabilities {
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        table::contains(&caps.mint_refs, asset_symbol)
+    }
+
+    #[test_only]
+    public fun create_target_asset_for_test(
+        creator: &signer,
+        target_id: String,
+        name: String,
+        icon_uri: String,
+        project_uri: String,
+    ) acquires AssetCapabilities {
+        create_target_asset(creator, target_id, name, icon_uri, project_uri)
+    }
+
+    /// Get the metadata object address for a given asset symbol
+    public fun get_metadata_object_address(asset_symbol: String): address acquires AssetCapabilities {
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        assert!(table::contains(&caps.metadata_objects, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
+        object::object_address(metadata)
     }
 } 

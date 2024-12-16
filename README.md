@@ -1,250 +1,227 @@
 # Podium Protocol & CheerOrBoo
 
-A decentralized protocol suite built on Movement, including subscription management and social tipping features.
+A decentralized protocol suite built on Movement, including subscription management, pass trading, and social tipping features.
 
-##Podium
-Podium's foundation is simple yet transformative: content creators and audiences should actively shape and own the conversations they engage in. Our “Showtime at Apollo”-style moderation system allows listeners to influence speaker time by paying to adjust it in real-time, creating an organic attention economy where creators and participants are rewarded for their contributions. This breaks the traditional passive consumption model, empowering users to become part of the content itself.
-In the future, social media will shift from passive listening to active participation. Platforms like Podium will allow users to influence conversations, while Web3 technology enables decentralized ownership of engagement. Podium is leading this shift, turning engagement into a monetizable experience for both creators and audiences.
-Our key assumptions are that users want more control over conversations, creators need better monetization tools, and Web3 adoption will grow.
+## Overview
 
+### Podium
+Podium's foundation enables content creators and audiences to actively shape and own their conversations. The protocol implements:
+1. Pass trading with bonding curve pricing
+2. Flexible subscription management
+3. Outpost creation and management
+4. Fee distribution with referral incentives
 
-## Contracts
+### CheerOrBoo
+A social tipping system that allows audience participation through positive (Cheer) or negative (Boo) feedback, with automatic reward distribution.
 
-- **PodiumPass**: Core subscription and lifetime access management
-- **PodiumPassCoin**: Token implementation for lifetime passes
-- **PodiumOutpost**: Outpost management and access control
-- **CheerOrBooV2**: Social tipping and reward distribution system
+## Smart Contract Architecture
 
+### 1. PodiumPass
+Core business logic handling pass trading and subscriptions.
 
-Podium Pass
-// Core functionality:
-Manages lifetime passes purchases for target accounts/addresses
-Manages temporary subscriptions for target accounts/addresses and outposts
-Handles buying/selling of passes
-Is the initiatior of Mints(buys) and redemption(sell) of lifetime passes as the owner of that functionality in PodiumPassCoin
-Controls fee distribution
-Verifies access rights
-Bonding curve for pass pricing (buying and selling)
-Subscription management
-Fee distribution (protocol, subject, referral)
-Access verification for both passes and subscriptions
-Supports subscription different tiers that can be set by Target Accounts/Addresses or the Owner of Outposts
-Lifetime passes can only be minted and redeemed in whole values through Podium Pass
-tracks subscription and lifetime pass ownership
+**Key Features:**
+- Bonding curve-based pass pricing
+- Multi-tier subscription management
+- Automated fee distribution
+- Vault system for pass redemption
+- Referral system integration
 
-Podium Pass Coin
-// Core functionality:
-Creates fungible tokens for lifetime access
-The underlying logic for minting, burning
-Contract responsible for trading /transferability of passes
-Tracks pass ownership and balances
+**Test Coverage:**
+1. **Pass Operations**
+   - `test_buy_pass`: Pass purchase and minting
+   - `test_pass_sell`: Pass redemption mechanics
+   - `test_pass_trading`: Trading between users
+   - `test_account_pass_operations`: Account-specific pass handling
+   - `test_outpost_pass_operations`: Outpost-specific pass operations
 
-Podium Outposts
-// Core functionality:
-Creates and manages NFT-based spaces ("Outposts")
-Tracks ownership and metadata of Outposts
-Integrates with access control
-Handles Outpost-specific fee distribution
-Sells Outpost NFTs to Owners
+2. **Subscription Management**
+   - `test_subscription`: Basic subscription creation/verification
+   - `test_subscription_flow`: Complete subscription lifecycle
+   - `test_subscription_expiration`: Time-based expiration
+   - `test_duplicate_subscription`: Duplicate prevention
+   - `test_subscription_with_referral`: Referral system
+   - `test_subscribe_nonexistent_tier`: Error handling
 
-## Prerequisites
+3. **Administrative Controls**
+   - `test_admin_price_control`: Price management
+   - `test_outpost_price_permissions`: Access control
+   - `test_outpost_creation_flow`: Outpost initialization
 
+### 2. PodiumOutpost
+Handles outpost (creator space) management.
+
+**Key Features:**
+- Deterministic addressing
+- Collection management
+- Metadata handling
+- Emergency controls
+
+**Test Coverage:**
+- Outpost creation and initialization
+- Price updates and permissions
+- Metadata management
+- Emergency pause functionality
+
+### 3. PodiumPassCoin
+Fungible asset implementation for passes.
+
+**Key Features:**
+- Custom token implementation
+- Balance tracking
+- Transfer management
+- Mint/burn capabilities
+
+### 4. CheerOrBooV2
+A social tipping system that enables real-time audience feedback through financial incentives.
+
+**Key Features:**
+- Dual action system (Cheer/Boo)
+- Configurable fee distribution
+- Multi-participant reward splitting
+- Event emission for tracking
+
+**Implementation Details:**
+```move
+cheer_or_boo(
+    sender: &signer,
+    target: address,
+    participants: vector<address>,
+    is_cheer: bool,
+    amount: u64,
+    target_allocation: u64,
+    unique_identifier: vector<u8>
+)
+```
+
+**Core Functionality:**
+- Flexible reward distribution between target and participants
+- Protocol fee handling (5% default)
+- Automatic account registration and coin store initialization
+- Event emission for analytics
+
+**Test Coverage:**
+1. **Basic Operations (`test_cheer`, `test_boo`)**
+   - Verifies correct fee calculations (5%)
+   - Validates reward distribution
+   - Checks balance updates for all parties
+   - Tests both positive and negative interactions
+
+2. **Economic Security (`test_insufficient_balance`)**
+   - Validates balance checks
+   - Tests failure conditions
+   - Verifies error handling
+
+3. **Distribution Logic**
+   - Tests multi-participant splitting
+   - Verifies target allocation percentages
+   - Validates rounding behavior
+
+4. **Event Emission**
+   - CheerEvent and BooEvent verification
+   - Unique identifier tracking
+   - Participant list handling
+
+## Subscription Model
+
+Podium implements a streamlined subscription system using a simple yet effective resource model.
+
+### Design Philosophy
+Subscriptions are implemented as pure data resources rather than transferable assets, reflecting their true nature as time-bound permissions.
+
+#### Key Characteristics
+- **Direct Resource Ownership**: Subscriptions stored as data resources
+- **Simple Data Mapping**: Straightforward subscriber → subscription details relationship
+- **Non-Transferable**: Subscriptions bound to specific subscribers
+- **Permission-Based**: Access control through outpost ownership verification
+
+## Development Setup
+
+### Prerequisites
 - Movement CLI
 - Node.js (v16+)
 - TypeScript
 - Yarn or npm
 
-## Getting Started
-
-### 1. Configuration
-
-Create your config file:
-bash
-cp .movement/config.yaml.example .movement/config.yaml
-
-2. Update the config with your deployment keys:
-yaml
-profiles:
-deployer:
-network: Custom
-private_key: "YOUR_PRIVATE_KEY"
-account: YOUR_ACCOUNT_ADDRESS
-rest_url: "https://aptos.testnet.porto.movementlabs.xyz/v1"
-faucet_url: "https://fund.testnet.porto.movementlabs.xyz/"
-
-## Installation
+### Installation
 npm install
 
-## Deployment
-Deploy specific modules:
+## Testing Framework
 
-bash
-Deploy CheerOrBoo
-npm run deploy cheerorboo
-Deploy Podium system
-npm run deploy podium
-Deploy all modules
-npm run deploy all
-bash
-movement move test
-bash
-Test CheerOrBoo functionality
-npm run test
-Check deployment status
-npm run check
+### PodiumPass Test Coverage
 
-## Contract Addresses
+#### Core Pass Operations
+1. **Pass Creation & Purchase (`test_buy_pass`)**
+   - Validates pass minting process
+   - Verifies token creation and ownership
+   - Checks correct balance updates
+   - Tests deterministic address derivation
 
-- CheerOrBooV2: `0xb20104c986e1a6f6d270f82dc6694d0002401a9c4c0c7e0574845dcc59b05cb2`
-- FiHub Fee Address: `0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb`
+2. **Subscription Management**
+   - `test_subscription`: Basic subscription creation and verification
+   - `test_subscription_flow`: Complete subscription lifecycle
+   - `test_subscription_expiration`: Time-based expiration mechanics
+   - `test_duplicate_subscription`: Duplicate prevention
 
-## Development
+3. **Pass Trading System**
+   - `test_pass_trading`: Pass transfers between users
+   - `test_unauthorized_mint`: Security checks
+   - `test_mint_and_transfer`: Complete trading flow
 
-### Project Structure
-├── sources/ # Move smart contracts
-├── scripts/ # Deployment and test scripts
-├── .movement/ # Movement configuration
-└── tests/ # Test files
+4. **Referral System**
+   - `test_subscription_with_referral`: Referral fee distribution
+   - Validates correct fee calculations
+   - Verifies payment distributions
 
+5. **Administrative Controls**
+   - `test_outpost_creation_flow`: Outpost initialization
+   - `test_admin_price_control`: Price management
+   - `test_outpost_price_permissions`: Access control
+   - `test_outpost_purchase_flow`: Purchase process validation
 
-### Key Commands
-- `npm run deploy`: Deploy contracts
-- `npm run test`: Run integration tests
-- `npm run check`: Verify deployments
+### Test Setup
 
-## License
+#### Prerequisites
 
-MIT
+### Key Test Files
+- `PodiumPass_test.move`: Core protocol tests
+- `PodiumOutpost_test.move`: Outpost management tests
+- `PodiumPassCoin_test.move`: Token implementation tests
+- `CheerOrBooV2_test.move`: Tipping system tests
 
+## Security Features
 
-Movement Commands
+1. **Access Control**
+   - Role-based permissions
+   - Owner-only operations
+   - Admin controls
 
-Usage: movement <COMMAND>
+2. **Economic Security**
+   - Fee limits
+   - Price controls
+   - Vault system for redemptions
 
-Commands:
-  account     Tool for interacting with accounts
-  config      Tool for interacting with configuration of the Movement CLI tool
-  genesis     Tool for setting up an Aptos chain Genesis transaction
-  governance  Tool for on-chain governance
-  info        Show build information about the CLI
-  init        Tool to initialize current directory for the Movement tool
-  key         Tool for generating, inspecting, and interacting with keys
-  move        Tool for Move smart contract related operations
-  multisig    Tool for interacting with multisig accounts
-  node        Tool for operations related to nodes
-  stake       Tool for manipulating stake and stake pools
-  update      Update the CLI or other tools it depends on
-  help        Print this message or the help of the given subcommand(s)
+3. **Emergency Controls**
+   - Pause functionality
+   - Admin override capabilities
+   - Error handling
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+## Events and Monitoring
 
+The protocol emits events for:
+- Pass purchases and sales
+- Subscription changes
+- Outpost updates
+- Cheer/Boo interactions
+- Administrative actions
 
- movement init --help
-Tool to initialize current directory for the Movement tool
+## Integration Points
 
-Configuration will be pushed into .movement/config.yaml
+1. **Frontend Integration**
+   - Pass trading interface
+   - Subscription management
+   - Tipping functionality
 
-Usage: movement init [OPTIONS]
-
-Options:
-      --network <NETWORK>
-          Network to use for default settings
-
-          If custom `rest_url` and `faucet_url` are wanted, use `custom`
-
-      --rest-url <REST_URL>
-          URL to a fullnode on the network
-
-      --faucet-url <FAUCET_URL>
-          URL for the Faucet endpoint
-
-      --faucet-auth-token <FAUCET_AUTH_TOKEN>
-          Auth token, if we're using the faucet. This is only used this time, we don't store it
-
-          [env: FAUCET_AUTH_TOKEN=]
-
-      --skip-faucet
-          Whether to skip the faucet for a non-faucet endpoint
-
-      --ledger
-          Whether you want to create a profile from your ledger account
-
-          Make sure that you have your Ledger device connected and unlocked, with the Aptos app installed and opened. You must also enable "Blind Signing" on your device to sign transactions from the CLI.
-
-      --derivation-path <DERIVATION_PATH>
-          Derivation Path of your account in hardware wallet
-
-          e.g format - m/44\'/637\'/0\'/0\'/0\' Make sure your wallet is unlocked and have Aptos opened
-
-      --derivation-index <DERIVATION_INDEX>
-          Index of your account in hardware wallet
-
-          This is the simpler version of derivation path e.g `format - [0]` we will translate this index into `[m/44'/637'/0'/0'/0]`
-
-      --random-seed <RANDOM_SEED>
-          The seed used for key generation, should be a 64 character hex string and only used for testing
-
-          If a predictable random seed is used, the key that is produced will be insecure and easy to reproduce.  Please do not use this unless sufficient randomness is put into the random seed.
-
-      --private-key-file <PRIVATE_KEY_FILE>
-          Signing Ed25519 private key file path
-
-          Encoded with type from `--encoding` Mutually exclusive with `--private-key`
-
-      --private-key <PRIVATE_KEY>
-          Signing Ed25519 private key
-
-          Encoded with type from `--encoding` Mutually exclusive with `--private-key-file`
-
-      --profile <PROFILE>
-          Profile to use from the CLI config
-
-          This will be used to override associated settings such as the REST URL, the Faucet URL, and the private key arguments.
-
-          Defaults to "default"
-
-      --assume-yes
-          Assume yes for all yes/no prompts
-
-      --assume-no
-          Assume no for all yes/no prompts
-
-      --encoding <ENCODING>
-          Encoding of data as one of [base64, bcs, hex]
-
-          [default: hex]
-
-  -h, --help
-          Print help (see a summary with '-h')
-
-  -V, --version
-          Print version
-
-
-movement account --help
-Tool for interacting with accounts
-
-This tool is used to create accounts, get information about the account's resources, and transfer resources between accounts.
-
-Usage: movement account <COMMAND>
-
-Commands:
-  create                           Create a new account on-chain
-  create-resource-account          Create a resource account on-chain
-  derive-resource-account-address  Derive the address for a resource account
-  fund-with-faucet                 Fund an account with tokens from a faucet
-  balance                          Show the account's balance of different coins
-  list                             List resources, modules, or balance owned by an address
-  lookup-address                   Lookup the account address through the on-chain lookup table
-  rotate-key                       Rotate an account's authentication key
-  transfer                         Transfer APT between accounts
-  help                             Print this message or the help of the given subcommand(s)
-
-Options:
-  -h, --help
-          Print help (see a summary with '-h')
-
-  -V, --version
-          Print version
+2. **Analytics Integration**
+   - Event monitoring
+   - Price tracking
+   - User activity analysis

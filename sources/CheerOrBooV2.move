@@ -8,6 +8,7 @@ module CheerOrBooV2::CheerOrBooV2 {
     const FEE_PERCENTAGE: u64 = 5;
     const FEE_ADDRESS: address = @fihub;
     const INSUFFICIENT_BALANCE: u64 = 102;
+    const ADMIN_ADDRESS: address = @podium;
 
     #[event]
     struct CheerEvent has drop, store, copy {

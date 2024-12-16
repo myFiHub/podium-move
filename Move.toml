@@ -1,28 +1,41 @@
 [package]
 name = "PodiumProtocol"
-version = "1.0.0"
+version = "0.0.1"
 authors = ["FiHub"]
 
 [addresses]
 CheerOrBooV2 = "_"
 sender = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
-target = "0xaf32340d25c72007c70cf7f48f4f1cfc2bc706a386242482026e54cac8b66a68"
+target = "_"
 participant = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
 fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
 podium = "_"
 admin = "_"
 treasury = "_"
+passcoin = "_"
+user1 = "_"
+user2 = "_"
+std = "0x1"
+aptos_framework = "0x1"
+aptos_std = "0x1"
+aptos_token = "0x3"
 
 [dev-addresses]
 CheerOrBooV2 = "0x345"
 podium = "0x456"
 admin = "0x123"
 treasury = "0x234"
+passcoin = "0x567"
+user1 = "0x678"
+user2 = "0x789"
+target = "0x321"
 
 [dependencies]
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework/", rev = "mainnet" }
 AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-stdlib/", rev = "mainnet" }
 AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token/", rev = "mainnet" }
 AptosTokenObjects = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token-objects/", rev = "mainnet" }
+MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib/", rev = "mainnet" }
 
 [dev-dependencies]
+
