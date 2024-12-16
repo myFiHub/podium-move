@@ -202,12 +202,11 @@ module podium::PodiumPass_test {
         assert!(initial_balance == PASS_AMOUNT, 0);
         
         // Record initial balances
-        let initial_coin_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
-        let initial_contract_balance = coin::balance<AptosCoin>(@podium);
+        let initial_vault_balance = PodiumPass::get_vault_balance();
         
         // Verify contract has sufficient funds
         let (sell_price, _, _) = PodiumPass::calculate_sell_price_with_fees(target_addr, PASS_AMOUNT);
-        assert!(initial_contract_balance >= sell_price, 1);
+        assert!(initial_vault_balance >= sell_price, 1);
         
         // Sell pass
         PodiumPass::sell_pass(buyer, target_addr, PASS_AMOUNT);
@@ -218,18 +217,18 @@ module podium::PodiumPass_test {
         // 2. Supply updated correctly
         assert!(PodiumPass::get_supply(target_addr) == 0, 3);
         // 3. Received payment
-        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_coin_balance, 4);
+        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_balance, 4);
         // 4. Contract balance decreased
-        assert!(coin::balance<AptosCoin>(@podium) < initial_contract_balance, 5);
+        assert!(PodiumPass::get_vault_balance() < initial_vault_balance, 5);
 
         debug::print(&string::utf8(b"[test] Initial buyer balance:"));
-        debug::print(&initial_coin_balance);
+        debug::print(&initial_balance);
         debug::print(&string::utf8(b"[test] Initial vault balance:"));
-        debug::print(&initial_contract_balance);
+        debug::print(&initial_vault_balance);
         debug::print(&string::utf8(b"[test] Final buyer balance:"));
         debug::print(&coin::balance<AptosCoin>(signer::address_of(buyer)));
         debug::print(&string::utf8(b"[test] Final vault balance:"));
-        debug::print(&coin::balance<AptosCoin>(@podium));
+        debug::print(&PodiumPass::get_vault_balance());
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, buyer = @user1)]
@@ -262,12 +261,11 @@ module podium::PodiumPass_test {
         assert!(initial_balance == PASS_AMOUNT, 0);
         
         // Record initial balances
-        let initial_coin_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
-        let initial_contract_balance = coin::balance<AptosCoin>(@podium);
+        let initial_vault_balance = PodiumPass::get_vault_balance();
         
         // Verify contract has sufficient funds
         let (sell_price, _, _) = PodiumPass::calculate_sell_price_with_fees(creator_addr, PASS_AMOUNT);
-        assert!(initial_contract_balance >= sell_price, 1);
+        assert!(initial_vault_balance >= sell_price, 1);
         
         // Sell pass
         PodiumPass::sell_pass(buyer, creator_addr, PASS_AMOUNT);
@@ -278,18 +276,18 @@ module podium::PodiumPass_test {
         // 2. Supply updated correctly
         assert!(PodiumPass::get_supply(creator_addr) == 0, 3);
         // 3. Received payment
-        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_coin_balance, 4);
+        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_balance, 4);
         // 4. Contract balance decreased
-        assert!(coin::balance<AptosCoin>(@podium) < initial_contract_balance, 5);
+        assert!(PodiumPass::get_vault_balance() < initial_vault_balance, 5);
 
         debug::print(&string::utf8(b"[test] Initial buyer balance:"));
-        debug::print(&initial_coin_balance);
+        debug::print(&initial_balance);
         debug::print(&string::utf8(b"[test] Initial vault balance:"));
-        debug::print(&initial_contract_balance);
+        debug::print(&initial_vault_balance);
         debug::print(&string::utf8(b"[test] Final buyer balance:"));
         debug::print(&coin::balance<AptosCoin>(signer::address_of(buyer)));
         debug::print(&string::utf8(b"[test] Final vault balance:"));
-        debug::print(&coin::balance<AptosCoin>(@podium));
+        debug::print(&PodiumPass::get_vault_balance());
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, buyer = @user1)]
@@ -327,12 +325,11 @@ module podium::PodiumPass_test {
         
         // Record initial balances
         let initial_balance = PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol);
-        let initial_coin_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
-        let initial_contract_balance = coin::balance<AptosCoin>(@podium);
+        let initial_vault_balance = PodiumPass::get_vault_balance();
         
         // Verify contract has sufficient funds for redemption
         let (sell_price, _, _) = PodiumPass::calculate_sell_price_with_fees(target_addr, PASS_AMOUNT);
-        assert!(initial_contract_balance >= sell_price, 0);
+        assert!(initial_vault_balance >= sell_price, 0);
         
         // Sell pass back
         PodiumPass::sell_pass(buyer, target_addr, PASS_AMOUNT);
@@ -341,20 +338,20 @@ module podium::PodiumPass_test {
         // 1. Pass balance decreased
         assert!(PodiumPassCoin::balance(signer::address_of(buyer), asset_symbol) == initial_balance - PASS_AMOUNT, 0);
         // 2. Received correct APT amount based on bonding curve
-        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_coin_balance, 1);
+        assert!(coin::balance<AptosCoin>(signer::address_of(buyer)) > initial_balance, 1);
         // 3. Supply updated correctly
         assert!(PodiumPass::get_supply(target_addr) == initial_balance - PASS_AMOUNT, 2);
         // 4. Contract balance decreased by sell amount
-        assert!(coin::balance<AptosCoin>(@podium) < initial_contract_balance, 3);
+        assert!(PodiumPass::get_vault_balance() < initial_vault_balance, 3);
 
         debug::print(&string::utf8(b"[test] Initial buyer balance:"));
-        debug::print(&initial_coin_balance);
+        debug::print(&initial_balance);
         debug::print(&string::utf8(b"[test] Initial vault balance:"));
-        debug::print(&initial_contract_balance);
+        debug::print(&initial_vault_balance);
         debug::print(&string::utf8(b"[test] Final buyer balance:"));
         debug::print(&coin::balance<AptosCoin>(signer::address_of(buyer)));
         debug::print(&string::utf8(b"[test] Final vault balance:"));
-        debug::print(&coin::balance<AptosCoin>(@podium));
+        debug::print(&PodiumPass::get_vault_balance());
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @user1, user2 = @user2, target = @target)]

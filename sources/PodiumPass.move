@@ -497,23 +497,37 @@ module podium::PodiumPass {
     ) acquires Config, RedemptionVault {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        let buyer_addr = signer::address_of(buyer);
-        
         // Initialize pass stats if needed
-        init_pass_stats(target_addr);
+        {
+            let config = borrow_global<Config>(@podium);
+            if (!table::contains(&config.pass_stats, target_addr)) {
+                init_pass_stats(target_addr);
+            };
+        };
         
-        // Calculate prices first
-        let total_cost = get_buy_price_after_fee(target_addr, amount);
-        let raw_price = get_buy_price(target_addr, amount); // Get raw price before fees
+        // Calculate prices
+        let raw_price = get_buy_price(target_addr, amount);  // Price already includes amount
+        let total_cost = get_buy_price_after_fee(target_addr, amount);  // Total cost with fees
+        let fee_amount = total_cost - raw_price;  // Fee amount
         
-        // Extract payment for redemption pool
-        let redemption_coins = coin::withdraw<AptosCoin>(buyer, total_cost);
-        deposit_to_vault(redemption_coins);
+        // Extract base amount for redemption pool
+        let redemption_coins = coin::withdraw<AptosCoin>(buyer, raw_price);
+        deposit_to_vault(redemption_coins);  // Base price goes to vault for future sellers
         
-        // Mint pass directly using PodiumPassCoin
+        // Handle fee distributions
+        let config = borrow_global<Config>(@podium);
+        let protocol_amount = (fee_amount * config.protocol_fee_percent) / 100;
+        let subject_amount = (fee_amount * config.subject_fee_percent) / 100;
+        
+        // Transfer fees (not the base price)
+        transfer_with_check(buyer, config.treasury, protocol_amount);  // Protocol fee
+        transfer_with_check(buyer, target_addr, subject_amount);  // Subject fee
+        if (option::is_some(&referrer)) {
+            transfer_with_check(buyer, option::extract(&mut referrer), fee_amount - protocol_amount - subject_amount);  // Referral fee
+        };
+        
+        // Mint pass
         let asset_symbol = get_asset_symbol(target_addr);
-        
-        // Create the asset type if it doesn't exist yet
         if (!PodiumPassCoin::asset_exists(asset_symbol)) {
             PodiumPassCoin::create_target_asset(
                 buyer,
@@ -525,16 +539,16 @@ module podium::PodiumPass {
         };
         
         let fa = PodiumPassCoin::mint(buyer, asset_symbol, amount);
-        primary_fungible_store::deposit(buyer_addr, fa);
+        primary_fungible_store::deposit(signer::address_of(buyer), fa);
         
-        // Update stats in the table
+        // Update stats
         let config = borrow_global_mut<Config>(@podium);
         let stats = table::borrow_mut<address, PassStats>(&mut config.pass_stats, target_addr);
         stats.total_supply = stats.total_supply + amount;
         stats.last_price = raw_price;
         
         // Emit event
-        emit_purchase_event(buyer_addr, target_addr, amount, raw_price, referrer);
+        emit_purchase_event(signer::address_of(buyer), target_addr, amount, raw_price, referrer);
     }
 
     /// Sell passes back to the protocol
@@ -545,12 +559,11 @@ module podium::PodiumPass {
     ) acquires Config, RedemptionVault {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        // Calculate prices first
+        // Calculate prices
+        let raw_price = get_sell_price(target_addr, amount);
         let sell_price = get_sell_price_after_fee(target_addr, amount);
-        let raw_price = get_sell_price(target_addr, amount); // Get raw price before fees
-        assert!(sell_price > 0, error::invalid_state(EINVALID_PRICE));
         
-        // Burn the pass tokens first
+        // Burn tokens first
         let asset_symbol = get_asset_symbol(target_addr);
         let seller_addr = signer::address_of(seller);
         let metadata = object::address_to_object<fungible_asset::Metadata>(
@@ -559,11 +572,11 @@ module podium::PodiumPass {
         let fa = primary_fungible_store::withdraw(seller, metadata, amount);
         PodiumPassCoin::burn(seller, asset_symbol, fa);
         
-        // Withdraw and distribute payments
-        let seller_coins = withdraw_from_vault(sell_price);
-        coin::deposit(seller_addr, seller_coins);
+        // Withdraw from vault and send to seller
+        let payment_coins = withdraw_from_vault(sell_price);
+        coin::deposit(seller_addr, payment_coins);
         
-        // Update stats in the table
+        // Update stats
         let config = borrow_global_mut<Config>(@podium);
         let stats = table::borrow_mut<address, PassStats>(&mut config.pass_stats, target_addr);
         stats.total_supply = stats.total_supply - amount;
@@ -876,6 +889,11 @@ module podium::PodiumPass {
         let referral_fee = (price * config.referral_fee_percent) / 100;
         
         price - protocol_fee - subject_fee - referral_fee
+    }
+
+    /// Public function to get current vault balance
+    public fun get_vault_balance(): u64 acquires RedemptionVault {
+        coin::value(&borrow_global<RedemptionVault>(@podium).coins)
     }
 }
    
