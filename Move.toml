@@ -4,21 +4,26 @@ version = "0.0.1"
 authors = ["FiHub"]
 
 [addresses]
-CheerOrBooV2 = "_"
-sender = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
-target = "_"
-participant = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
-fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
-podium = "_"
-admin = "_"
-treasury = "_"
-passcoin = "_"
-user1 = "_"
-user2 = "_"
+# Fixed addresses
 std = "0x1"
 aptos_framework = "0x1"
 aptos_std = "0x1"
 aptos_token = "0x3"
+fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
+sender = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
+participant = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
+
+# Dynamic addresses (replaced by deployer)
+podium = "_"      # <-- Will be replaced by deployer address
+admin = "_"       # <-- Will be replaced by deployer address
+treasury = "_"    # <-- Will be replaced by deployer address
+passcoin = "_"    # <-- Will be replaced by deployer address
+
+# Placeholder addresses
+CheerOrBooV2 = "_"
+target = "_"
+user1 = "_"
+user2 = "_"
 
 [dev-addresses]
 CheerOrBooV2 = "0x345"

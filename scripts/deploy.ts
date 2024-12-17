@@ -4,18 +4,46 @@ import * as yaml from "yaml";
 import * as path from "path";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { isContractDeployed, CHEERORBOO_ADDRESS } from './utils.js';
+import { isContractDeployed, CHEERORBOO_ADDRESS, getDeployerAddresses } from './utils.js';
+import { viewFunction } from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load config function
-function loadConfig() {
+type DeployTarget = 'cheerorboo' | 'podium' | 'all';
+
+interface DeploymentOptions {
+    target: DeployTarget;
+    isDryRun: boolean;
+    isDebug: boolean;
+}
+
+function parseArgs(): DeploymentOptions {
+    const args = process.argv.slice(2);
+    const target = args[0] as DeployTarget || '';
+    
+    return {
+        target,
+        isDryRun: args.includes('--dry-run'),
+        isDebug: args.includes('--debug')
+    };
+}
+
+async function loadConfig() {
     try {
-        const configFile = fs.readFileSync(path.join(__dirname, '../.movement/config.yaml'), 'utf8');
+        const configPath = path.join(__dirname, '../.movement/config.yaml');
+        
+        if (!fs.existsSync(configPath)) {
+            throw new Error(`Config file not found at ${configPath}`);
+        }
+        
+        const configFile = await fs.promises.readFile(configPath, 'utf8');
         const config = yaml.parse(configFile);
         
-        // Validate private key format
+        if (!config?.profiles?.deployer?.private_key) {
+            throw new Error('Invalid config structure - missing deployer profile or private key');
+        }
+        
         const privateKey = config.profiles.deployer.private_key;
         if (!privateKey.match(/^0x[0-9a-fA-F]{64}$/)) {
             throw new Error('Invalid private key format. Must be 0x-prefixed 32-byte hex string');
@@ -28,118 +56,260 @@ function loadConfig() {
     }
 }
 
-async function main() {
-    // Get command line arguments
-    const args = process.argv.slice(2);
-    const deployTarget = args[0];
-    // Fix dry-run detection - it was being ignored
-    const isDryRun = args.includes('--dry-run') || args[2] === '--dry-run';
+const addresses = getDeployerAddresses();
+const MODULE_ADDRESSES = {
+    PODIUM: addresses.deployerAddress,
+    PODIUM_PASS: 'PodiumPass',
+    PODIUM_PASS_COIN: 'PodiumPassCoin'
+};
 
-    if (!deployTarget) {
-        console.error("Please specify deployment target: 'cheerorboo', 'podium', or 'all'");
-        process.exit(1);
-    }
-
-    console.log(`Mode: ${isDryRun ? 'Dry Run' : 'Live'}`);
-
-    // Load configuration and setup client
-    const config = loadConfig();
-    const aptosConfig = new AptosConfig({ 
-        network: Network.CUSTOM,
-        fullnode: config.rest_url,
-        faucet: config.faucet_url,
-    });
-    
-    const aptos = new Aptos(aptosConfig);
-    const privateKey = new Ed25519PrivateKey(config.private_key);
-    const account = Account.fromPrivateKey({ privateKey });
-
-    console.log(`Deploying from address: ${account.accountAddress}`);
-
+async function checkModuleInitialized(aptos: Aptos, account: Account, moduleName: string): Promise<boolean> {
     try {
-        switch(deployTarget.toLowerCase()) {
+        const result = await viewFunction(aptos, {
+            function: `${MODULE_ADDRESSES.PODIUM}::${moduleName}::is_initialized`,
+            type_arguments: [],
+            arguments: []
+        });
+        return result[0] as boolean;
+    } catch (error) {
+        console.log(`Module ${moduleName} not initialized or not found`);
+        return false;
+    }
+}
+
+const main = async () => {
+    const options = parseArgs();
+    try {
+        if (!options.target) {
+            throw new Error("Please specify deployment target: 'cheerorboo', 'podium', or 'all'");
+        }
+
+        console.log(`=== Deployment Configuration ===`);
+        console.log(`Target: ${options.target}`);
+        console.log(`Mode: ${options.isDryRun ? 'Dry Run' : 'Live'}`);
+        console.log(`Debug: ${options.isDebug ? 'Enabled' : 'Disabled'}`);
+
+        const config = await loadConfig();
+        const aptosConfig = new AptosConfig({ 
+            network: Network.CUSTOM,
+            fullnode: config.rest_url,
+            faucet: config.faucet_url,
+        });
+        
+        const aptos = new Aptos(aptosConfig);
+        const privateKey = new Ed25519PrivateKey(config.private_key);
+        const account = Account.fromPrivateKey({ privateKey });
+
+        if (options.isDebug) {
+            console.log(`\n=== Debug Information ===`);
+            console.log(`Network: ${aptosConfig.network}`);
+            console.log(`Fullnode URL: ${aptosConfig.fullnode}`);
+            console.log(`Account Address: ${account.accountAddress}`);
+        }
+
+        const passCoinInitialized = await checkModuleInitialized(aptos, account, MODULE_ADDRESSES.PODIUM_PASS_COIN);
+        const passInitialized = await checkModuleInitialized(aptos, account, MODULE_ADDRESSES.PODIUM_PASS);
+
+        console.log(`\n=== Module Status ===`);
+        console.log(`PodiumPassCoin initialized: ${passCoinInitialized}`);
+        console.log(`PodiumPass initialized: ${passInitialized}`);
+
+        if (!passCoinInitialized) {
+            console.log("\nInitializing PodiumPassCoin module...");
+            if (!options.isDryRun) {
+                await deployModule(aptos, account, "PodiumPassCoin.move", false);
+            } else {
+                console.log("[DRY RUN] Would deploy PodiumPassCoin");
+            }
+        }
+
+        if (!passInitialized) {
+            console.log("\nInitializing PodiumPass module...");
+            if (!options.isDryRun) {
+                await deployModule(aptos, account, "PodiumPass.move", false);
+            } else {
+                console.log("[DRY RUN] Would deploy PodiumPass");
+            }
+        }
+
+        console.log("Checking PodiumOutpost collection...");
+        const outpostInit = {
+            function: `${account.accountAddress.toString()}::PodiumOutpost::init_collection`,
+            arguments: [],
+            typeArguments: []
+        };
+        
+        if (options.isDryRun) {
+            console.log(`Would execute: ${outpostInit.function}`);
+        } else {
+            await executeTransaction(aptos, account, outpostInit);
+        }
+
+        switch(options.target.toLowerCase()) {
             case 'cheerorboo':
-                console.log("\nSimulating CheerOrBooV2 deployment...");
-                await deployIfNeeded(aptos, account, "CheerOrBooV2.move", isDryRun);
+                await deployIfNeeded(aptos, account, "CheerOrBooV2.move", options.isDryRun);
                 break;
-
             case 'podium':
-                console.log("\nDeploying Podium System...");
-                await deployPodiumSystem(aptos, account, isDryRun);
+                await deployPodiumSystem(aptos, account, options.isDryRun);
                 break;
-
             case 'all':
-                console.log("\nChecking CheerOrBooV2 deployment...");
-                await deployIfNeeded(aptos, account, "CheerOrBooV2.move", isDryRun);
-                
-                console.log("\nDeploying Podium System...");
-                await deployPodiumSystem(aptos, account, isDryRun);
+                await deployIfNeeded(aptos, account, "CheerOrBooV2.move", options.isDryRun);
+                await deployPodiumSystem(aptos, account, options.isDryRun);
                 break;
-
             default:
-                console.error("Invalid deployment target. Use: 'cheerorboo', 'podium', or 'all'");
-                process.exit(1);
+                throw new Error("Invalid deployment target. Use: 'cheerorboo', 'podium', or 'all'");
         }
 
         console.log("\nDeployment completed successfully!");
-    } catch (error) {
-        console.error("Deployment failed:", error);
+    } catch (error: any) {
+        console.error("\n=== Deployment Failed ===");
+        if (options.isDebug) {
+            console.error("Error details:", error);
+        } else {
+            console.error("Error:", error.message);
+            console.error("Run with --debug flag for more details");
+        }
         process.exit(1);
     }
+};
+
+function shouldDeployFile(file: string): boolean {
+    return !file.endsWith('_test.move');
 }
 
 async function deployModule(aptos: Aptos, account: Account, moduleName: string, isDryRun = false) {
-    console.log(`${isDryRun ? '[DRY RUN] Would deploy' : 'Deploying'} ${moduleName}...`);
-    
-    const moduleHex = fs.readFileSync(
-        path.join(__dirname, "../sources/", moduleName),
-        "utf8"
-    );
-
-    if (isDryRun) {
-        console.log(`Would deploy module ${moduleName} from address: ${account.accountAddress}`);
-        console.log(`Module content length: ${moduleHex.length} bytes`);
+    if (moduleName.endsWith('_test.move')) {
+        console.log(`Skipping test file: ${moduleName}`);
         return;
     }
 
-    const transaction = await aptos.publishPackageTransaction({
-        account: account.accountAddress,
-        metadataBytes: new Uint8Array(),
-        moduleBytecode: [Buffer.from(moduleHex).toString("hex")],
-    });
+    console.log(`\n=== Deployment Details ===`);
+    console.log(`Module: ${moduleName}`);
+    console.log(`Deployer Address: ${account.accountAddress}`);
+    console.log(`Mode: ${isDryRun ? 'Dry Run' : 'Live'}`);
+    
+    try {
+        const moduleHex = fs.readFileSync(
+            path.join(__dirname, "../sources/", moduleName),
+            "utf8"
+        );
 
-    const committedTxn = await aptos.signAndSubmitTransaction({ signer: account, transaction });
-    console.log(`Submitted transaction for ${moduleName}: ${committedTxn.hash}`);
-    
-    const response = await aptos.waitForTransaction({ 
-        transactionHash: committedTxn.hash 
-    });
-    
-    console.log(`${moduleName} deployed successfully!`);
-    return response;
+        console.log(`Module file size: ${moduleHex.length} bytes`);
+
+        if (isDryRun) {
+            console.log(`[DRY RUN] Would deploy module ${moduleName}`);
+            return;
+        }
+
+        const resources = await aptos.account.getAccountResources({
+            accountAddress: account.accountAddress,
+        });
+        console.log(`Account has ${resources.length} resources`);
+
+        if (moduleName === "PodiumPass.move") {
+            const passCoinInit = await verifyModuleInitialized(aptos, account, "PodiumPassCoin");
+            if (!passCoinInit) {
+                throw new Error("PodiumPassCoin must be initialized before PodiumPass");
+            }
+        }
+
+        const transaction = await aptos.publishPackageTransaction({
+            account: account.accountAddress,
+            metadataBytes: new Uint8Array(),
+            moduleBytecode: [Buffer.from(moduleHex).toString("hex")],
+        });
+
+        console.log(`\nTransaction payload created successfully`);
+        console.log(`Attempting to submit transaction...`);
+
+        const committedTxn = await aptos.signAndSubmitTransaction({ signer: account, transaction });
+        console.log(`Transaction submitted. Hash: ${committedTxn.hash}`);
+        
+        const response = await aptos.waitForTransaction({ 
+            transactionHash: committedTxn.hash,
+            options: {
+                timeoutSecs: 30,
+                checkSuccess: true
+            }
+        });
+        
+        console.log(`\nTransaction Details:`);
+        console.log(`Status: ${response.success ? 'Success' : 'Failed'}`);
+        console.log(`Gas used: ${response.gas_used}`);
+        
+        if (!response.success) {
+            throw new Error(`Transaction failed: ${response.vm_status}`);
+        }
+
+        console.log(`${moduleName} deployed successfully!`);
+        return response;
+    } catch (error: any) {
+        console.error(`\n=== Module Deployment Error ===`);
+        console.error(`Failed to deploy ${moduleName}`);
+        if (error.transaction?.vm_status) {
+            console.error(`VM Status: ${error.transaction.vm_status}`);
+            if (error.transaction.vm_status.includes("ABORTED")) {
+                console.error("Contract initialization failed - check permissions and prerequisites");
+            }
+        }
+        throw error;
+    }
+}
+
+async function verifyModuleInitialized(aptos: Aptos, account: Account, moduleName: string): Promise<boolean> {
+    try {
+        const response = await aptos.view({
+            payload: {
+                function: `${account.accountAddress}::${moduleName}::is_initialized` as `${string}::${string}::${string}`,
+                typeArguments: [],
+                functionArguments: []
+            }
+        });
+        return response[0] as boolean;
+    } catch (error) {
+        console.error(`Failed to verify ${moduleName} initialization:`, error);
+        return false;
+    }
 }
 
 async function deployPodiumSystem(aptos: Aptos, account: Account, isDryRun = false) {
-    // Deploy in correct order
+    console.log("\n=== Deploying Podium System ===");
+    
     const modules = [
-        "PodiumOutpost.move",
         "PodiumPassCoin.move",
+        "PodiumOutpost.move",
         "PodiumPass.move"
     ];
 
     for (const module of modules) {
+        console.log(`\nDeploying ${module}...`);
         await deployModule(aptos, account, module, isDryRun);
     }
 
-    // Initialize the system
-    await initializePodiumSystem(aptos, account, isDryRun);
+    if (!isDryRun) {
+        await initializePodiumSystem(aptos, account, isDryRun);
+    }
 }
 
 async function initializePodiumSystem(aptos: Aptos, account: Account, isDryRun = false) {
     console.log(`\n${isDryRun ? '[DRY RUN] Would initialize' : 'Initializing'} Podium System...`);
 
     const initTxns = [
-        // Initialize PodiumOutpost first
+        {
+            function: `${account.accountAddress.toString()}::PodiumPassCoin::init_module`,
+            arguments: [],
+            typeArguments: []
+        },
+        {
+            function: `${account.accountAddress.toString()}::PodiumPass::initialize`,
+            arguments: [
+                account.accountAddress,
+                4,
+                8,
+                2
+            ],
+            typeArguments: []
+        },
         {
             function: `${account.accountAddress.toString()}::PodiumOutpost::init_collection`,
             arguments: [],
@@ -148,23 +318,6 @@ async function initializePodiumSystem(aptos: Aptos, account: Account, isDryRun =
         {
             function: `${account.accountAddress.toString()}::PodiumOutpost::update_outpost_price`,
             arguments: ["1000"],
-            typeArguments: []
-        },
-        // Initialize PodiumPassCoin properly
-        {
-            function: `${account.accountAddress.toString()}::PodiumPassCoin::init_module`,
-            arguments: [],
-            typeArguments: []
-        },
-        // Initialize PodiumPass with proper parameters
-        {
-            function: `${account.accountAddress.toString()}::PodiumPass::initialize`,
-            arguments: [
-                account.accountAddress, // treasury
-                4,  // protocol fee percent
-                8,  // subject fee percent
-                2   // referral fee percent
-            ],
             typeArguments: []
         }
     ];
@@ -198,23 +351,115 @@ async function initializePodiumSystem(aptos: Aptos, account: Account, isDryRun =
 
         console.log(`Submitted initialization transaction: ${committedTxn.hash}`);
         await aptos.waitForTransaction({ 
-            transactionHash: committedTxn.hash 
+            transactionHash: committedTxn.hash,
+            options: {
+                timeoutSecs: 30,
+                checkSuccess: true
+            }
         });
         console.log(`Initialized ${txn.function}`);
     }
 }
 
 async function deployIfNeeded(aptos: Aptos, account: Account, moduleName: string, isDryRun = false) {
-    const isDeployed = await isContractDeployed(aptos, CHEERORBOO_ADDRESS);
-    
-    if (isDeployed) {
-        console.log(`Contract already deployed at ${CHEERORBOO_ADDRESS}`);
-        return true;
-    }
+    console.log(`\n=== Checking Deployment Status ===`);
+    try {
+        const isDeployed = await isContractDeployed(aptos, CHEERORBOO_ADDRESS);
+        console.log(`Contract deployment status at ${CHEERORBOO_ADDRESS}: ${isDeployed ? 'Deployed' : 'Not deployed'}`);
+        
+        if (isDeployed) {
+            console.log(`Contract already deployed at ${CHEERORBOO_ADDRESS}`);
+            return true;
+        }
 
-    console.log(`Deploying contract to ${account.accountAddress}...`);
-    return await deployModule(aptos, account, moduleName, isDryRun);
+        console.log(`Initiating deployment to ${account.accountAddress}...`);
+        return await deployModule(aptos, account, moduleName, isDryRun);
+    } catch (error) {
+        console.error(`\n=== Deployment Check Error ===`);
+        console.error(`Failed to check or deploy contract`);
+        console.error(error);
+        throw error;
+    }
 }
 
-// Run deployment
-main().catch(console.error);
+async function executeTransaction(aptos: Aptos, account: Account, txn: any) {
+    console.log(`Executing ${txn.function}...`);
+    
+    const transaction = await aptos.transaction.build.simple({
+        sender: account.accountAddress,
+        data: {
+            function: txn.function as `${string}::${string}::${string}`,
+            functionArguments: txn.arguments,
+            typeArguments: txn.typeArguments,
+        }
+    });
+
+    const signature = await aptos.transaction.sign({ 
+        signer: account, 
+        transaction 
+    });
+
+    const committedTxn = await aptos.transaction.submit.simple({
+        transaction,
+        senderAuthenticator: signature,
+    });
+
+    console.log(`Submitted transaction: ${committedTxn.hash}`);
+    await aptos.waitForTransaction({ 
+        transactionHash: committedTxn.hash,
+        options: {
+            timeoutSecs: 30,
+            checkSuccess: true
+        }
+    });
+}
+
+async function upgradeModule(
+    aptos: Aptos, 
+    account: Account, 
+    moduleName: string, 
+    newCode: string
+) {
+    console.log(`\n=== Upgrading ${moduleName} ===`);
+    
+    const transaction = await aptos.transaction.build.simple({
+        sender: account.accountAddress,
+        data: {
+            function: `${account.accountAddress}::${moduleName}::upgrade`,
+            functionArguments: [
+                new Uint8Array(), // metadata_serialized
+                [Buffer.from(newCode).toString("hex")] // code
+            ],
+            typeArguments: []
+        }
+    });
+
+    const signature = await aptos.transaction.sign({ 
+        signer: account, 
+        transaction 
+    });
+
+    const committedTxn = await aptos.transaction.submit.simple({
+        transaction,
+        senderAuthenticator: signature,
+    });
+
+    await aptos.waitForTransaction({ 
+        transactionHash: committedTxn.hash,
+        options: {
+            timeoutSecs: 30,
+            checkSuccess: true
+        }
+    });
+
+    console.log(`${moduleName} upgraded successfully!`);
+}
+
+try {
+    await main();
+} catch (error) {
+    console.error("\n=== Unhandled Error ===");
+    console.error("An unexpected error occurred:");
+    console.error(error);
+    process.exit(1);
+}

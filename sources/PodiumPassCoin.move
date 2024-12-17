@@ -16,6 +16,7 @@ module podium::PodiumPassCoin {
     use aptos_framework::aptos_account;
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::debug;
+    use aptos_framework::code;
 
     /// Error codes
     /// When a non-PodiumPass contract tries to perform restricted operations
@@ -53,6 +54,11 @@ module podium::PodiumPassCoin {
         metadata_objects: Table<String, Object<Metadata>>,
     }
 
+    /// Capability to manage upgrades
+    struct UpgradeCapability has key, store {
+        version: u64
+    }
+
     /// Verifies if the caller is the PodiumPass contract
     /// @param caller: The signer to verify
     /// @return Boolean indicating if caller is PodiumPass
@@ -64,12 +70,19 @@ module podium::PodiumPassCoin {
 
     /// Internal initialization function - must be private
     fun init_module(admin: &signer) {
-        move_to(admin, AssetCapabilities {
-            mint_refs: table::new(),
-            burn_refs: table::new(),
-            transfer_refs: table::new(),
-            metadata_objects: table::new(),
-        });
+        if (!exists<AssetCapabilities>(@podium)) {
+            move_to(admin, AssetCapabilities {
+                mint_refs: table::new(),
+                burn_refs: table::new(),
+                transfer_refs: table::new(),
+                metadata_objects: table::new(),
+            });
+
+            // Initialize upgrade capability
+            move_to(admin, UpgradeCapability {
+                version: 1
+            });
+        }
     }
 
     /// Public initialization function for testing
@@ -332,5 +345,24 @@ module podium::PodiumPassCoin {
         project_uri: String,
     ) acquires AssetCapabilities {
         create_target_asset(creator, target_id, name, icon_uri, project_uri)
+    }
+
+    /// Function to upgrade the module
+    public entry fun upgrade(
+        admin: &signer,
+        metadata_serialized: vector<u8>,
+        code: vector<vector<u8>>
+    ) acquires UpgradeCapability {
+        // Verify admin
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
+        
+        // Get upgrade capability
+        let upgrade_cap = borrow_global_mut<UpgradeCapability>(@podium);
+        
+        // Increment version
+        upgrade_cap.version = upgrade_cap.version + 1;
+        
+        // Perform upgrade
+        code::publish_package_txn(admin, metadata_serialized, code);
     }
 } 

@@ -13,6 +13,7 @@ module podium::PodiumOutpost {
     use aptos_framework::aptos_coin::AptosCoin;
     use std::debug;
     use aptos_framework::aggregator_v2;
+    use aptos_framework::code;
     
     // Error codes
     const ENOT_ADMIN: u64 = 0x10001;  // 65537
@@ -429,7 +430,12 @@ module podium::PodiumOutpost {
                 outposts: table::new(),
                 purchase_price: 1000,
             });
-        };
+
+            // Initialize upgrade capability
+            move_to(creator, UpgradeCapability {
+                version: 1
+            });
+        }
     }
 
     /// Verify ownership of an outpost
@@ -563,5 +569,24 @@ module podium::PodiumOutpost {
     public fun is_outpost(addr: address): bool acquires OutpostCollection {
         let collection_data = borrow_global<OutpostCollection>(@podium);
         table::contains(&collection_data.outposts, addr)
+    }
+
+    /// Capability to manage upgrades
+    struct UpgradeCapability has key, store {
+        version: u64
+    }
+
+    /// Function to upgrade the module
+    public entry fun upgrade(
+        admin: &signer,
+        metadata_serialized: vector<u8>,
+        code: vector<vector<u8>>
+    ) acquires UpgradeCapability {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        let upgrade_cap = borrow_global_mut<UpgradeCapability>(@podium);
+        upgrade_cap.version = upgrade_cap.version + 1;
+        
+        code::publish_package_txn(admin, metadata_serialized, code);
     }
 }

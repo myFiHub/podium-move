@@ -17,6 +17,7 @@ module podium::PodiumPass {
     use aptos_framework::account;
     use aptos_framework::event::{Self, EventHandle};
     use aptos_framework::fungible_asset;
+    use aptos_framework::code;
 
     /// Error codes
     const ENOT_AUTHORIZED: u64 = 1;
@@ -182,6 +183,11 @@ module podium::PodiumPass {
         coins: coin::Coin<AptosCoin>,
     }
 
+    /// Capability to manage upgrades
+    struct UpgradeCapability has key, store {
+        version: u64
+    }
+
     /// Helper function to get duration value
     public fun get_duration_week(): u64 { DURATION_WEEK }
     public fun get_duration_month(): u64 { DURATION_MONTH }
@@ -192,6 +198,7 @@ module podium::PodiumPass {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
         
         if (!exists<Config>(@podium)) {
+            // Initialize Config
             move_to(admin, Config {
                 protocol_fee_percent: MAX_PROTOCOL_FEE_PERCENT,
                 subject_fee_percent: MAX_SUBJECT_FEE_PERCENT,
@@ -214,6 +221,11 @@ module podium::PodiumPass {
             // Initialize redemption vault
             move_to(admin, RedemptionVault {
                 coins: coin::zero<AptosCoin>()
+            });
+
+            // Initialize upgrade capability
+            move_to(admin, UpgradeCapability {
+                version: 1
             });
         }
     }
@@ -899,6 +911,20 @@ module podium::PodiumPass {
     /// Check if the module is initialized
     public fun is_initialized(): bool {
         exists<Config>(@podium)
+    }
+
+    /// Function to upgrade the module
+    public entry fun upgrade(
+        admin: &signer,
+        metadata_serialized: vector<u8>,
+        code: vector<vector<u8>>
+    ) acquires UpgradeCapability {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        let upgrade_cap = borrow_global_mut<UpgradeCapability>(@podium);
+        upgrade_cap.version = upgrade_cap.version + 1;
+        
+        code::publish_package_txn(admin, metadata_serialized, code);
     }
 }
    
