@@ -517,69 +517,76 @@ module podium::PodiumProtocol {
 
     // ============ Pass Trading & Bonding Curve Functions ============
 
+    /// Calculate total buy price including all fees and referral bonus
+    public fun calculate_buy_price_with_fees(
+        target_addr: address,
+        amount: u64,
+        _referrer: Option<address>
+    ): (u64, u64, u64, u64) acquires Config {
+        // Get current supply
+        let current_supply = get_total_supply(target_addr);
+        
+        // Get raw price from bonding curve
+        let price = calculate_price(current_supply, amount, false);
+        
+        // Return price without fees, matching Solidity
+        (price, 0, 0, 0)
+    }
+
+    /// Calculate sell price and fees when selling passes
+    /// Returns (amount_received, protocol_fee, subject_fee)
+    public fun calculate_sell_price_with_fees(
+        target_addr: address,
+        amount: u64
+    ): (u64, u64, u64) acquires Config {
+        // Get current supply
+        let current_supply = get_total_supply(target_addr);
+        
+        // Basic validations matching Solidity
+        if (current_supply == 0 || amount == 0 || current_supply < amount) {
+            return (0, 0, 0)
+        };
+
+        // Get raw price from bonding curve
+        let price = calculate_price(current_supply, amount, true);
+        
+        // Return price as-is without fee calculations
+        (price, 0, 0)
+    }
+
     /// Calculate price using bonding curve
-    fun calculate_price(supply: u64, amount: u64, _is_sell: bool): u64 acquires Config {
+    fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
         
         // Scale down for calculations
-        let scaled_supply = if (supply == 0) { 1 } else { scale_down(supply) };
+        let scaled_supply = scale_down(supply);
         let scaled_amount = scale_down(amount);
-        let adjusted_supply = scaled_supply;
+
+        // For sells, we calculate based on the supply after selling
+        let adjusted_supply = if (is_sell) {
+            scaled_supply - scaled_amount
+        } else {
+            scaled_supply
+        };
 
         // Calculate summation for current supply
-        let n1 = adjusted_supply - 1;
-        let sum1 = (n1 * adjusted_supply * (2 * n1 + 1)) / 6;
+        let n1 = adjusted_supply;
+        let sum1 = (n1 * (n1 + 1) * (2 * n1 + 1)) / 6;
         
         // Calculate summation for supply + amount
-        let n2 = adjusted_supply - 1 + scaled_amount;
-        let final_supply = adjusted_supply + scaled_amount;
-        let sum2 = (n2 * final_supply * (2 * n2 + 1)) / 6;
+        let n2 = adjusted_supply + scaled_amount;
+        let sum2 = (n2 * (n2 + 1) * (2 * n2 + 1)) / 6;
         
         // Calculate price using weight factors
         let summation = config.weight_a * (sum2 - sum1);
         let price = (config.weight_b * summation * INITIAL_PRICE) / (1000000 * 1000000);
         
         // Scale up result and use initial price as floor
-        let scaled_price = scale_up(if (price < INITIAL_PRICE) {
+        scale_up(if (price < INITIAL_PRICE) {
             INITIAL_PRICE
         } else {
             price
-        });
-
-        scaled_price
-    }
-
-    /// Calculate raw buy price without fees
-    public fun get_buy_price(
-        target_addr: address,
-        amount: u64
-    ): u64 acquires Config {
-        let current_supply = get_total_supply(target_addr);
-        calculate_price(current_supply, amount, false)
-    }
-
-    /// Calculate raw sell price without fees
-    public fun get_sell_price(
-        target_addr: address,
-        amount: u64
-    ): u64 acquires Config {
-        let current_supply = get_total_supply(target_addr);
-        calculate_price(current_supply, amount, true)
-    }
-
-    /// Calculate buy price including all fees
-    public fun get_buy_price_after_fee(
-        target_addr: address,
-        amount: u64
-    ): u64 acquires Config {
-        let price = get_buy_price(target_addr, amount);
-        let config = borrow_global<Config>(@podium);
-        
-        let protocol_fee = (price * config.protocol_fee_percent) / 100;
-        let subject_fee = (price * config.subject_fee_percent) / 100;
-        let referral_fee = (price * config.referral_fee_percent) / 100;
-        
-        price + protocol_fee + subject_fee + referral_fee
+        })
     }
 
     /// Buy passes
@@ -595,9 +602,7 @@ module podium::PodiumProtocol {
         init_pass_stats(target_addr);
         
         // Calculate prices
-        let raw_price = get_buy_price(target_addr, amount);  // Price already includes amount
-        let total_cost = get_buy_price_after_fee(target_addr, amount);  // Total cost with fees
-        let fee_amount = total_cost - raw_price;  // Fee amount
+        let (raw_price, protocol_fee, subject_fee, referral_fee) = calculate_buy_price_with_fees(target_addr, amount, referrer);
         
         // Extract base amount for redemption pool
         let redemption_coins = coin::withdraw<AptosCoin>(buyer, raw_price);
@@ -605,14 +610,14 @@ module podium::PodiumProtocol {
         
         // Handle fee distributions
         let config = borrow_global<Config>(@podium);
-        let protocol_amount = (fee_amount * config.protocol_fee_percent) / 100;
-        let subject_amount = (fee_amount * config.subject_fee_percent) / 100;
-        
-        // Transfer fees
-        transfer_with_check(buyer, config.treasury, protocol_amount);  // Protocol fee
-        transfer_with_check(buyer, target_addr, subject_amount);  // Subject fee
-        if (option::is_some(&referrer)) {
-            transfer_with_check(buyer, option::extract(&mut referrer), fee_amount - protocol_amount - subject_amount);  // Referral fee
+        if (protocol_fee > 0) {
+            transfer_with_check(buyer, config.treasury, protocol_fee);  // Protocol fee
+        };
+        if (subject_fee > 0) {
+            transfer_with_check(buyer, target_addr, subject_fee);  // Subject fee
+        };
+        if (referral_fee > 0 && option::is_some(&referrer)) {
+            transfer_with_check(buyer, option::extract(&mut referrer), referral_fee);  // Referral fee
         };
         
         // Mint and transfer passes
@@ -621,7 +626,7 @@ module podium::PodiumProtocol {
         primary_fungible_store::deposit(signer::address_of(buyer), fa);
         
         // Update stats
-        update_stats(target_addr, amount, raw_price);
+        update_stats(target_addr, amount, raw_price, false);
         
         // Emit purchase event
         emit_purchase_event(signer::address_of(buyer), target_addr, amount, raw_price, referrer);
@@ -635,13 +640,14 @@ module podium::PodiumProtocol {
     ) acquires Config, RedemptionVault, AssetCapabilities {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
+        // Calculate sell price and fees
+        let (sell_price, protocol_fee, subject_fee) = calculate_sell_price_with_fees(target_addr, amount);
+        assert!(sell_price > 0, error::invalid_argument(EINVALID_AMOUNT));
+        
         // Get asset symbol and burn the passes
         let asset_symbol = get_asset_symbol(target_addr);
         let fa = primary_fungible_store::withdraw(seller, *table::borrow(&borrow_global<AssetCapabilities>(@podium).metadata_objects, asset_symbol), amount);
         burn_pass(seller, asset_symbol, fa);
-        
-        // Calculate sell price
-        let sell_price = get_sell_price(target_addr, amount);
         
         // Withdraw from vault and transfer to seller
         let payment = withdraw_from_vault(sell_price);
@@ -651,7 +657,7 @@ module podium::PodiumProtocol {
         coin::deposit(signer::address_of(seller), payment);
         
         // Update stats
-        update_stats(target_addr, amount, sell_price);
+        update_stats(target_addr, amount, sell_price, true);
         
         // Emit sell event
         event::emit_event(
@@ -720,7 +726,7 @@ module podium::PodiumProtocol {
     }
 
     /// Update pass stats
-    fun update_stats(target_addr: address, amount: u64, price: u64) acquires Config {
+    fun update_stats(target_addr: address, amount: u64, price: u64, is_sell: bool) acquires Config {
         let config = borrow_global_mut<Config>(@podium);
         if (!table::contains(&config.pass_stats, target_addr)) {
             table::add(&mut config.pass_stats, target_addr, PassStats {
@@ -729,7 +735,11 @@ module podium::PodiumProtocol {
             });
         };
         let stats = table::borrow_mut(&mut config.pass_stats, target_addr);
-        stats.total_supply = stats.total_supply + amount;
+        if (is_sell) {
+            stats.total_supply = stats.total_supply - amount;
+        } else {
+            stats.total_supply = stats.total_supply + amount;
+        };
         stats.last_price = price;
     }
 

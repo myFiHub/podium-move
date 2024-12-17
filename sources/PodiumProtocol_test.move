@@ -13,6 +13,7 @@ module podium::PodiumProtocol_test {
     use aptos_token_objects::collection;
     use aptos_token_objects::token;
     use aptos_framework::fungible_asset;
+    use aptos_framework::primary_fungible_store;
 
     // Test addresses
     const TREASURY: address = @podium;
@@ -392,7 +393,11 @@ module podium::PodiumProtocol_test {
         let metadata_addr = object::object_address<fungible_asset::Metadata>(&metadata);
         assert!(object::is_object(metadata_addr), 0);
 
+        // Create fungible store for the creator
+        let asset_symbol = PodiumProtocol::get_asset_symbol_from_string(target_id);
+        primary_fungible_store::ensure_primary_store_exists(@podium, metadata);
+
         // Verify initial balance is 0
-        assert!(PodiumProtocol::get_balance(@podium, target_id) == 0, 1);
+        assert!(PodiumProtocol::get_balance(@podium, asset_symbol) == 0, 1);
     }
 } 
