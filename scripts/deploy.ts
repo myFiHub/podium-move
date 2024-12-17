@@ -4,7 +4,7 @@ import * as yaml from "yaml";
 import * as path from "path";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { isContractDeployed, CHEERORBOO_ADDRESS, getDeployerAddresses, formatAddress } from './utils.js';
+import { isContractDeployed, CHEERORBOO_ADDRESS, getDeployerAddresses, formatAddress, isModuleDeployed } from './utils.js';
 import { viewFunction } from './utils.js';
 import {
     verifyDecimals,
@@ -14,6 +14,8 @@ import {
     validateAddresses,
     toMoveAmount
 } from './utils.js';
+import { execSync } from 'child_process';
+import { MoveConfigManager } from './move_config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,6 +26,7 @@ interface DeploymentOptions {
     target: DeployTarget;
     isDryRun: boolean;
     isDebug: boolean;
+    mode: 'dev' | 'prod';
 }
 
 function parseArgs(): DeploymentOptions {
@@ -33,7 +36,8 @@ function parseArgs(): DeploymentOptions {
     return {
         target,
         isDryRun: args.includes('--dry-run'),
-        isDebug: args.includes('--debug')
+        isDebug: args.includes('--debug'),
+        mode: args.includes('--dev') ? 'dev' : 'prod'
     };
 }
 
@@ -79,15 +83,21 @@ async function checkModuleInitialized(aptos: Aptos, account: Account, moduleName
             arguments: []
         });
         return result[0] as boolean;
-    } catch (error) {
-        console.log(`Module ${moduleName} not initialized or not found`);
+    } catch (error: any) {
+        if (error?.data?.error_code !== 'module_not_found') {
+            console.log(`Module ${moduleName} not initialized or not found:`, error);
+        }
         return false;
     }
 }
 
 const main = async () => {
     const options = parseArgs();
+    const moveConfig = new MoveConfigManager();
+    
     try {
+        moveConfig.backup();
+        
         if (!options.target) {
             throw new Error("Please specify deployment target: 'cheerorboo', 'podium', or 'all'");
         }
@@ -158,11 +168,11 @@ const main = async () => {
                 await deployIfNeeded(aptos, account, "CheerOrBooV2.move", options.isDryRun);
                 break;
             case 'podium':
-                await deployPodiumSystem(aptos, account, options.isDryRun);
+                await deployPodiumSystem(aptos, account, options.isDryRun, options);
                 break;
             case 'all':
                 await deployIfNeeded(aptos, account, "CheerOrBooV2.move", options.isDryRun);
-                await deployPodiumSystem(aptos, account, options.isDryRun);
+                await deployPodiumSystem(aptos, account, options.isDryRun, options);
                 break;
             default:
                 throw new Error("Invalid deployment target. Use: 'cheerorboo', 'podium', or 'all'");
@@ -178,6 +188,12 @@ const main = async () => {
             console.error("Run with --debug flag for more details");
         }
         process.exit(1);
+    } finally {
+        try {
+            moveConfig.restore();
+        } catch (e) {
+            console.error('Failed to restore Move.toml:', e);
+        }
     }
 };
 
@@ -306,143 +322,258 @@ async function verifyModuleInitialized(aptos: Aptos, account: Account, moduleNam
     }
 }
 
-async function deployPodiumSystem(aptos: Aptos, account: Account, isDryRun = false) {
-    console.log("\n=== Deploying Podium System ===");
+async function deployPodiumSystem(aptos: Aptos, account: Account, isDryRun = false, options: DeploymentOptions) {
+    const moveConfig = new MoveConfigManager();
+    try {
+        moveConfig.backup();
 
-    // Pre-deployment validation
-    console.log("\n--- Pre-deployment Validation ---");
-    const addressValidation = validateAddresses(account);
-    if (!addressValidation.success) {
-        console.error("Address validation failed for:", addressValidation.mismatches);
-        throw new Error("Address validation failed - check Move.toml configuration");
-    }
-    console.log("✓ Address validation successful");
-
-    // First Phase: Deploy base modules
-    console.log("\n--- Phase 1: Deploying Base Modules ---");
-    
-    // Deploy modules in correct order
-    const modules = [
-        "PodiumPassCoin.move",
-        "PodiumOutpost.move",
-        "PodiumPass.move"
-    ];
-
-    // Check dependencies and simulate/deploy each module
-    for (const module of modules) {
-        console.log(`\nProcessing ${module}...`);
+        log('Deploying Podium System...', options);
         
-        // Check if module is already deployed
-        const isDeployed = await isModuleDeployed(aptos, account, module);
-        if (isDeployed) {
-            console.log(`Module ${module} already deployed, skipping...`);
-            continue;
+        // Pre-deployment validation
+        console.log("\n--- Pre-deployment Validation ---");
+        const addressValidation = validateAddresses(account);
+        if (!addressValidation.success) {
+            throw new Error("Address validation failed - check Move.toml configuration");
         }
+        console.log("✓ Address validation successful");
 
-        if (isDryRun) {
-            // Simulate module deployment
-            const moduleHex = fs.readFileSync(
-                path.join(__dirname, "../sources/", module),
-                "utf8"
-            );
+        // First Phase: Deploy base modules
+        console.log("\n--- Phase 1: Deploying Base Modules ---");
+        
+        const modules = [
+            "PodiumPassCoin.move",
+            "PodiumOutpost.move",
+            "PodiumPass.move"
+        ];
 
-            // First build the transaction
-            const transaction = await aptos.transaction.build.simple({
-                sender: account.accountAddress,
-                data: {
-                    function: `${account.accountAddress}::${module.split('.')[0]}::init_module` as `${string}::${string}::${string}`,
-                    functionArguments: [],
-                    typeArguments: []
-                }
-            });
+        // Track simulated deployments for dry run
+        const simulatedDeployments = new Set<string>();
 
-            // Then simulate the built transaction
-            const simulation = await aptos.transaction.simulate.simple({
-                signerPublicKey: account.publicKey,
-                transaction
-            });
-
-            console.log(`Simulation results for ${module}:`);
-            console.log(`Success: ${simulation[0]?.success ?? false}`);
-            console.log(`Gas estimate: ${simulation[0].gas_used}`);
+        for (const module of modules) {
+            console.log(`\nProcessing ${module}...`);
             
-            if (!simulation[0].success) {
-                throw new Error(`Deployment simulation failed for ${module}: ${simulation[0].vm_status}`);
+            if (isDryRun) {
+                try {
+                    // First compile the module
+                    if (options.isDebug) {
+                        console.log('Compiling module...');
+                    }
+                    
+                    try {
+                        const MOVE_QUIET = process.env.MOVE_QUIET === '1';
+
+                        // Update compile command
+                        const compileCommand = `aptos move compile ${options.mode === 'dev' ? '--dev' : ''} ${MOVE_QUIET ? '--quiet' : ''}`;
+
+                        const output = execSync(compileCommand, {
+                            cwd: path.join(__dirname, '..'),
+                            stdio: ['ignore', 'pipe', 'pipe'],
+                            env: {
+                                ...process.env,
+                                MOVE_COMPILER_DEBUG: options.isDebug ? '1' : '0'
+                            }
+                        }).toString();
+
+                        // Only show relevant parts of output
+                        const relevantOutput = output
+                            .split('\n')
+                            .filter(line => (
+                                !line.includes('label') && 
+                                !line.includes('UPDATING GIT DEPENDENCY') &&
+                                !line.startsWith('Compiling') &&
+                                !line.match(/^\s*$/) // Skip empty lines
+                            ))
+                            .join('\n');
+
+                        if (options.isDebug) {
+                            console.log(relevantOutput);
+                        } else {
+                            // Only show compilation status
+                            if (relevantOutput.includes('Compilation successful')) {
+                                console.log('Compilation successful');
+                            }
+                        }
+                    } catch (error) {
+                        handleMoveAbort(error);
+                    }
+
+                    // Read the compiled bytecode
+                    const buildPath = path.join(__dirname, '../build/PodiumProtocol/bytecode_modules', 
+                        module.replace('.move', '.mv'));
+                    
+                    if (!fs.existsSync(buildPath)) {
+                        console.error(`Compiled bytecode not found at ${buildPath}`);
+                        if (options.isDebug) {
+                            // List contents of build directory
+                            try {
+                                const buildDir = path.join(__dirname, '../build');
+                                console.log('\nBuild directory contents:');
+                                const files = fs.readdirSync(buildDir, { recursive: true });
+                                console.log(files);
+                            } catch (e) {
+                                console.error('Could not read build directory');
+                            }
+                        }
+                        continue;
+                    }
+
+                    const bytecode = fs.readFileSync(buildPath);
+
+                    if (options.isDebug) {
+                        console.log(`Module bytecode size: ${bytecode.length} bytes`);
+                        console.log(`Module path: ${buildPath}`);
+                    }
+
+                    // Use publishPackageTransaction with compiled bytecode
+                    const transaction = await aptos.publishPackageTransaction({
+                        account: account.accountAddress,
+                        metadataBytes: new Uint8Array(),
+                        moduleBytecode: [bytecode.toString('hex')]
+                    });
+
+                    if (options.isDebug) {
+                        console.log('\nTransaction details:');
+                        // Convert BigInt to string in transaction object
+                        const txnDetails = JSON.parse(JSON.stringify(transaction, (key, value) => {
+                            if (typeof value === 'bigint') {
+                                return value.toString();
+                            }
+                            return value;
+                        }));
+                        console.log(txnDetails);
+                    }
+
+                    // Simulate deployment
+                    console.log(`Simulating deployment of ${module}...`);
+                    const [simulation] = await aptos.transaction.simulate.simple({
+                        transaction,
+                        signerPublicKey: account.publicKey,
+                        options: {
+                            estimateGasUnitPrice: true,
+                            estimateMaxGasAmount: true
+                        }
+                    });
+
+                    console.log(`Simulation results:`);
+                    console.log(`Success: ${simulation?.success ?? false}`);
+                    console.log(`Gas estimate: ${simulation.gas_used}`);
+                    if (simulation.vm_status) {
+                        console.log(`VM Status: ${simulation.vm_status}`);
+                    }
+                    if (options.isDebug && simulation.changes) {
+                        console.log('\nSimulated changes:');
+                        console.log(JSON.stringify(simulation.changes, null, 2));
+                    }
+
+                    if (simulation?.success) {
+                        simulatedDeployments.add(module.replace('.move', ''));
+                    }
+                } catch (error: any) {
+                    console.error(`Simulation failed for ${module}:`, error?.message || error);
+                    if (error?.data?.vm_status) {
+                        console.error(`VM Status: ${error.data.vm_status}`);
+                    }
+                    if (options.isDebug) {
+                        console.error('Full error:', error);
+                    }
+                }
+                continue;
             }
-        } else {
+
+            const isDeployed = await isModuleDeployed(aptos, account, module);
+            if (isDeployed) {
+                console.log(`Module ${module} already deployed, skipping...`);
+                continue;
+            }
+
             await deployModule(aptos, account, module, false);
         }
-    }
 
-    // Phase 2: Initialize modules
-    console.log("\n--- Phase 2: Module Initialization ---");
-    
-    const initTxns = [
-        {
-            function: `${account.accountAddress}::PodiumPassCoin::init_module`,
-            arguments: [],
-            typeArguments: []
-        },
-        {
-            function: `${account.accountAddress}::PodiumPass::initialize`,
-            arguments: [
-                account.accountAddress,
-                4,
-                8,
-                2
-            ],
-            typeArguments: []
-        },
-        {
-            function: `${account.accountAddress}::PodiumOutpost::init_collection`,
-            arguments: [],
-            typeArguments: []
-        },
-        {
-            function: `${account.accountAddress}::PodiumOutpost::update_outpost_price`,
-            arguments: [toMoveAmount(30)],
-            typeArguments: []
-        }
-    ];
-
-    // Execute or simulate initialization transactions
-    for (const txn of initTxns) {
-        console.log(`\nProcessing ${txn.function}...`);
-        const result = await executeTransaction(aptos, account, txn, isDryRun);
+        // Phase 2: Initialize modules
+        console.log("\n--- Phase 2: Module Initialization ---");
         
-        if (!result) {
-            throw new Error(`Failed to ${isDryRun ? 'simulate' : 'execute'} ${txn.function}`);
+        const initTxns = [
+            {
+                function: `${account.accountAddress}::PodiumPassCoin::init_module`,
+                arguments: [],
+                typeArguments: []
+            },
+            {
+                function: `${account.accountAddress}::PodiumPass::initialize`,
+                arguments: [
+                    account.accountAddress,
+                    4,
+                    8,
+                    2
+                ],
+                typeArguments: []
+            },
+            {
+                function: `${account.accountAddress}::PodiumOutpost::init_collection`,
+                arguments: [],
+                typeArguments: []
+            },
+            {
+                function: `${account.accountAddress}::PodiumOutpost::update_outpost_price`,
+                arguments: [toMoveAmount(30)],
+                typeArguments: []
+            }
+        ];
+
+        for (const txn of initTxns) {
+            console.log(`\nProcessing ${txn.function}...`);
+            
+            if (isDryRun) {
+                // Extract module name from function
+                const moduleName = txn.function.split('::')[2];
+                if (!simulatedDeployments.has(moduleName)) {
+                    console.log(`Skipping initialization simulation for ${moduleName} - module not deployed`);
+                    continue;
+                }
+
+                try {
+                    // Build the transaction
+                    const transaction = await aptos.transaction.build.simple({
+                        sender: account.accountAddress,
+                        data: {
+                            function: txn.function as `${string}::${string}::${string}`,
+                            functionArguments: txn.arguments,
+                            typeArguments: txn.typeArguments
+                        }
+                    });
+
+                    // Simulate without authentication check
+                    const [simulation] = await aptos.transaction.simulate.simple({
+                        transaction
+                    });
+
+                    console.log(`Simulation results:`);
+                    console.log(`Success: ${simulation?.success ?? false}`);
+                    console.log(`Gas estimate: ${simulation.gas_used}`);
+                } catch (error: any) {
+                    console.error(`Simulation failed:`, error?.message || error);
+                }
+            } else {
+                const result = await executeTransaction(aptos, account, txn, false);
+                if (!result) {
+                    throw new Error(`Failed to execute ${txn.function}`);
+                }
+            }
         }
+
+        console.log("\n=== Podium System Deployment Complete ===");
+
+        if (options.isDebug) {
+            log('Deployment simulation complete', options, 'debug');
+            // Show detailed simulation results only in debug mode
+        } else {
+            log('Deployment successful', options);
+        }
+
+    } catch (error) {
+        moveConfig.restore();
+        throw error;
     }
-
-    // Phase 3: Validation
-    console.log("\n--- Phase 3: System Validation ---");
-    
-    if (isDryRun) {
-        console.log("Simulating system validation...");
-        try {
-            // Simulate view function calls
-            const simulations = await Promise.all([
-                simulateViewFunction(aptos, account, "PodiumPassCoin::is_initialized"),
-                simulateViewFunction(aptos, account, "PodiumPass::is_initialized"),
-                simulateViewFunction(aptos, account, "PodiumOutpost::get_collection_data"),
-                simulateViewFunction(aptos, account, "PodiumOutpost::get_outpost_purchase_price")
-            ]);
-
-            console.log("Validation simulations successful");
-        } catch (error) {
-            console.error("Validation simulation failed:", error);
-            throw error;
-        }
-    } else {
-        // Real validation
-        const systemValidation = await validateSystemState(aptos, account);
-        if (!systemValidation.success) {
-            throw new Error("System validation failed");
-        }
-    }
-
-    console.log("\n=== Podium System Deployment Complete ===");
 }
 
 // Add helper function for view function simulation
@@ -601,17 +732,27 @@ async function upgradeModule(aptos: Aptos, account: Account, moduleName: string,
     });
 }
 
-// Add this helper function to check module deployment status
-async function isModuleDeployed(aptos: Aptos, account: Account, moduleName: string): Promise<boolean> {
-    try {
-        const moduleExists = await aptos.getAccountModule({
-            accountAddress: account.accountAddress,
-            moduleName: moduleName.replace('.move', '')  // Remove .move extension
-        });
-        return !!moduleExists;
-    } catch (error) {
-        return false;
+function log(message: string, options: DeploymentOptions, level: 'info' | 'debug' = 'info') {
+    if (level === 'debug' && !options.isDebug) {
+        return;
     }
+    console.log(message);
+}
+
+function handleMoveAbort(error: any) {
+    if (error?.message?.includes('Move abort')) {
+        const abortCode = error.message.match(/0x1::util: (0x[0-9a-f]+)/);
+        if (abortCode) {
+            switch (abortCode[1]) {
+                case '0x10001':
+                    throw new Error('Module initialization failed - check account permissions');
+                // Add other abort codes
+                default:
+                    throw new Error(`Unknown Move abort: ${abortCode[1]}`);
+            }
+        }
+    }
+    throw error;
 }
 
 try {

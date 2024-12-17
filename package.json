@@ -11,6 +11,9 @@
   },
   "scripts": {
     "deploy": "NODE_OPTIONS='--loader ts-node/esm' node scripts/deploy.ts",
+    "deploy:dev": "npm run deploy -- --dev",
+    "deploy:test": "NODE_OPTIONS='--loader ts-node/esm' node scripts/test_deployment.ts",
+    "deploy:dry-run": "npm run deploy -- --dry-run",
     "test": "NODE_OPTIONS='--loader ts-node/esm' node scripts/test_deployment.ts",
     "check": "NODE_OPTIONS='--loader ts-node/esm' node -e 'import(\"./scripts/test_deployment.ts\").then(m => m.isContractDeployed())'"
   }

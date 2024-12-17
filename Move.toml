@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = ["FiHub"]
 
 [addresses]
-# Fixed addresses
+# Keep only fixed/framework addresses here
 std = "0x1"
 aptos_framework = "0x1"
 aptos_std = "0x1"
@@ -13,13 +13,11 @@ fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
 sender = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
 participant = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
 
-# Dynamic addresses (replaced by deployer)
-podium = "_"      # <-- Will be replaced by deployer address
-admin = "_"       # <-- Will be replaced by deployer address
-treasury = "_"    # <-- Will be replaced by deployer address
-passcoin = "_"    # <-- Will be replaced by deployer address
-
-# Placeholder addresses
+# All dynamic addresses should be placeholders
+podium = "_"
+admin = "_"
+treasury = "_"
+passcoin = "_"
 CheerOrBooV2 = "_"
 target = "_"
 user1 = "_"
@@ -27,10 +25,10 @@ user2 = "_"
 
 [dev-addresses]
 CheerOrBooV2 = "0x345"
-podium = "0x456"  # Changed to be unique
-admin = "0x123"   # Changed to be unique
-treasury = "0x234" # Changed to be unique
-passcoin = "0x567" # Changed to be unique
+podium = "0x456"
+admin = "0x123"
+treasury = "0x234"
+passcoin = "0x567"
 user1 = "0x678"
 user2 = "0x789"
 target = "0x321"

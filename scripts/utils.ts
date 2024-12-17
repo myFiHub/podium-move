@@ -4,6 +4,7 @@ import * as yaml from "yaml";
 import * as path from "path";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { MoveConfigManager } from './move_config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -50,8 +51,11 @@ export async function viewFunction(aptos: Aptos, params: {
                 functionArguments: params.arguments
             }
         });
-    } catch (error) {
-        console.error(`View function failed:`, error);
+    } catch (error: any) {
+        // Don't log error for module not found during checks
+        if (error?.data?.error_code !== 'module_not_found') {
+            console.error(`View function failed:`, error);
+        }
         return [false];
     }
 }
@@ -62,23 +66,28 @@ export function getDeployerAddresses() {
     );
     const deployerAddress = config.profiles.deployer.account;
 
-    // Update Move.toml with deployer address
-    let moveToml = fs.readFileSync(path.join(__dirname, '../Move.toml'), 'utf-8');
-    const addressRegex = /(podium|admin|treasury|passcoin)\s*=\s*"[^"]*"/g;
+    const moveConfig = new MoveConfigManager();
+    const currentAddresses = moveConfig.getAddresses();
     
-    moveToml = moveToml.replace(addressRegex, (match) => {
-        const key = match.split('=')[0].trim();
-        return `${key} = "${deployerAddress}"`;
-    });
+    // Only update addresses that are placeholders ("_")
+    const updates: Record<string, string> = {};
+    for (const [key, value] of Object.entries(currentAddresses)) {
+        if (value === '_') {
+            updates[key] = deployerAddress;
+        }
+    }
 
-    fs.writeFileSync(path.join(__dirname, '../Move.toml'), moveToml);
+    if (Object.keys(updates).length > 0) {
+        moveConfig.backup();
+        moveConfig.updateAddresses(updates);
+    }
     
     return {
         deployerAddress,
-        podiumAddress: deployerAddress,
-        adminAddress: deployerAddress,
-        treasuryAddress: deployerAddress,
-        passcoinAddress: deployerAddress
+        podiumAddress: currentAddresses.podium,
+        adminAddress: currentAddresses.admin,
+        treasuryAddress: currentAddresses.treasury,
+        passcoinAddress: currentAddresses.passcoin
     };
 }
 
@@ -211,22 +220,28 @@ export async function validateSystemState(aptos: Aptos, account: Account): Promi
 export function validateAddresses(account: Account): { success: boolean; mismatches: string[] } {
     try {
         const moveToml = fs.readFileSync(path.join(__dirname, '../Move.toml'), 'utf8');
-        const addresses = {
-            podium: account.accountAddress.toString(),
-            admin: account.accountAddress.toString(),
-            treasury: account.accountAddress.toString(),
-            passcoin: account.accountAddress.toString()
-        };
-
-        const mismatches: string[] = [];
-        for (const [key, value] of Object.entries(addresses)) {
-            const pattern = new RegExp(`${key}\\s*=\\s*"([^"]+)"`, 'i');
-            const match = moveToml.match(pattern);
-            
-            if (!match || match[1] !== value) {
-                mismatches.push(key);
-            }
+        const accountAddress = account.accountAddress.toString();
+        
+        // When using --dev flag, we validate against dev-addresses
+        const addressSection = '[dev-addresses]';
+        const devAddressesStart = moveToml.indexOf(addressSection);
+        if (devAddressesStart === -1) {
+            console.error('No dev-addresses section found in Move.toml');
+            return { success: false, mismatches: ['dev-addresses section missing'] };
         }
+
+        // Extract dev-addresses section
+        const devAddressesText = moveToml.slice(devAddressesStart);
+        const nextSection = devAddressesText.indexOf('[', addressSection.length);
+        const devAddresses = devAddressesText.slice(0, nextSection > 0 ? nextSection : undefined);
+
+        // Check if required addresses are defined
+        const requiredAddresses = ['podium', 'admin', 'treasury', 'passcoin'];
+        const mismatches = requiredAddresses.filter(addr => {
+            const pattern = new RegExp(`${addr}\\s*=\\s*"([^"]+)"`, 'i');
+            const match = devAddresses.match(pattern);
+            return !match;
+        });
 
         return {
             success: mismatches.length === 0,
@@ -249,4 +264,21 @@ export function formatAddress(address: string): string {
 
 export function toMoveAmount(amount: number): string {
     return (amount * Math.pow(10, MOVE_DECIMALS)).toString();
+}
+
+export async function isModuleDeployed(aptos: Aptos, account: Account, moduleName: string): Promise<boolean> {
+    try {
+        const moduleExists = await aptos.getAccountModule({
+            accountAddress: account.accountAddress,
+            moduleName: moduleName.replace('.move', '')  // Remove .move extension
+        });
+        return !!moduleExists;
+    } catch (error: any) {
+        // Don't treat module_not_found as an error
+        if (error?.data?.error_code === 'module_not_found') {
+            return false;
+        }
+        console.error(`Error checking module deployment:`, error);
+        return false;
+    }
 }
