@@ -27,10 +27,10 @@ user2 = "_"
 
 [dev-addresses]
 CheerOrBooV2 = "0x345"
-podium = "0x456"
-admin = "0x123"
-treasury = "0x234"
-passcoin = "0x567"
+podium = "0x456"  # Changed to be unique
+admin = "0x123"   # Changed to be unique
+treasury = "0x234" # Changed to be unique
+passcoin = "0x567" # Changed to be unique
 user1 = "0x678"
 user2 = "0x789"
 target = "0x321"

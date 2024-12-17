@@ -31,10 +31,13 @@ module podium::PodiumPassCoin {
     const INSUFFICIENT_BALANCE: u64 = 5;
     /// When unauthorized account tries to perform admin operations
     const ENOT_AUTHORIZED: u64 = 6;
+    /// When the amount is not a whole number of passes
+    const EINVALID_AMOUNT: u64 = 7;
 
     /// Constants for asset configuration
-    /// No decimal places as passes are whole units only
-    const DECIMALS: u8 = 0;
+    /// Using 8 decimals to match Movement network standard and allow fractionalization
+    /// while maintaining whole unit purchases
+    const DECIMALS: u8 = 8;
     /// Prefix for target account assets to distinguish them
     const PREFIX_TARGET: vector<u8> = b"TARGET_";
     /// Prefix for outpost assets to distinguish them
@@ -102,7 +105,7 @@ module podium::PodiumPassCoin {
     }
 
     /// Creates a new target asset type
-    public(friend) fun create_target_asset(
+    public fun create_target_asset(
         creator: &signer,
         target_id: String,
         name: String,
@@ -195,6 +198,15 @@ module podium::PodiumPassCoin {
         table::add(&mut caps.metadata_objects, asset_symbol, metadata);
     }
 
+    /// Validates that the amount is a whole number of passes
+    fun validate_whole_unit(amount: u64) {
+        // Check if amount is divisible by 10^8 (no fractional passes for purchases)
+        assert!(
+            amount % (100000000) == 0,
+            error::invalid_argument(EINVALID_AMOUNT)
+        );
+    }
+
     /// Mints new passes of a specific asset type
     /// Only callable by PodiumPass contract
     /// @param caller: The signer of the calling contract
@@ -213,6 +225,7 @@ module podium::PodiumPassCoin {
         assert!(table::contains(&caps.mint_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
         
         let mint_ref = table::borrow(&caps.mint_refs, asset_symbol);
+        validate_whole_unit(amount);
         fungible_asset::mint(mint_ref, amount)
     }
 
@@ -230,6 +243,9 @@ module podium::PodiumPassCoin {
         
         let caps = borrow_global<AssetCapabilities>(@podium);
         assert!(table::contains(&caps.burn_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
+        
+        let amount = fungible_asset::amount(&fa);
+        validate_whole_unit(amount);
         
         let burn_ref = table::borrow(&caps.burn_refs, asset_symbol);
         fungible_asset::burn(burn_ref, fa)

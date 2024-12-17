@@ -6,6 +6,14 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { isContractDeployed, CHEERORBOO_ADDRESS, getDeployerAddresses } from './utils.js';
 import { viewFunction } from './utils.js';
+import {
+    verifyDecimals,
+    verifyOutpostCollection,
+    verifyPermissions,
+    validateSystemState,
+    validateAddresses,
+    toMoveAmount
+} from './utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -58,7 +66,7 @@ async function loadConfig() {
 
 const addresses = getDeployerAddresses();
 const MODULE_ADDRESSES = {
-    PODIUM: addresses.deployerAddress,
+    PODIUM: addresses.deployerAddress.padStart(66, '0'),
     PODIUM_PASS: 'PodiumPass',
     PODIUM_PASS_COIN: 'PodiumPassCoin'
 };
@@ -241,7 +249,33 @@ async function deployModule(aptos: Aptos, account: Account, moduleName: string, 
             throw new Error(`Transaction failed: ${response.vm_status}`);
         }
 
-        console.log(`${moduleName} deployed successfully!`);
+        if (!isDryRun) {
+            // Verify module-specific initialization
+            switch(moduleName) {
+                case "PodiumOutpost.move":
+                    const collectionValid = await verifyOutpostCollection(aptos, account);
+                    if (!collectionValid) {
+                        throw new Error("Outpost collection initialization failed");
+                    }
+                    break;
+                
+                case "PodiumPassCoin.move":
+                    const decimalsValid = await verifyDecimals(aptos, account);
+                    if (!decimalsValid) {
+                        throw new Error("PodiumPassCoin decimal configuration failed");
+                    }
+                    break;
+                
+                case "PodiumPass.move":
+                    const permissionsValid = await verifyPermissions(aptos, account);
+                    if (!permissionsValid) {
+                        throw new Error("PodiumPass permissions initialization failed");
+                    }
+                    break;
+            }
+        }
+
+        console.log(`${moduleName} deployed and validated successfully!`);
         return response;
     } catch (error: any) {
         console.error(`\n=== Module Deployment Error ===`);
@@ -274,90 +308,146 @@ async function verifyModuleInitialized(aptos: Aptos, account: Account, moduleNam
 
 async function deployPodiumSystem(aptos: Aptos, account: Account, isDryRun = false) {
     console.log("\n=== Deploying Podium System ===");
+
+    // Pre-deployment validation
+    console.log("\nValidating deployment configuration...");
+    const addressValidation = validateAddresses(account);
+    if (!addressValidation.success) {
+        console.error("Address validation failed for:", addressValidation.mismatches);
+        throw new Error("Address validation failed - check Move.toml configuration");
+    }
+    console.log("Address validation successful");
+
+    // First Phase: Deploy independent modules
+    console.log("\n--- Phase 1: Deploying Base Modules ---");
     
-    const modules = [
-        "PodiumPassCoin.move",
-        "PodiumOutpost.move",
-        "PodiumPass.move"
-    ];
-
-    for (const module of modules) {
-        console.log(`\nDeploying ${module}...`);
-        await deployModule(aptos, account, module, isDryRun);
+    // Check and deploy PodiumOutpost
+    const outpostDeployed = await isModuleDeployed(aptos, account, "PodiumOutpost");
+    if (outpostDeployed) {
+        console.log("\nPodiumOutpost already deployed, skipping deployment...");
+    } else {
+        console.log("\nDeploying PodiumOutpost...");
+        await deployModule(aptos, account, "PodiumOutpost.move", isDryRun);
+        if (!isDryRun) {
+            // Initialize collection
+            await executeTransaction(aptos, account, {
+                function: `${account.accountAddress}::PodiumOutpost::init_collection`,
+                arguments: [],
+                typeArguments: []
+            });
+            
+            // Set outpost price to 30 MOVE with 8 decimals
+            await executeTransaction(aptos, account, {
+                function: `${account.accountAddress}::PodiumOutpost::update_outpost_price`,
+                arguments: [toMoveAmount(30)], // 30 MOVE
+                typeArguments: []
+            });
+            
+            console.log("PodiumOutpost collection initialized with price set to 30 MOVE");
+        }
     }
 
+    // Check and deploy PodiumPassCoin
+    const passCoinDeployed = await isModuleDeployed(aptos, account, "PodiumPassCoin");
+    if (passCoinDeployed) {
+        console.log("\nPodiumPassCoin already deployed, skipping deployment...");
+    } else {
+        console.log("\nDeploying PodiumPassCoin...");
+        await deployModule(aptos, account, "PodiumPassCoin.move", isDryRun);
+        if (!isDryRun) {
+            await executeTransaction(aptos, account, {
+                function: `${account.accountAddress}::PodiumPassCoin::init_module`,
+                arguments: [],
+                typeArguments: []
+            });
+        }
+    }
+
+    // Check and deploy PodiumPass
+    const passDeployed = await isModuleDeployed(aptos, account, "PodiumPass");
+    if (passDeployed) {
+        console.log("\nPodiumPass already deployed, skipping deployment...");
+    } else {
+        console.log("\nDeploying PodiumPass...");
+        await deployModule(aptos, account, "PodiumPass.move", isDryRun);
+        if (!isDryRun) {
+            await executeTransaction(aptos, account, {
+                function: `${account.accountAddress}::PodiumPass::initialize`,
+                arguments: [
+                    account.accountAddress,
+                    4,
+                    8,
+                    2
+                ],
+                typeArguments: []
+            });
+        }
+    }
+
+    // Still run validation even if modules were skipped
     if (!isDryRun) {
-        await initializePodiumSystem(aptos, account, isDryRun);
+        console.log("\nValidating system...");
+        const allModulesInitialized = await validateFullSystem(aptos, account);
+        if (!allModulesInitialized) {
+            throw new Error("System validation failed");
+        }
     }
+
+    // Post-deployment validation
+    if (!isDryRun) {
+        console.log("\nPerforming comprehensive system validation...");
+        const systemValidation = await validateSystemState(aptos, account);
+        
+        if (!systemValidation.success) {
+            console.error("\nValidation Results:");
+            console.error("Collection:", systemValidation.details.collection ? "✓" : "✗");
+            console.error("Decimals:", systemValidation.details.decimals ? "✓" : "✗");
+            console.error("Permissions:", systemValidation.details.permissions ? "✓" : "✗");
+            console.error("Price:", systemValidation.details.price ? "✓" : "✗");
+            throw new Error("System validation failed - check deployment state");
+        }
+        
+        console.log("\nValidation Results:");
+        console.log("Collection: ✓");
+        console.log("Decimals: ✓");
+        console.log("Permissions: ✓");
+        console.log("Price: ✓");
+        console.log("\nSystem validation successful");
+    }
+
+    console.log("\n=== Podium System Deployment Complete ===");
 }
 
-async function initializePodiumSystem(aptos: Aptos, account: Account, isDryRun = false) {
-    console.log(`\n${isDryRun ? '[DRY RUN] Would initialize' : 'Initializing'} Podium System...`);
-
-    const initTxns = [
-        {
-            function: `${account.accountAddress.toString()}::PodiumPassCoin::init_module`,
-            arguments: [],
-            typeArguments: []
-        },
-        {
-            function: `${account.accountAddress.toString()}::PodiumPass::initialize`,
-            arguments: [
-                account.accountAddress,
-                4,
-                8,
-                2
-            ],
-            typeArguments: []
-        },
-        {
-            function: `${account.accountAddress.toString()}::PodiumOutpost::init_collection`,
-            arguments: [],
-            typeArguments: []
-        },
-        {
-            function: `${account.accountAddress.toString()}::PodiumOutpost::update_outpost_price`,
-            arguments: ["1000"],
-            typeArguments: []
-        }
-    ];
-
-    for (const txn of initTxns) {
-        if (isDryRun) {
-            console.log(`Would execute: ${txn.function}`);
-            console.log(`With arguments:`, txn.arguments);
-            continue;
-        }
-        console.log(`Executing ${txn.function}...`);
-        
-        const transaction = await aptos.transaction.build.simple({
-            sender: account.accountAddress,
-            data: {
-                function: txn.function as `${string}::${string}::${string}`,
-                functionArguments: txn.arguments,
-                typeArguments: txn.typeArguments,
+// Add this helper function for full system validation
+async function validateFullSystem(aptos: Aptos, account: Account): Promise<boolean> {
+    try {
+        // Check all modules exist
+        const modules = ["PodiumOutpost", "PodiumPassCoin", "PodiumPass"];
+        for (const module of modules) {
+            const moduleExists = await aptos.getAccountModule({
+                accountAddress: account.accountAddress,
+                moduleName: module
+            }).then(() => true).catch(() => false);
+            
+            if (!moduleExists) {
+                console.error(`Module ${module} not found`);
+                return false;
             }
-        });
+        }
 
-        const signature = await aptos.transaction.sign({ 
-            signer: account, 
-            transaction 
-        });
+        // Check initialization status
+        const passCoinInitialized = await verifyModuleInitialized(aptos, account, "PodiumPassCoin");
+        const passInitialized = await verifyModuleInitialized(aptos, account, "PodiumPass");
 
-        const committedTxn = await aptos.transaction.submit.simple({
-            transaction,
-            senderAuthenticator: signature,
-        });
+        if (!passCoinInitialized || !passInitialized) {
+            console.error("Module initialization check failed");
+            return false;
+        }
 
-        console.log(`Submitted initialization transaction: ${committedTxn.hash}`);
-        await aptos.waitForTransaction({ 
-            transactionHash: committedTxn.hash,
-            options: {
-                timeoutSecs: 30,
-                checkSuccess: true
-            }
-        });
-        console.log(`Initialized ${txn.function}`);
+        return true;
+    } catch (error) {
+        console.error("System validation error:", error);
+        return false;
     }
 }
 
@@ -453,6 +543,24 @@ async function upgradeModule(
     });
 
     console.log(`${moduleName} upgraded successfully!`);
+}
+
+// Add this helper function to check module deployment status
+async function isModuleDeployed(aptos: Aptos, account: Account, moduleName: string): Promise<boolean> {
+    try {
+        const moduleExists = await aptos.getAccountModule({
+            accountAddress: account.accountAddress,
+            moduleName: moduleName.replace('.move', '')  // Remove .move extension
+        });
+        return !!moduleExists;
+    } catch (error) {
+        return false;
+    }
+}
+
+// Add this helper function at the top level
+function toMoveAmount(amount: number): string {
+    return (amount * Math.pow(10, 8)).toString(); // 8 decimals for Movement network
 }
 
 try {

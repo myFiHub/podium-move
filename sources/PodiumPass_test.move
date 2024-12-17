@@ -29,10 +29,10 @@ module podium::PodiumPass_test {
     const ESUBSCRIPTION_NOT_FOUND: u64 = 6;  // Original error code for subscription not found
 
     // Test constants
-    const PASS_AMOUNT: u64 = 1;
-    const SUBSCRIPTION_WEEK_PRICE: u64 = 100;
-    const SUBSCRIPTION_MONTH_PRICE: u64 = 300;
-    const SUBSCRIPTION_YEAR_PRICE: u64 = 3000;
+    const PASS_AMOUNT: u64 = 100000000; // 1 pass (1 * 10^8)
+    const SUBSCRIPTION_WEEK_PRICE: u64 = 10000000000; // 100 MOVE (100 * 10^8)
+    const SUBSCRIPTION_MONTH_PRICE: u64 = 30000000000; // 300 MOVE (300 * 10^8)
+    const SUBSCRIPTION_YEAR_PRICE: u64 = 300000000000; // 3000 MOVE (3000 * 10^8)
 
     // Helper function to setup test environment
     fun setup_test(
@@ -65,10 +65,12 @@ module podium::PodiumPass_test {
         coin::register<AptosCoin>(user2);
         coin::register<AptosCoin>(target);
         
-        coin::deposit(signer::address_of(podium_signer), coin::mint<AptosCoin>(100000, &mint_cap));
-        coin::deposit(signer::address_of(user1), coin::mint<AptosCoin>(100000, &mint_cap));
-        coin::deposit(signer::address_of(user2), coin::mint<AptosCoin>(100000, &mint_cap));
-        coin::deposit(signer::address_of(target), coin::mint<AptosCoin>(100000, &mint_cap));
+        // Fund accounts with enough MOVE (considering 8 decimals and bonding curve)
+        let initial_balance = 10000000 * 100000000; // 10M MOVE
+        coin::deposit(signer::address_of(podium_signer), coin::mint<AptosCoin>(initial_balance, &mint_cap));
+        coin::deposit(signer::address_of(user1), coin::mint<AptosCoin>(initial_balance, &mint_cap));
+        coin::deposit(signer::address_of(user2), coin::mint<AptosCoin>(initial_balance, &mint_cap));
+        coin::deposit(signer::address_of(target), coin::mint<AptosCoin>(initial_balance, &mint_cap));
 
         // Initialize PodiumPassCoin first
         if (!PodiumPassCoin::is_initialized()) {
@@ -139,6 +141,11 @@ module podium::PodiumPass_test {
         PodiumPass::init_subscription_config(creator, outpost);
         debug::print(&string::utf8(b"=== Finished create_test_outpost ==="));
         outpost
+    }
+
+    // Helper function to convert whole units to decimals
+    fun to_decimals(amount: u64): u64 {
+        amount * 100000000 // 10^8
     }
 
     #[test(creator = @target, buyer = @user1)]

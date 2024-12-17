@@ -188,6 +188,20 @@ module podium::PodiumPass {
         version: u64
     }
 
+    /// Constants for scaling
+    const DECIMALS: u8 = 8;
+    const SCALING_FACTOR: u64 = 100000000; // 10^8
+
+    /// Helper function to scale down amount for calculations
+    fun scale_down(amount: u64): u64 {
+        amount / SCALING_FACTOR
+    }
+
+    /// Helper function to scale up result after calculations
+    fun scale_up(amount: u64): u64 {
+        amount * SCALING_FACTOR
+    }
+
     /// Helper function to get duration value
     public fun get_duration_week(): u64 { DURATION_WEEK }
     public fun get_duration_month(): u64 { DURATION_MONTH }
@@ -292,42 +306,36 @@ module podium::PodiumPass {
         };
     }
 
-    /// Calculate price based on bonding curve using summation formula
-    /// Matches Solidity implementation's logic
+    /// Calculate price using bonding curve
     fun calculate_price(supply: u64, amount: u64, _is_sell: bool): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
         
-        debug::print(&string::utf8(b"[price] Supply:"));
-        debug::print(&supply);
-        debug::print(&string::utf8(b"[price] Amount:"));
-        debug::print(&amount);
-        
-        // Add adjustment factor to supply
-        let adjusted_supply = supply + config.weight_c;
-        
-        if (adjusted_supply == 0) {
-            return INITIAL_PRICE
-        };
+        // Scale down for calculations
+        let scaled_supply = scale_down(supply);
+        let scaled_amount = scale_down(amount);
+        let adjusted_supply = scaled_supply + 1;
 
         // Calculate summation for current supply
         let n1 = adjusted_supply - 1;
         let sum1 = (n1 * adjusted_supply * (2 * n1 + 1)) / 6;
         
         // Calculate summation for supply + amount
-        let n2 = adjusted_supply - 1 + amount;
-        let final_supply = adjusted_supply + amount;
+        let n2 = adjusted_supply - 1 + scaled_amount;
+        let final_supply = adjusted_supply + scaled_amount;
         let sum2 = (n2 * final_supply * (2 * n2 + 1)) / 6;
         
         // Calculate price using weight factors
         let summation = config.weight_a * (sum2 - sum1);
         let price = (config.weight_b * summation * INITIAL_PRICE) / (1000000 * 1000000);
         
-        // Use initial price as floor
-        if (price < INITIAL_PRICE) {
+        // Scale up result and use initial price as floor
+        let scaled_price = scale_up(if (price < INITIAL_PRICE) {
             INITIAL_PRICE
         } else {
             price
-        }
+        });
+
+        scaled_price
     }
 
     /// Helper function to calculate total cost for buying passes
