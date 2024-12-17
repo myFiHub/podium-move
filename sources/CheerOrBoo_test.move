@@ -1,10 +1,10 @@
 #[test_only]
-module CheerOrBooV2::CheerOrBooV2_test {
+module podium::CheerOrBoo_test {
     use std::vector;
     use aptos_framework::account;
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
-    use CheerOrBooV2::CheerOrBooV2;
+    use podium::CheerOrBoo;
 
     const SENDER: address = @0x123;
     const TARGET: address = @0x456;
@@ -41,7 +41,7 @@ module CheerOrBooV2::CheerOrBooV2_test {
         let initial_p2_balance = coin::balance<AptosCoin>(PARTICIPANT2);
 
         // Send cheer with 1000 coins, 50% to target
-        CheerOrBooV2::cheer_or_boo(
+        CheerOrBoo::cheer_or_boo(
             &sender,
             TARGET,
             participants,
@@ -92,7 +92,7 @@ module CheerOrBooV2::CheerOrBooV2_test {
         let initial_p1_balance = coin::balance<AptosCoin>(PARTICIPANT1);
 
         // Send boo with 1000 coins, 30% to target
-        CheerOrBooV2::cheer_or_boo(
+        CheerOrBoo::cheer_or_boo(
             &sender,
             TARGET,
             participants,
@@ -136,7 +136,7 @@ module CheerOrBooV2::CheerOrBooV2_test {
         vector::push_back(&mut participants, PARTICIPANT1);
 
         // Try to send more than we have
-        CheerOrBooV2::cheer_or_boo(
+        CheerOrBoo::cheer_or_boo(
             &sender,
             TARGET,
             participants,

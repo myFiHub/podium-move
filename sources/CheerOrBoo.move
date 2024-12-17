@@ -1,4 +1,4 @@
-module CheerOrBooV2::CheerOrBooV2 {
+module podium::CheerOrBoo {
     use aptos_framework::aptos_account;
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;

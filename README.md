@@ -71,7 +71,7 @@ Fungible asset implementation for passes.
 - Transfer management
 - Mint/burn capabilities
 
-### 4. CheerOrBooV2
+### 4. CheerOrBoo
 A social tipping system that enables real-time audience feedback through financial incentives.
 
 **Key Features:**
@@ -219,7 +219,7 @@ During deployment, the system is initialized with:
 - `PodiumPass_test.move`: Core protocol tests
 - `PodiumOutpost_test.move`: Outpost management tests
 - `PodiumPassCoin_test.move`: Token implementation tests
-- `CheerOrBooV2_test.move`: Tipping system tests
+- `CheerOrBoo_test.move`: Tipping system tests
 
 ## Security Features
 

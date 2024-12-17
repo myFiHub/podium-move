@@ -2,25 +2,23 @@ import { Aptos, Account } from "@aptos-labs/ts-sdk";
 import * as fs from "fs";
 import * as yaml from "yaml";
 import * as path from "path";
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-import { MoveConfigManager } from './move_config.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { MoveConfigManager } from './move_config';
 
 // Constants
 export const MOVE_DECIMALS = 8;
 export const PASS_DECIMALS = 8;
 
+// Helper function to get project root path
+const getProjectRoot = () => process.cwd();
+
 // Read config.yaml for deployer address
-const config = yaml.parse(
-    fs.readFileSync(path.join(__dirname, '../.movement/config.yaml'), 'utf-8')
-);
+const configPath = path.join(getProjectRoot(), '.movement', 'config.yaml');
+const config = yaml.parse(fs.readFileSync(configPath, 'utf-8'));
 const deployerAddress = config.profiles.deployer.account;
 
 // Read Move.toml for FiHub address
-const moveToml = fs.readFileSync(path.join(__dirname, '../Move.toml'), 'utf-8');
+const moveTomlPath = path.join(getProjectRoot(), 'Move.toml');
+const moveToml = fs.readFileSync(moveTomlPath, 'utf-8');
 const fihubRegex = /fihub\s*=\s*"([^"]+)"/;
 
 export const CHEERORBOO_ADDRESS = deployerAddress;
@@ -30,7 +28,7 @@ export async function isContractDeployed(aptos: Aptos, address: string) {
     try {
         const moduleData = await aptos.getAccountModule({
             accountAddress: address,
-            moduleName: "CheerOrBooV2"
+            moduleName: "CheerOrBoo"
         });
         return moduleData !== null;
     } catch (error) {
@@ -61,34 +59,37 @@ export async function viewFunction(aptos: Aptos, params: {
 }
 
 export function getDeployerAddresses() {
-    const config = yaml.parse(
-        fs.readFileSync(path.join(__dirname, '../.movement/config.yaml'), 'utf-8')
-    );
-    const deployerAddress = config.profiles.deployer.account;
-
-    const moveConfig = new MoveConfigManager();
-    const currentAddresses = moveConfig.getAddresses();
-    
-    // Only update addresses that are placeholders ("_")
-    const updates: Record<string, string> = {};
-    for (const [key, value] of Object.entries(currentAddresses)) {
-        if (value === '_') {
-            updates[key] = deployerAddress;
+    try {
+        const configPath = path.join(getProjectRoot(), '.movement', 'config.yaml');
+        const config = yaml.parse(fs.readFileSync(configPath, 'utf-8'));
+        
+        // Use deployer profile by default
+        const deployerAddress = config.profiles.deployer?.account;
+        const fihubAddress = config.profiles.fihub?.account;
+        
+        if (!deployerAddress || !fihubAddress) {
+            throw new Error('Required addresses not found in config.yaml');
         }
-    }
 
-    if (Object.keys(updates).length > 0) {
+        const moveConfig = new MoveConfigManager();
+        const updates: Record<string, string> = {
+            podium: deployerAddress,
+            fihub: fihubAddress
+        };
+
+        console.log('Updating addresses:', updates);
         moveConfig.backup();
-        moveConfig.updateAddresses(updates);
+        moveConfig.updateAddresses(updates, true);
+        
+        return {
+            deployerAddress,
+            podiumAddress: deployerAddress,
+            fihubAddress
+        };
+    } catch (error) {
+        console.error('Error getting deployer addresses:', error);
+        throw error;
     }
-    
-    return {
-        deployerAddress,
-        podiumAddress: currentAddresses.podium,
-        adminAddress: currentAddresses.admin,
-        treasuryAddress: currentAddresses.treasury,
-        passcoinAddress: currentAddresses.passcoin
-    };
 }
 
 export async function verifyDecimals(aptos: Aptos, account: Account): Promise<boolean> {
@@ -219,7 +220,8 @@ export async function validateSystemState(aptos: Aptos, account: Account): Promi
 
 export function validateAddresses(account: Account): { success: boolean; mismatches: string[] } {
     try {
-        const moveToml = fs.readFileSync(path.join(__dirname, '../Move.toml'), 'utf8');
+        const moveTomlPath = path.join(getProjectRoot(), 'Move.toml');
+        const moveToml = fs.readFileSync(moveTomlPath, 'utf8');
         const accountAddress = account.accountAddress.toString();
         
         // When using --dev flag, we validate against dev-addresses
@@ -281,4 +283,14 @@ export async function isModuleDeployed(aptos: Aptos, account: Account, moduleNam
         console.error(`Error checking module deployment:`, error);
         return false;
     }
+}
+
+export async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function saveDeploymentData(data: any) {
+  const deploymentPath = `deployments/${data.network}.json`;
+  fs.writeFileSync(deploymentPath, JSON.stringify(data, null, 2));
+  console.log(`Deployment data saved to ${deploymentPath}`);
 }
