@@ -6,10 +6,16 @@ authors = ["FiHub"]
 [addresses]
 podium = "_"
 fihub = "_"
+user1 = "_"
+user2 = "_"
+target = "_"
 
 [dev-addresses]
 podium = "a76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
 fihub = "927d3b626f01d6a9b2ef25e706086bd8fb1633cf0898e24fcabd6ea95c360f0b"
+user1 = "0x123"
+user2 = "0x234"
+target = "0x345"
 
 [dependencies]
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework/", rev = "mainnet" }

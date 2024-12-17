@@ -532,7 +532,7 @@ module podium::PodiumPass_test {
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @0x456, user2 = @0x789, target = @target)]
-    #[expected_failure(abort_code = ESUBSCRIPTION_ALREADY_EXISTS, location = 0x456::PodiumPass)]
+    #[expected_failure(abort_code = ESUBSCRIPTION_ALREADY_EXISTS, location = podium::PodiumPass)]
     public fun test_duplicate_subscription(
         aptos_framework: &signer,
         podium_signer: &signer,
@@ -570,7 +570,7 @@ module podium::PodiumPass_test {
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @0x456, user2 = @0x789, target = @target)]
-    #[expected_failure(abort_code = ETIER_EXISTS, location = 0x456::PodiumPass)]
+    #[expected_failure(abort_code = ETIER_EXISTS, location = podium::PodiumPass)]
     public fun test_duplicate_tier_creation(
         aptos_framework: &signer,
         podium_signer: &signer,
@@ -601,7 +601,7 @@ module podium::PodiumPass_test {
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @0x456, user2 = @0x789, target = @target)]
-    #[expected_failure(abort_code = EINVALID_SUBSCRIPTION_TIER, location = 0x456::PodiumPass)]
+    #[expected_failure(abort_code = EINVALID_SUBSCRIPTION_TIER, location = podium::PodiumPass)]
     public fun test_subscribe_nonexistent_tier(
         aptos_framework: &signer,
         podium_signer: &signer,
