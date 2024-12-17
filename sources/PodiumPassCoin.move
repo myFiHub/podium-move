@@ -1,5 +1,7 @@
 module podium::PodiumPassCoin {
     friend podium::PodiumPass;
+    // Remove friend relationship for now
+    // friend podium::PodiumPassCoin_test;
 
     use std::error;
     use std::signer;
@@ -60,10 +62,20 @@ module podium::PodiumPassCoin {
         exists<AssetCapabilities>(@podium)
     }
 
-    /// Initializes the PodiumPassCoin module
-    /// Creates the central storage for managing all pass types
-    /// @param admin: The signer of the module creator (podium address)
-    public fun init_module_for_test(admin: &signer) {
+    /// Internal initialization function - must be private
+    fun init_module(admin: &signer) {
+        move_to(admin, AssetCapabilities {
+            mint_refs: table::new(),
+            burn_refs: table::new(),
+            transfer_refs: table::new(),
+            metadata_objects: table::new(),
+        });
+    }
+
+    /// Public initialization function for testing
+    #[test_only]
+    public fun initialize_for_test(admin: &signer) {
+        /// Public initialization function for testing
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
         
         if (!exists<AssetCapabilities>(@podium)) {
@@ -74,16 +86,6 @@ module podium::PodiumPassCoin {
                 metadata_objects: table::new(),
             });
         }
-    }
-
-    /// Internal initialization function
-    fun init_module(admin: &signer) {
-        move_to(admin, AssetCapabilities {
-            mint_refs: table::new(),
-            burn_refs: table::new(),
-            transfer_refs: table::new(),
-            metadata_objects: table::new(),
-        });
     }
 
     /// Creates a new target asset type
@@ -104,6 +106,18 @@ module podium::PodiumPassCoin {
 
         create_asset(creator, asset_symbol, name, icon_uri, project_uri);
         debug::print(&string::utf8(b"Asset created successfully"));
+    }
+
+    /// Test version of create_target_asset
+    #[test_only]
+    public fun create_target_asset_test(
+        creator: &signer,
+        target_id: String,
+        name: String,
+        icon_uri: String,
+        project_uri: String,
+    ) acquires AssetCapabilities {
+        create_target_asset(creator, target_id, name, icon_uri, project_uri)
     }
 
     /// Creates a new fungible asset type for an outpost
@@ -289,37 +303,10 @@ module podium::PodiumPassCoin {
         };
     }
 
-    #[test_only]
-    public fun mint_for_test(
-        admin: &signer,
-        asset_symbol: String,
-        amount: u64,
-    ): FungibleAsset acquires AssetCapabilities {
-        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_AUTHORIZED));
-        assert!(amount > 0, error::invalid_argument(EZERO_AMOUNT));
-        
-        let caps = borrow_global<AssetCapabilities>(@podium);
-        assert!(table::contains(&caps.mint_refs, asset_symbol), error::not_found(EASSET_DOES_NOT_EXIST));
-        
-        let mint_ref = table::borrow(&caps.mint_refs, asset_symbol);
-        fungible_asset::mint(mint_ref, amount)
-    }
-
     /// Check if an asset type exists
     public fun asset_exists(asset_symbol: String): bool acquires AssetCapabilities {
         let caps = borrow_global<AssetCapabilities>(@podium);
         table::contains(&caps.mint_refs, asset_symbol)
-    }
-
-    #[test_only]
-    public fun create_target_asset_for_test(
-        creator: &signer,
-        target_id: String,
-        name: String,
-        icon_uri: String,
-        project_uri: String,
-    ) acquires AssetCapabilities {
-        create_target_asset(creator, target_id, name, icon_uri, project_uri)
     }
 
     /// Get the metadata object address for a given asset symbol
@@ -329,5 +316,21 @@ module podium::PodiumPassCoin {
         
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
         object::object_address(metadata)
+    }
+
+    /// Check if the module is initialized
+    public fun is_initialized(): bool {
+        exists<AssetCapabilities>(@podium)
+    }
+
+    /// Add a production version that is friend-only
+    public(friend) fun create_target_asset_internal(
+        creator: &signer,
+        target_id: String,
+        name: String,
+        icon_uri: String,
+        project_uri: String,
+    ) acquires AssetCapabilities {
+        create_target_asset(creator, target_id, name, icon_uri, project_uri)
     }
 } 

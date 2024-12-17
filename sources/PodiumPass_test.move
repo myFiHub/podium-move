@@ -13,6 +13,7 @@ module podium::PodiumPass_test {
     use podium::PodiumPassCoin;
     use podium::PodiumOutpost::{Self, OutpostData};
     use aptos_token_objects::collection;
+    use podium::PodiumPassCoin_test;
 
     // Test addresses - with clear roles
     const TREASURY: address = @podium;
@@ -41,9 +42,14 @@ module podium::PodiumPass_test {
         user2: &signer,
         target: &signer,
     ) {
+        debug::print(&string::utf8(b"[setup_test] Starting setup"));
+        debug::print(&string::utf8(b"[setup_test] Podium signer address:"));
+        debug::print(&signer::address_of(podium_signer));
+
         // Create test accounts
         account::create_account_for_test(@0x1);
-        account::create_account_for_test(@podium);
+        assert!(signer::address_of(podium_signer) == @podium, 0);
+        account::create_account_for_test(signer::address_of(podium_signer));
         account::create_account_for_test(signer::address_of(user1));
         account::create_account_for_test(signer::address_of(user2));
         account::create_account_for_test(signer::address_of(target));
@@ -52,7 +58,9 @@ module podium::PodiumPass_test {
         let (burn_cap, mint_cap) = aptos_framework::aptos_coin::initialize_for_test(aptos_framework);
         
         // Register and fund accounts
-        coin::register<AptosCoin>(podium_signer);
+        if (!coin::is_account_registered<AptosCoin>(signer::address_of(podium_signer))) {
+            coin::register<AptosCoin>(podium_signer);
+        };
         coin::register<AptosCoin>(user1);
         coin::register<AptosCoin>(user2);
         coin::register<AptosCoin>(target);
@@ -62,9 +70,15 @@ module podium::PodiumPass_test {
         coin::deposit(signer::address_of(user2), coin::mint<AptosCoin>(100000, &mint_cap));
         coin::deposit(signer::address_of(target), coin::mint<AptosCoin>(100000, &mint_cap));
 
-        // Initialize modules in correct order
-        PodiumPass::initialize(podium_signer);
-        PodiumPassCoin::init_module_for_test(podium_signer);
+        // Initialize PodiumPassCoin first
+        if (!PodiumPassCoin::is_initialized()) {
+            PodiumPassCoin::initialize_for_test(podium_signer);
+        };
+
+        // Initialize PodiumPass
+        if (!PodiumPass::is_initialized()) {
+            PodiumPass::initialize(podium_signer);
+        };
 
         // Initialize outpost collection
         PodiumOutpost::init_collection(podium_signer);
@@ -673,7 +687,9 @@ module podium::PodiumPass_test {
     #[test_only]
     public fun create_test_asset(creator: &signer, asset_symbol: String) {
         let podium_signer = account::create_signer_for_test(@podium);
-        PodiumPassCoin::create_target_asset_for_test(
+
+        // Create test asset through test module
+        PodiumPassCoin_test::create_test_asset(
             creator,
             asset_symbol,
             string::utf8(b"Test Pass"),

@@ -145,22 +145,26 @@ async function initializePodiumSystem(aptos: Aptos, account: Account, isDryRun =
             arguments: [],
             typeArguments: []
         },
-        // Set initial outpost price
         {
             function: `${account.accountAddress.toString()}::PodiumOutpost::update_outpost_price`,
-            arguments: ["1000"], // 1000 APT initial price
+            arguments: ["1000"],
             typeArguments: []
         },
-        // Initialize PodiumPassCoin
+        // Initialize PodiumPassCoin properly
         {
-            function: `${account.accountAddress.toString()}::PodiumPassCoin::init_module_for_test`,
+            function: `${account.accountAddress.toString()}::PodiumPassCoin::init_module`,
             arguments: [],
             typeArguments: []
         },
-        // Initialize PodiumPass with default parameters
+        // Initialize PodiumPass with proper parameters
         {
             function: `${account.accountAddress.toString()}::PodiumPass::initialize`,
-            arguments: [],
+            arguments: [
+                account.accountAddress, // treasury
+                4,  // protocol fee percent
+                8,  // subject fee percent
+                2   // referral fee percent
+            ],
             typeArguments: []
         }
     ];

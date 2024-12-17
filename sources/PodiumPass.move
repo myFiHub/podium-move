@@ -895,5 +895,10 @@ module podium::PodiumPass {
     public fun get_vault_balance(): u64 acquires RedemptionVault {
         coin::value(&borrow_global<RedemptionVault>(@podium).coins)
     }
+
+    /// Check if the module is initialized
+    public fun is_initialized(): bool {
+        exists<Config>(@podium)
+    }
 }
    
