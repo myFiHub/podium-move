@@ -520,8 +520,11 @@ module podium::PodiumProtocol {
     /// Calculate price using bonding curve
     fun calculate_price(supply: u64, amount: u64, _is_sell: bool): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
-        let adjusted_supply = scale_down(supply);
+        
+        // Scale down for calculations
+        let scaled_supply = if (supply == 0) { 1 } else { scale_down(supply) };
         let scaled_amount = scale_down(amount);
+        let adjusted_supply = scaled_supply;
 
         // Calculate summation for current supply
         let n1 = adjusted_supply - 1;
@@ -1249,5 +1252,10 @@ module podium::PodiumProtocol {
         table::add(&mut caps.burn_refs, asset_symbol, burn_ref);
         table::add(&mut caps.transfer_refs, asset_symbol, transfer_ref);
         table::add(&mut caps.metadata_objects, asset_symbol, metadata);
+    }
+
+    /// Check if the protocol is initialized
+    public fun is_initialized(): bool {
+        exists<Config>(@podium)
     }
 }

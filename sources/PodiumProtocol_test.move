@@ -44,7 +44,7 @@ module podium::PodiumProtocol_test {
     ) {
         debug::print(&string::utf8(b"[setup_test] Starting setup"));
         
-        // Create test accounts
+        // Create test accounts with proper initialization
         account::create_account_for_test(@0x1);
         assert!(signer::address_of(podium_signer) == @podium, 0);
         account::create_account_for_test(signer::address_of(podium_signer));
@@ -68,8 +68,10 @@ module podium::PodiumProtocol_test {
         coin::deposit(signer::address_of(user2), coin::mint<AptosCoin>(initial_balance, &mint_cap));
         coin::deposit(signer::address_of(target), coin::mint<AptosCoin>(initial_balance, &mint_cap));
 
-        // Initialize protocol
-        PodiumProtocol::initialize(podium_signer);
+        // Initialize protocol if not already initialized
+        if (!PodiumProtocol::is_initialized()) {
+            PodiumProtocol::initialize(podium_signer);
+        };
 
         // Set timestamp for testing
         timestamp::set_time_has_started_for_testing(aptos_framework);
@@ -90,16 +92,12 @@ module podium::PodiumProtocol_test {
         let name = string::utf8(b"Test Outpost");
         
         // Create outpost
-        PodiumProtocol::create_outpost(
+        let outpost = PodiumProtocol::create_outpost_internal(
             creator,
             name,
             string::utf8(b"Test Description"),
             string::utf8(b"https://test.uri"),
         );
-
-        // Get outpost object from expected address
-        let expected_addr = get_expected_outpost_address(creator_addr, name);
-        let outpost = object::address_to_object<OutpostData>(expected_addr);
 
         // Initialize subscription config
         PodiumProtocol::init_subscription_config(creator, outpost);
@@ -111,7 +109,7 @@ module podium::PodiumProtocol_test {
     // Helper function to get expected outpost address
     fun get_expected_outpost_address(creator: address, name: String): address {
         let collection_name = PodiumProtocol::get_collection_name();
-        let seed = *string::bytes(&name);
+        let seed = token::create_token_seed(&collection_name, &name);
         object::create_object_address(&creator, seed)
     }
 
@@ -248,53 +246,53 @@ module podium::PodiumProtocol_test {
         assert!(coin::balance<AptosCoin>(signer::address_of(user1)) > initial_apt_balance, 2);
     }
 
-    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1)]
-    #[expected_failure(abort_code = ETIER_EXISTS)]
-    public fun test_duplicate_tier_creation(
-        aptos_framework: &signer,
-        podium_signer: &signer,
-        creator: &signer,
-        user1: &signer,
-    ) {
-        setup_test(aptos_framework, podium_signer, user1, user1, creator);
-        let outpost = create_test_outpost(creator);
-
-        // Create tier twice with same name
-        PodiumProtocol::create_subscription_tier(
-            creator,
-            outpost,
-            string::utf8(b"basic"),
-            SUBSCRIPTION_WEEK_PRICE,
-            1,
-        );
-
-        PodiumProtocol::create_subscription_tier(
-            creator,
-            outpost,
-            string::utf8(b"basic"),
-            SUBSCRIPTION_MONTH_PRICE,
-            2,
-        );
-    }
-
-    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1)]
-    #[expected_failure(abort_code = ENOT_OWNER)]
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, unauthorized_user = @user1)]
+    #[expected_failure(abort_code = 327695)]
     public fun test_unauthorized_tier_creation(
         aptos_framework: &signer,
         podium_signer: &signer,
         creator: &signer,
-        user1: &signer,
+        unauthorized_user: &signer,
     ) {
-        setup_test(aptos_framework, podium_signer, user1, user1, creator);
+        setup_test(aptos_framework, podium_signer, creator, unauthorized_user, creator);
         let outpost = create_test_outpost(creator);
-
-        // Try to create tier as non-owner
+        
+        // Try to create tier with unauthorized user
         PodiumProtocol::create_subscription_tier(
-            user1,
+            unauthorized_user,
             outpost,
             string::utf8(b"basic"),
             SUBSCRIPTION_WEEK_PRICE,
-            1,
+            1, // DURATION_WEEK
+        );
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1)]
+    #[expected_failure(abort_code = 524296)]
+    public fun test_duplicate_tier_creation(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, podium_signer, creator, creator, creator);
+        let outpost = create_test_outpost(creator);
+        
+        // Create first tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            1, // DURATION_WEEK
+        );
+        
+        // Try to create duplicate tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            1, // DURATION_WEEK
         );
     }
 
@@ -368,6 +366,9 @@ module podium::PodiumProtocol_test {
 
     #[test(creator = @podium)]
     fun test_create_target_asset(creator: &signer) {
+        // Create account first
+        account::create_account_for_test(@podium);
+        
         // Initialize the protocol
         PodiumProtocol::initialize(creator);
 
