@@ -134,7 +134,7 @@ export async function verifyPermissions(aptos: Aptos, account: Account): Promise
             }
         });
 
-        return isAdmin[0] && treasury[0] === account.accountAddress;
+        return (isAdmin[0] ?? false) && (treasury[0] ?? '') === account.accountAddress;
     } catch (error) {
         console.error("Permission verification failed:", error);
         return false;
@@ -208,26 +208,43 @@ export async function validateSystemState(aptos: Aptos, account: Account): Promi
     }
 }
 
-export function validateAddresses(account: Account): {
-    success: boolean;
-    mismatches: string[];
-} {
-    const requiredAddresses = ['podium', 'admin', 'treasury', 'passcoin'];
-    const moveToml = fs.readFileSync(path.join(__dirname, '../Move.toml'), 'utf8');
-    const mismatches: string[] = [];
-    
-    for (const addr of requiredAddresses) {
-        const regex = new RegExp(`${addr}\\s*=\\s*"([^"]+)"`, 'g');
-        const match = regex.exec(moveToml);
-        if (!match || match[1] !== account.accountAddress.toString()) {
-            mismatches.push(addr);
+export function validateAddresses(account: Account): { success: boolean; mismatches: string[] } {
+    try {
+        const moveToml = fs.readFileSync(path.join(__dirname, '../Move.toml'), 'utf8');
+        const addresses = {
+            podium: account.accountAddress.toString(),
+            admin: account.accountAddress.toString(),
+            treasury: account.accountAddress.toString(),
+            passcoin: account.accountAddress.toString()
+        };
+
+        const mismatches: string[] = [];
+        for (const [key, value] of Object.entries(addresses)) {
+            const pattern = new RegExp(`${key}\\s*=\\s*"([^"]+)"`, 'i');
+            const match = moveToml.match(pattern);
+            
+            if (!match || match[1] !== value) {
+                mismatches.push(key);
+            }
         }
+
+        return {
+            success: mismatches.length === 0,
+            mismatches
+        };
+    } catch (error) {
+        console.error('Error validating addresses:', error);
+        return {
+            success: false,
+            mismatches: ['Error reading Move.toml']
+        };
     }
-    
-    return {
-        success: mismatches.length === 0,
-        mismatches
-    };
+}
+
+export function formatAddress(address: string): string {
+    // Remove '0x' prefix if present and ensure 64 characters
+    const cleanAddress = address.startsWith('0x') ? address.slice(2) : address;
+    return '0x' + cleanAddress.padStart(64, '0');
 }
 
 export function toMoveAmount(amount: number): string {

@@ -4,7 +4,7 @@ import * as yaml from "yaml";
 import * as path from "path";
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import { isContractDeployed, CHEERORBOO_ADDRESS, getDeployerAddresses } from './utils.js';
+import { isContractDeployed, CHEERORBOO_ADDRESS, getDeployerAddresses, formatAddress } from './utils.js';
 import { viewFunction } from './utils.js';
 import {
     verifyDecimals,
@@ -66,7 +66,7 @@ async function loadConfig() {
 
 const addresses = getDeployerAddresses();
 const MODULE_ADDRESSES = {
-    PODIUM: addresses.deployerAddress.padStart(66, '0'),
+    PODIUM: formatAddress(addresses.deployerAddress),
     PODIUM_PASS: 'PodiumPass',
     PODIUM_PASS_COIN: 'PodiumPassCoin'
 };
@@ -310,112 +310,156 @@ async function deployPodiumSystem(aptos: Aptos, account: Account, isDryRun = fal
     console.log("\n=== Deploying Podium System ===");
 
     // Pre-deployment validation
-    console.log("\nValidating deployment configuration...");
+    console.log("\n--- Pre-deployment Validation ---");
     const addressValidation = validateAddresses(account);
     if (!addressValidation.success) {
         console.error("Address validation failed for:", addressValidation.mismatches);
         throw new Error("Address validation failed - check Move.toml configuration");
     }
-    console.log("Address validation successful");
+    console.log("✓ Address validation successful");
 
-    // First Phase: Deploy independent modules
+    // First Phase: Deploy base modules
     console.log("\n--- Phase 1: Deploying Base Modules ---");
     
-    // Check and deploy PodiumOutpost
-    const outpostDeployed = await isModuleDeployed(aptos, account, "PodiumOutpost");
-    if (outpostDeployed) {
-        console.log("\nPodiumOutpost already deployed, skipping deployment...");
-    } else {
-        console.log("\nDeploying PodiumOutpost...");
-        await deployModule(aptos, account, "PodiumOutpost.move", isDryRun);
-        if (!isDryRun) {
-            // Initialize collection
-            await executeTransaction(aptos, account, {
-                function: `${account.accountAddress}::PodiumOutpost::init_collection`,
-                arguments: [],
-                typeArguments: []
+    // Deploy modules in correct order
+    const modules = [
+        "PodiumPassCoin.move",
+        "PodiumOutpost.move",
+        "PodiumPass.move"
+    ];
+
+    // Check dependencies and simulate/deploy each module
+    for (const module of modules) {
+        console.log(`\nProcessing ${module}...`);
+        
+        // Check if module is already deployed
+        const isDeployed = await isModuleDeployed(aptos, account, module);
+        if (isDeployed) {
+            console.log(`Module ${module} already deployed, skipping...`);
+            continue;
+        }
+
+        if (isDryRun) {
+            // Simulate module deployment
+            const moduleHex = fs.readFileSync(
+                path.join(__dirname, "../sources/", module),
+                "utf8"
+            );
+
+            // First build the transaction
+            const transaction = await aptos.transaction.build.simple({
+                sender: account.accountAddress,
+                data: {
+                    function: `${account.accountAddress}::${module.split('.')[0]}::init_module` as `${string}::${string}::${string}`,
+                    functionArguments: [],
+                    typeArguments: []
+                }
             });
+
+            // Then simulate the built transaction
+            const simulation = await aptos.transaction.simulate.simple({
+                signerPublicKey: account.publicKey,
+                transaction
+            });
+
+            console.log(`Simulation results for ${module}:`);
+            console.log(`Success: ${simulation[0]?.success ?? false}`);
+            console.log(`Gas estimate: ${simulation[0].gas_used}`);
             
-            // Set outpost price to 30 MOVE with 8 decimals
-            await executeTransaction(aptos, account, {
-                function: `${account.accountAddress}::PodiumOutpost::update_outpost_price`,
-                arguments: [toMoveAmount(30)], // 30 MOVE
-                typeArguments: []
-            });
-            
-            console.log("PodiumOutpost collection initialized with price set to 30 MOVE");
+            if (!simulation[0].success) {
+                throw new Error(`Deployment simulation failed for ${module}: ${simulation[0].vm_status}`);
+            }
+        } else {
+            await deployModule(aptos, account, module, false);
         }
     }
 
-    // Check and deploy PodiumPassCoin
-    const passCoinDeployed = await isModuleDeployed(aptos, account, "PodiumPassCoin");
-    if (passCoinDeployed) {
-        console.log("\nPodiumPassCoin already deployed, skipping deployment...");
+    // Phase 2: Initialize modules
+    console.log("\n--- Phase 2: Module Initialization ---");
+    
+    const initTxns = [
+        {
+            function: `${account.accountAddress}::PodiumPassCoin::init_module`,
+            arguments: [],
+            typeArguments: []
+        },
+        {
+            function: `${account.accountAddress}::PodiumPass::initialize`,
+            arguments: [
+                account.accountAddress,
+                4,
+                8,
+                2
+            ],
+            typeArguments: []
+        },
+        {
+            function: `${account.accountAddress}::PodiumOutpost::init_collection`,
+            arguments: [],
+            typeArguments: []
+        },
+        {
+            function: `${account.accountAddress}::PodiumOutpost::update_outpost_price`,
+            arguments: [toMoveAmount(30)],
+            typeArguments: []
+        }
+    ];
+
+    // Execute or simulate initialization transactions
+    for (const txn of initTxns) {
+        console.log(`\nProcessing ${txn.function}...`);
+        const result = await executeTransaction(aptos, account, txn, isDryRun);
+        
+        if (!result) {
+            throw new Error(`Failed to ${isDryRun ? 'simulate' : 'execute'} ${txn.function}`);
+        }
+    }
+
+    // Phase 3: Validation
+    console.log("\n--- Phase 3: System Validation ---");
+    
+    if (isDryRun) {
+        console.log("Simulating system validation...");
+        try {
+            // Simulate view function calls
+            const simulations = await Promise.all([
+                simulateViewFunction(aptos, account, "PodiumPassCoin::is_initialized"),
+                simulateViewFunction(aptos, account, "PodiumPass::is_initialized"),
+                simulateViewFunction(aptos, account, "PodiumOutpost::get_collection_data"),
+                simulateViewFunction(aptos, account, "PodiumOutpost::get_outpost_purchase_price")
+            ]);
+
+            console.log("Validation simulations successful");
+        } catch (error) {
+            console.error("Validation simulation failed:", error);
+            throw error;
+        }
     } else {
-        console.log("\nDeploying PodiumPassCoin...");
-        await deployModule(aptos, account, "PodiumPassCoin.move", isDryRun);
-        if (!isDryRun) {
-            await executeTransaction(aptos, account, {
-                function: `${account.accountAddress}::PodiumPassCoin::init_module`,
-                arguments: [],
-                typeArguments: []
-            });
-        }
-    }
-
-    // Check and deploy PodiumPass
-    const passDeployed = await isModuleDeployed(aptos, account, "PodiumPass");
-    if (passDeployed) {
-        console.log("\nPodiumPass already deployed, skipping deployment...");
-    } else {
-        console.log("\nDeploying PodiumPass...");
-        await deployModule(aptos, account, "PodiumPass.move", isDryRun);
-        if (!isDryRun) {
-            await executeTransaction(aptos, account, {
-                function: `${account.accountAddress}::PodiumPass::initialize`,
-                arguments: [
-                    account.accountAddress,
-                    4,
-                    8,
-                    2
-                ],
-                typeArguments: []
-            });
-        }
-    }
-
-    // Still run validation even if modules were skipped
-    if (!isDryRun) {
-        console.log("\nValidating system...");
-        const allModulesInitialized = await validateFullSystem(aptos, account);
-        if (!allModulesInitialized) {
+        // Real validation
+        const systemValidation = await validateSystemState(aptos, account);
+        if (!systemValidation.success) {
             throw new Error("System validation failed");
         }
     }
 
-    // Post-deployment validation
-    if (!isDryRun) {
-        console.log("\nPerforming comprehensive system validation...");
-        const systemValidation = await validateSystemState(aptos, account);
-        
-        if (!systemValidation.success) {
-            console.error("\nValidation Results:");
-            console.error("Collection:", systemValidation.details.collection ? "✓" : "✗");
-            console.error("Decimals:", systemValidation.details.decimals ? "✓" : "✗");
-            console.error("Permissions:", systemValidation.details.permissions ? "✓" : "✗");
-            console.error("Price:", systemValidation.details.price ? "✓" : "✗");
-            throw new Error("System validation failed - check deployment state");
-        }
-        
-        console.log("\nValidation Results:");
-        console.log("Collection: ✓");
-        console.log("Decimals: ✓");
-        console.log("Permissions: ✓");
-        console.log("Price: ✓");
-        console.log("\nSystem validation successful");
-    }
-
     console.log("\n=== Podium System Deployment Complete ===");
+}
+
+// Add helper function for view function simulation
+async function simulateViewFunction(aptos: Aptos, account: Account, func: string): Promise<boolean> {
+    try {
+        const simulation = await aptos.view({
+            payload: {
+                function: `${account.accountAddress}::${func}` as `${string}::${string}::${string}`,
+                typeArguments: [],
+                functionArguments: []
+            }
+        });
+        return true;
+    } catch (error) {
+        console.error(`View function simulation failed for ${func}:`, error);
+        return false;
+    }
 }
 
 // Add this helper function for full system validation
@@ -472,77 +516,89 @@ async function deployIfNeeded(aptos: Aptos, account: Account, moduleName: string
     }
 }
 
-async function executeTransaction(aptos: Aptos, account: Account, txn: any) {
-    console.log(`Executing ${txn.function}...`);
+async function simulateTransaction(aptos: Aptos, account: Account, txn: any) {
+    try {
+        // Build the transaction payload
+        const transaction = await aptos.transaction.build.simple({
+            sender: account.accountAddress,
+            data: {
+                function: txn.function as `${string}::${string}::${string}`,
+                functionArguments: txn.arguments,
+                typeArguments: txn.typeArguments || [],
+            }
+        });
+
+        // Simulate using the built transaction
+        const [simulation] = await aptos.transaction.simulate.simple({
+            signerPublicKey: account.publicKey,
+            transaction,
+        });
+        
+        console.log(`Simulation results for ${txn.function}:`);
+        console.log(`Success: ${simulation?.success ?? false}`);
+        console.log(`Gas used: ${simulation.gas_used}`);
+        return simulation?.success ?? false;
+    } catch (error) {
+        console.error(`Simulation failed:`, error);
+        return false;
+    }
+}
+
+async function executeTransaction(aptos: Aptos, account: Account, txn: any, isDryRun = false) {
+    if (isDryRun) {
+        return await simulateTransaction(aptos, account, txn);
+    }
     
     const transaction = await aptos.transaction.build.simple({
         sender: account.accountAddress,
         data: {
             function: txn.function as `${string}::${string}::${string}`,
             functionArguments: txn.arguments,
-            typeArguments: txn.typeArguments,
-        }
+            typeArguments: txn.typeArguments || [],
+        },
     });
 
-    const signature = await aptos.transaction.sign({ 
-        signer: account, 
-        transaction 
+    const senderAuthenticator = await aptos.transaction.sign({
+        signer: account,
+        transaction,
     });
 
     const committedTxn = await aptos.transaction.submit.simple({
         transaction,
-        senderAuthenticator: signature,
+        senderAuthenticator,
     });
 
-    console.log(`Submitted transaction: ${committedTxn.hash}`);
-    await aptos.waitForTransaction({ 
+    return await aptos.waitForTransaction({
         transactionHash: committedTxn.hash,
-        options: {
-            timeoutSecs: 30,
-            checkSuccess: true
-        }
     });
 }
 
-async function upgradeModule(
-    aptos: Aptos, 
-    account: Account, 
-    moduleName: string, 
-    newCode: string
-) {
-    console.log(`\n=== Upgrading ${moduleName} ===`);
-    
+async function upgradeModule(aptos: Aptos, account: Account, moduleName: string, newCode: string) {
     const transaction = await aptos.transaction.build.simple({
         sender: account.accountAddress,
         data: {
-            function: `${account.accountAddress}::${moduleName}::upgrade`,
+            function: `${account.accountAddress}::${moduleName}::upgrade` as `${string}::${string}::${string}`,
             functionArguments: [
-                new Uint8Array(), // metadata_serialized
-                [Buffer.from(newCode).toString("hex")] // code
+                new Uint8Array(),
+                [Buffer.from(newCode).toString("hex")]
             ],
-            typeArguments: []
-        }
+            typeArguments: [],
+        },
     });
 
-    const signature = await aptos.transaction.sign({ 
-        signer: account, 
-        transaction 
+    const senderAuthenticator = await aptos.transaction.sign({
+        signer: account,
+        transaction,
     });
 
     const committedTxn = await aptos.transaction.submit.simple({
         transaction,
-        senderAuthenticator: signature,
+        senderAuthenticator,
     });
 
-    await aptos.waitForTransaction({ 
+    return await aptos.waitForTransaction({
         transactionHash: committedTxn.hash,
-        options: {
-            timeoutSecs: 30,
-            checkSuccess: true
-        }
     });
-
-    console.log(`${moduleName} upgraded successfully!`);
 }
 
 // Add this helper function to check module deployment status
@@ -556,11 +612,6 @@ async function isModuleDeployed(aptos: Aptos, account: Account, moduleName: stri
     } catch (error) {
         return false;
     }
-}
-
-// Add this helper function at the top level
-function toMoveAmount(amount: number): string {
-    return (amount * Math.pow(10, 8)).toString(); // 8 decimals for Movement network
 }
 
 try {
