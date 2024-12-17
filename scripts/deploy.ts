@@ -590,10 +590,21 @@ function handleMoveAbort(error: any) {
 }
 
 async function verifyAccountBalance(aptos: Aptos, account: Account) {
-    const balance = await aptos.getAccountBalance(account.accountAddress);
-    const minRequired = 100_000_000; // 1 APT
-    if (Number(balance) < minRequired) {
-        throw new Error(`Insufficient balance. Required: ${minRequired}, Found: ${balance}`);
+    try {
+        const resource = await aptos.getAccountResource({
+            accountAddress: account.accountAddress,
+            resourceType: "0x1::coin::CoinStore<0x1::aptos_coin::AptosCoin>"
+        });
+        
+        const balance = (resource.data as any).coin.value;
+        const minRequired = 100_000_000; // 1 APT
+        
+        if (Number(balance) < minRequired) {
+            throw new Error(`Insufficient balance. Required: ${minRequired}, Found: ${balance}`);
+        }
+    } catch (error) {
+        console.error('Failed to verify account balance:', error);
+        throw error;
     }
 }
 
@@ -629,13 +640,17 @@ async function getModuleState(aptos: Aptos, account: Account, moduleName: string
     }
 }
 
-try {
-    await main();
-} catch (error) {
-    console.error("\n=== Unhandled Error ===");
-    console.error("An unexpected error occurred:");
-    console.error(error);
-    process.exit(1);
+async function runMain() {
+    try {
+        await main();
+    } catch (error) {
+        console.error("\n=== Unhandled Error ===");
+        console.error("An unexpected error occurred:");
+        console.error(error);
+        process.exit(1);
+    }
 }
+
+runMain();
 
 export { main };
