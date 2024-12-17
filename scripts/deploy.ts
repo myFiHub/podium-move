@@ -202,16 +202,21 @@ function shouldDeployFile(file: string): boolean {
 }
 
 async function deployModule(aptos: Aptos, account: Account, moduleName: string, isDryRun = false) {
+    console.log(`\n=== Deployment Details ===`);
+    console.log(`Module: ${moduleName}`);
+    console.log(`Deployer Address: ${account.accountAddress}`);
+    console.log(`Mode: ${isDryRun ? 'Dry Run' : 'Live'}`);
+
+    // Get pre-deployment state
+    console.log('\nPre-deployment state:');
+    const preState = await getModuleState(aptos, account, moduleName.replace('.move', ''));
+    console.log(JSON.stringify(preState, null, 2));
+
     if (moduleName.endsWith('_test.move')) {
         console.log(`Skipping test file: ${moduleName}`);
         return;
     }
 
-    console.log(`\n=== Deployment Details ===`);
-    console.log(`Module: ${moduleName}`);
-    console.log(`Deployer Address: ${account.accountAddress}`);
-    console.log(`Mode: ${isDryRun ? 'Dry Run' : 'Live'}`);
-    
     try {
         const moduleHex = fs.readFileSync(
             path.join(__dirname, "../sources/", moduleName),
@@ -265,30 +270,28 @@ async function deployModule(aptos: Aptos, account: Account, moduleName: string, 
             throw new Error(`Transaction failed: ${response.vm_status}`);
         }
 
-        if (!isDryRun) {
-            // Verify module-specific initialization
-            switch(moduleName) {
-                case "PodiumOutpost.move":
-                    const collectionValid = await verifyOutpostCollection(aptos, account);
-                    if (!collectionValid) {
-                        throw new Error("Outpost collection initialization failed");
-                    }
-                    break;
-                
-                case "PodiumPassCoin.move":
-                    const decimalsValid = await verifyDecimals(aptos, account);
-                    if (!decimalsValid) {
-                        throw new Error("PodiumPassCoin decimal configuration failed");
-                    }
-                    break;
-                
-                case "PodiumPass.move":
-                    const permissionsValid = await verifyPermissions(aptos, account);
-                    if (!permissionsValid) {
-                        throw new Error("PodiumPass permissions initialization failed");
-                    }
-                    break;
-            }
+        // Verify module-specific initialization
+        switch(moduleName) {
+            case "PodiumOutpost.move":
+                const collectionValid = await verifyOutpostCollection(aptos, account);
+                if (!collectionValid) {
+                    throw new Error("Outpost collection initialization failed");
+                }
+                break;
+            
+            case "PodiumPassCoin.move":
+                const decimalsValid = await verifyDecimals(aptos, account);
+                if (!decimalsValid) {
+                    throw new Error("PodiumPassCoin decimal configuration failed");
+                }
+                break;
+            
+            case "PodiumPass.move":
+                const permissionsValid = await verifyPermissions(aptos, account);
+                if (!permissionsValid) {
+                    throw new Error("PodiumPass permissions initialization failed");
+                }
+                break;
         }
 
         console.log(`${moduleName} deployed and validated successfully!`);
@@ -303,6 +306,13 @@ async function deployModule(aptos: Aptos, account: Account, moduleName: string, 
             }
         }
         throw error;
+    } finally {
+        // Get post-deployment state
+        if (!isDryRun) {
+            console.log('\nPost-deployment state:');
+            const postState = await getModuleState(aptos, account, moduleName.replace('.move', ''));
+            console.log(JSON.stringify(postState, null, 2));
+        }
     }
 }
 
@@ -327,249 +337,58 @@ async function deployPodiumSystem(aptos: Aptos, account: Account, isDryRun = fal
     try {
         moveConfig.backup();
 
-        log('Deploying Podium System...', options);
+        log('Starting Podium System deployment...', options);
+
+        // 1. First deploy PodiumPassCoin (no dependencies)
+        log('Deploying PodiumPassCoin...', options);
+        await deployModule(aptos, account, "PodiumPassCoin.move", isDryRun);
         
-        // Pre-deployment validation
-        console.log("\n--- Pre-deployment Validation ---");
-        const addressValidation = validateAddresses(account);
-        if (!addressValidation.success) {
-            throw new Error("Address validation failed - check Move.toml configuration");
-        }
-        console.log("✓ Address validation successful");
-
-        // First Phase: Deploy base modules
-        console.log("\n--- Phase 1: Deploying Base Modules ---");
-        
-        const modules = [
-            "PodiumPassCoin.move",
-            "PodiumOutpost.move",
-            "PodiumPass.move"
-        ];
-
-        // Track simulated deployments for dry run
-        const simulatedDeployments = new Set<string>();
-
-        for (const module of modules) {
-            console.log(`\nProcessing ${module}...`);
-            
-            if (isDryRun) {
-                try {
-                    // First compile the module
-                    if (options.isDebug) {
-                        console.log('Compiling module...');
-                    }
-                    
-                    try {
-                        const MOVE_QUIET = process.env.MOVE_QUIET === '1';
-
-                        // Update compile command
-                        const compileCommand = `aptos move compile ${options.mode === 'dev' ? '--dev' : ''} ${MOVE_QUIET ? '--quiet' : ''}`;
-
-                        const output = execSync(compileCommand, {
-                            cwd: path.join(__dirname, '..'),
-                            stdio: ['ignore', 'pipe', 'pipe'],
-                            env: {
-                                ...process.env,
-                                MOVE_COMPILER_DEBUG: options.isDebug ? '1' : '0'
-                            }
-                        }).toString();
-
-                        // Only show relevant parts of output
-                        const relevantOutput = output
-                            .split('\n')
-                            .filter(line => (
-                                !line.includes('label') && 
-                                !line.includes('UPDATING GIT DEPENDENCY') &&
-                                !line.startsWith('Compiling') &&
-                                !line.match(/^\s*$/) // Skip empty lines
-                            ))
-                            .join('\n');
-
-                        if (options.isDebug) {
-                            console.log(relevantOutput);
-                        } else {
-                            // Only show compilation status
-                            if (relevantOutput.includes('Compilation successful')) {
-                                console.log('Compilation successful');
-                            }
-                        }
-                    } catch (error) {
-                        handleMoveAbort(error);
-                    }
-
-                    // Read the compiled bytecode
-                    const buildPath = path.join(__dirname, '../build/PodiumProtocol/bytecode_modules', 
-                        module.replace('.move', '.mv'));
-                    
-                    if (!fs.existsSync(buildPath)) {
-                        console.error(`Compiled bytecode not found at ${buildPath}`);
-                        if (options.isDebug) {
-                            // List contents of build directory
-                            try {
-                                const buildDir = path.join(__dirname, '../build');
-                                console.log('\nBuild directory contents:');
-                                const files = fs.readdirSync(buildDir, { recursive: true });
-                                console.log(files);
-                            } catch (e) {
-                                console.error('Could not read build directory');
-                            }
-                        }
-                        continue;
-                    }
-
-                    const bytecode = fs.readFileSync(buildPath);
-
-                    if (options.isDebug) {
-                        console.log(`Module bytecode size: ${bytecode.length} bytes`);
-                        console.log(`Module path: ${buildPath}`);
-                    }
-
-                    // Use publishPackageTransaction with compiled bytecode
-                    const transaction = await aptos.publishPackageTransaction({
-                        account: account.accountAddress,
-                        metadataBytes: new Uint8Array(),
-                        moduleBytecode: [bytecode.toString('hex')]
-                    });
-
-                    if (options.isDebug) {
-                        console.log('\nTransaction details:');
-                        // Convert BigInt to string in transaction object
-                        const txnDetails = JSON.parse(JSON.stringify(transaction, (key, value) => {
-                            if (typeof value === 'bigint') {
-                                return value.toString();
-                            }
-                            return value;
-                        }));
-                        console.log(txnDetails);
-                    }
-
-                    // Simulate deployment
-                    console.log(`Simulating deployment of ${module}...`);
-                    const [simulation] = await aptos.transaction.simulate.simple({
-                        transaction,
-                        signerPublicKey: account.publicKey,
-                        options: {
-                            estimateGasUnitPrice: true,
-                            estimateMaxGasAmount: true
-                        }
-                    });
-
-                    console.log(`Simulation results:`);
-                    console.log(`Success: ${simulation?.success ?? false}`);
-                    console.log(`Gas estimate: ${simulation.gas_used}`);
-                    if (simulation.vm_status) {
-                        console.log(`VM Status: ${simulation.vm_status}`);
-                    }
-                    if (options.isDebug && simulation.changes) {
-                        console.log('\nSimulated changes:');
-                        console.log(JSON.stringify(simulation.changes, null, 2));
-                    }
-
-                    if (simulation?.success) {
-                        simulatedDeployments.add(module.replace('.move', ''));
-                    }
-                } catch (error: any) {
-                    console.error(`Simulation failed for ${module}:`, error?.message || error);
-                    if (error?.data?.vm_status) {
-                        console.error(`VM Status: ${error.data.vm_status}`);
-                    }
-                    if (options.isDebug) {
-                        console.error('Full error:', error);
-                    }
-                }
-                continue;
-            }
-
-            const isDeployed = await isModuleDeployed(aptos, account, module);
-            if (isDeployed) {
-                console.log(`Module ${module} already deployed, skipping...`);
-                continue;
-            }
-
-            await deployModule(aptos, account, module, false);
-        }
-
-        // Phase 2: Initialize modules
-        console.log("\n--- Phase 2: Module Initialization ---");
-        
-        const initTxns = [
-            {
+        if (!isDryRun) {
+            log('Initializing PodiumPassCoin...', options);
+            await executeTransaction(aptos, account, {
                 function: `${account.accountAddress}::PodiumPassCoin::init_module`,
                 arguments: [],
                 typeArguments: []
-            },
-            {
-                function: `${account.accountAddress}::PodiumPass::initialize`,
-                arguments: [
-                    account.accountAddress,
-                    4,
-                    8,
-                    2
-                ],
-                typeArguments: []
-            },
-            {
+            });
+
+            const passCoinInitialized = await verifyModuleInitialized(aptos, account, "PodiumPassCoin");
+            if (!passCoinInitialized) {
+                throw new Error('PodiumPassCoin initialization failed');
+            }
+        }
+
+        // 2. Then deploy PodiumOutpost (no dependencies)
+        log('Deploying PodiumOutpost...', options);
+        await deployModule(aptos, account, "PodiumOutpost.move", isDryRun);
+        
+        if (!isDryRun) {
+            log('Initializing PodiumOutpost collection...', options);
+            await executeTransaction(aptos, account, {
                 function: `${account.accountAddress}::PodiumOutpost::init_collection`,
                 arguments: [],
                 typeArguments: []
-            },
-            {
-                function: `${account.accountAddress}::PodiumOutpost::update_outpost_price`,
-                arguments: [toMoveAmount(30)],
+            });
+        }
+
+        // 3. Finally deploy PodiumPass (depends on both)
+        log('Deploying PodiumPass...', options);
+        await deployModule(aptos, account, "PodiumPass.move", isDryRun);
+        
+        if (!isDryRun) {
+            log('Initializing PodiumPass...', options);
+            await executeTransaction(aptos, account, {
+                function: `${account.accountAddress}::PodiumPass::initialize`,
+                arguments: [],
                 typeArguments: []
-            }
-        ];
+            });
 
-        for (const txn of initTxns) {
-            console.log(`\nProcessing ${txn.function}...`);
-            
-            if (isDryRun) {
-                // Extract module name from function
-                const moduleName = txn.function.split('::')[2];
-                if (!simulatedDeployments.has(moduleName)) {
-                    console.log(`Skipping initialization simulation for ${moduleName} - module not deployed`);
-                    continue;
-                }
-
-                try {
-                    // Build the transaction
-                    const transaction = await aptos.transaction.build.simple({
-                        sender: account.accountAddress,
-                        data: {
-                            function: txn.function as `${string}::${string}::${string}`,
-                            functionArguments: txn.arguments,
-                            typeArguments: txn.typeArguments
-                        }
-                    });
-
-                    // Simulate without authentication check
-                    const [simulation] = await aptos.transaction.simulate.simple({
-                        transaction
-                    });
-
-                    console.log(`Simulation results:`);
-                    console.log(`Success: ${simulation?.success ?? false}`);
-                    console.log(`Gas estimate: ${simulation.gas_used}`);
-                } catch (error: any) {
-                    console.error(`Simulation failed:`, error?.message || error);
-                }
-            } else {
-                const result = await executeTransaction(aptos, account, txn, false);
-                if (!result) {
-                    throw new Error(`Failed to execute ${txn.function}`);
-                }
+            const passInitialized = await verifyModuleInitialized(aptos, account, "PodiumPass");
+            if (!passInitialized) {
+                throw new Error('PodiumPass initialization failed');
             }
         }
 
-        console.log("\n=== Podium System Deployment Complete ===");
-
-        if (options.isDebug) {
-            log('Deployment simulation complete', options, 'debug');
-            // Show detailed simulation results only in debug mode
-        } else {
-            log('Deployment successful', options);
-        }
-
+        log('Podium System deployment complete', options);
     } catch (error) {
         moveConfig.restore();
         throw error;
@@ -745,14 +564,69 @@ function handleMoveAbort(error: any) {
         if (abortCode) {
             switch (abortCode[1]) {
                 case '0x10001':
-                    throw new Error('Module initialization failed - check account permissions');
-                // Add other abort codes
+                    throw new Error('Module initialization failed - Possible causes:\n' +
+                        '1. Account permissions issue\n' +
+                        '2. Module already initialized\n' +
+                        '3. Dependencies not initialized first');
+                case '0x10002':
+                    throw new Error('Invalid admin account');
+                case '0x10003':
+                    throw new Error('Invalid configuration');
                 default:
+                    console.error('Full error details:', error);
                     throw new Error(`Unknown Move abort: ${abortCode[1]}`);
             }
         }
     }
+    
+    // Log raw error for debugging
+    console.error('Raw error:', error);
+    
+    if (error?.data?.vm_status) {
+        console.error('VM Status:', error.data.vm_status);
+    }
+    
     throw error;
+}
+
+async function verifyAccountBalance(aptos: Aptos, account: Account) {
+    const balance = await aptos.getAccountBalance(account.accountAddress);
+    const minRequired = 100_000_000; // 1 APT
+    if (Number(balance) < minRequired) {
+        throw new Error(`Insufficient balance. Required: ${minRequired}, Found: ${balance}`);
+    }
+}
+
+// Add this helper function to get detailed error info
+async function getModuleState(aptos: Aptos, account: Account, moduleName: string): Promise<any> {
+    try {
+        // Try to get module info
+        const moduleInfo = await aptos.getAccountModule({
+            accountAddress: account.accountAddress,
+            moduleName: moduleName
+        });
+        
+        // Try to call is_initialized
+        const initState = await aptos.view({
+            payload: {
+                function: `${account.accountAddress}::${moduleName}::is_initialized` as `${string}::${string}::${string}`,
+                typeArguments: [],
+                functionArguments: []
+            }
+        });
+
+        return {
+            exists: true,
+            initialized: initState[0],
+            moduleInfo
+        };
+    } catch (error: any) {
+        return {
+            exists: false,
+            error: error?.message || 'Unknown error',
+            details: error
+        };
+    }
 }
 
 try {
@@ -763,3 +637,5 @@ try {
     console.error(error);
     process.exit(1);
 }
+
+export { main };

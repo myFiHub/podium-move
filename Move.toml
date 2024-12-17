@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = ["FiHub"]
 
 [addresses]
-# Keep only fixed/framework addresses here
+# Fixed addresses
 std = "0x1"
 aptos_framework = "0x1"
 aptos_std = "0x1"
@@ -13,15 +13,15 @@ fihub = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
 sender = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
 participant = "0xc898a3b0a7c3ddc9ff813eeca34981b6a42b0918057a7c18ecb9f4a6ae82eefb"
 
-# All dynamic addresses should be placeholders
-podium = "_"
-admin = "_"
-treasury = "_"
-passcoin = "_"
-CheerOrBooV2 = "_"
-target = "_"
-user1 = "_"
-user2 = "_"
+# Dynamic addresses with actual values for deployment
+podium = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
+admin = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
+treasury = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
+passcoin = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
+CheerOrBooV2 = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
+target = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
+user1 = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
+user2 = "0xa76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4"
 
 [dev-addresses]
 CheerOrBooV2 = "0x345"

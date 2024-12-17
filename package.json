@@ -1,5 +1,11 @@
 {
   "type": "module",
+  "scripts": {
+    "deploy": "npx tsx scripts/deploy.ts",
+    "deploy:dev": "npx tsx scripts/deploy.ts --dev",
+    "deploy:test": "npx tsx scripts/test_deployment.ts",
+    "deploy:dry-run": "npx tsx scripts/deploy.ts --dry-run"
+  },
   "dependencies": {
     "@aptos-labs/ts-sdk": "latest",
     "yaml": "^2.3.4"
@@ -7,14 +13,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.7.2"
-  },
-  "scripts": {
-    "deploy": "NODE_OPTIONS='--loader ts-node/esm' node scripts/deploy.ts",
-    "deploy:dev": "npm run deploy -- --dev",
-    "deploy:test": "NODE_OPTIONS='--loader ts-node/esm' node scripts/test_deployment.ts",
-    "deploy:dry-run": "npm run deploy -- --dry-run",
-    "test": "NODE_OPTIONS='--loader ts-node/esm' node scripts/test_deployment.ts",
-    "check": "NODE_OPTIONS='--loader ts-node/esm' node -e 'import(\"./scripts/test_deployment.ts\").then(m => m.isContractDeployed())'"
+    "typescript": "^5.7.2",
+    "tsx": "^4.7.0"
   }
 }
