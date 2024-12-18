@@ -1,264 +1,279 @@
 # Podium Protocol & CheerOrBoo
 
-A decentralized protocol suite built on Movement, including subscription management, pass trading, and social tipping features.
+A decentralized protocol suite built on movement, including subscription management, pass trading, and social tipping features.
 
 ## Overview
 
-### Podium
-Podium's foundation enables content creators and audiences to actively shape and own their conversations. The protocol implements:
+### Podium Protocol
+The protocol enables content creators and audiences to actively participate in digital communities through:
 1. Pass trading with bonding curve pricing
 2. Flexible subscription management
 3. Outpost creation and management
 4. Fee distribution with referral incentives
 
 ### CheerOrBoo
-A social tipping system that allows audience participation through positive (Cheer) or negative (Boo) feedback, with automatic reward distribution.
+A social tipping system allowing audience participation through positive (Cheer) or negative (Boo) feedback, with automatic reward distribution.
 
 ## Smart Contract Architecture
 
-### 1. PodiumPass
-Core business logic handling pass trading and subscriptions.
+### 1. PodiumProtocol
+Core protocol handling pass trading, subscriptions, and outpost management.
 
 **Key Features:**
-- Bonding curve-based pass pricing
+- Bonding curve-based pass pricing (80/50/2 weight configuration)
 - Multi-tier subscription management
-- Automated fee distribution
+- Automated fee distribution (4% protocol, 8% subject, 2% referral)
 - Vault system for pass redemption
-- Referral system integration
-
-**Test Coverage:**
-1. **Pass Operations**
-   - `test_buy_pass`: Pass purchase and minting
-   - `test_pass_sell`: Pass redemption mechanics
-   - `test_pass_trading`: Trading between users
-   - `test_account_pass_operations`: Account-specific pass handling
-   - `test_outpost_pass_operations`: Outpost-specific pass operations
-
-2. **Subscription Management**
-   - `test_subscription`: Basic subscription creation/verification
-   - `test_subscription_flow`: Complete subscription lifecycle
-   - `test_subscription_expiration`: Time-based expiration
-   - `test_duplicate_subscription`: Duplicate prevention
-   - `test_subscription_with_referral`: Referral system
-   - `test_subscribe_nonexistent_tier`: Error handling
-
-3. **Administrative Controls**
-   - `test_admin_price_control`: Price management
-   - `test_outpost_price_permissions`: Access control
-   - `test_outpost_creation_flow`: Outpost initialization
-
-### 2. PodiumOutpost
-Handles outpost (creator space) management.
-
-**Key Features:**
-- Deterministic addressing
-- Collection management
-- Metadata handling
-- Emergency controls
-
-**Test Coverage:**
-- Outpost creation and initialization
-- Price updates and permissions
-- Metadata management
 - Emergency pause functionality
+- Upgradeable architecture
 
-### 3. PodiumPassCoin
-Fungible asset implementation for passes.
-
-**Key Features:**
-- Custom token implementation
-- Balance tracking
-- Transfer management
-- Mint/burn capabilities
-
-### 4. CheerOrBoo
-A social tipping system that enables real-time audience feedback through financial incentives.
-
-**Key Features:**
-- Dual action system (Cheer/Boo)
-- Configurable fee distribution
-- Multi-participant reward splitting
+**Security Features:**
+- Role-based access control
+- Emergency pause mechanism
+- Balance validation
+- Secure fee distribution
 - Event emission for tracking
 
-**Implementation Details:**
+**Limitations:**
+- Fixed asset symbol generation ("T1")
+- No slippage protection in trading
+- Fixed bonding curve parameters
+- No maximum tier limit enforcement
+
+### 2. CheerOrBoo
+Social tipping implementation with dual action system.
+
+**Key Features:**
+- 5% fixed protocol fee
+- Configurable reward distribution
+- Multi-participant splitting
+- Automatic account registration
+
+**Security Features:**
+- Balance checks
+- Safe transfer handling
+- Event tracking
+
+**Limitations:**
+- Fixed fee percentage
+- Hardcoded fee recipient
+- No upgradability mechanism
+
+## Implementation Details
+
+### Pass Trading System
 ```move
-cheer_or_boo(
-    sender: &signer,
-    target: address,
-    participants: vector<address>,
-    is_cheer: bool,
-    amount: u64,
-    target_allocation: u64,
-    unique_identifier: vector<u8>
-)
+calculate_buy_price_with_fees(target_addr: address, amount: u64, referrer: Option<address>)
+calculate_sell_price_with_fees(target_addr: address, amount: u64)
 ```
 
-**Core Functionality:**
-- Flexible reward distribution between target and participants
-- Protocol fee handling (5% default)
-- Automatic account registration and coin store initialization
-- Event emission for analytics
+### Subscription System
 
-**Test Coverage:**
-1. **Basic Operations (`test_cheer`, `test_boo`)**
-   - Verifies correct fee calculations (5%)
-   - Validates reward distribution
-   - Checks balance updates for all parties
-   - Tests both positive and negative interactions
+The protocol implements a flexible subscription system with the following features:
 
-2. **Economic Security (`test_insufficient_balance`)**
-   - Validates balance checks
-   - Tests failure conditions
-   - Verifies error handling
+#### Subscription Tiers
+- Multiple tier support per outpost
+- Configurable pricing and duration
+- Three duration options:
+  - Weekly (7 days): `DURATION_WEEK = 1`
+  - Monthly (30 days): `DURATION_MONTH = 2`
+  - Yearly (365 days): `DURATION_YEAR = 3`
 
-3. **Distribution Logic**
-   - Tests multi-participant splitting
-   - Verifies target allocation percentages
-   - Validates rounding behavior
+#### Subscription Data Structure
+```move
+struct Subscription {
+    tier_id: u64,
+    start_time: u64,
+    end_time: u64,
+}
 
-4. **Event Emission**
-   - CheerEvent and BooEvent verification
-   - Unique identifier tracking
-   - Participant list handling
+struct SubscriptionTier {
+    name: String,
+    price: u64,
+    duration: u64,
+}
+```
 
-## Subscription Model
+#### Key Functions
+```move
+// Create a new subscription tier
+create_subscription_tier(
+    creator: &signer,
+    outpost: Object<OutpostData>,
+    tier_name: String,
+    price: u64,
+    duration: u64,
+)
 
-Podium implements a streamlined subscription system using a simple yet effective resource model.
+// Subscribe to a tier
+subscribe(
+    subscriber: &signer,
+    outpost: Object<OutpostData>,
+    tier_id: u64,
+    referrer: Option<address>
+)
 
-### Design Philosophy
-Subscriptions are implemented as pure data resources rather than transferable assets, reflecting their true nature as time-bound permissions.
+// Cancel subscription
+cancel_subscription(
+    subscriber: &signer,
+    outpost: Object<OutpostData>
+)
 
-#### Key Characteristics
-- **Direct Resource Ownership**: Subscriptions stored as data resources
-- **Simple Data Mapping**: Straightforward subscriber → subscription details relationship
-- **Non-Transferable**: Subscriptions bound to specific subscribers
-- **Permission-Based**: Access control through outpost ownership verification
+// Verify subscription status
+verify_subscription(
+    subscriber: address,
+    outpost: Object<OutpostData>,
+    tier_id: u64
+): bool
+
+// Get subscription details
+get_subscription(
+    subscriber: address,
+    outpost: Object<OutpostData>
+): (u64, u64, u64) // Returns (tier_id, start_time, end_time)
+```
+
+#### Fee Distribution
+When a user subscribes:
+- Protocol fee: 4% to treasury
+- Subject fee: 8% to outpost owner
+- Referral fee: 2% to referrer (if provided)
+
+#### Subscription Management
+1. **Creation**:
+   - Outpost owners can create multiple tiers
+   - Each tier has unique name, price, and duration
+   - Tiers cannot share names within an outpost
+
+2. **Subscription Process**:
+   - Users select tier and optional referrer
+   - Fees are automatically distributed
+   - Subscription period starts immediately
+   - End time calculated based on duration
+
+3. **Validation**:
+   - Active subscriptions checked by tier_id and end_time
+   - Prevents duplicate subscriptions
+   - Validates tier existence and ownership
+
+4. **Cancellation**:
+   - Subscribers can cancel at any time
+   - No partial refunds implemented
+   - Emits cancellation event
+
+#### Events
+```move
+struct SubscriptionEvent {
+    subscriber: address,
+    target_or_outpost: address,
+    tier: String,
+    duration: u64,
+    price: u64,
+    referrer: Option<address>,
+}
+
+struct SubscriptionCreatedEvent {
+    outpost_addr: address,
+    subscriber: address,
+    tier_id: u64,
+    timestamp: u64
+}
+
+struct SubscriptionCancelledEvent {
+    outpost_addr: address,
+    subscriber: address,
+    tier_id: u64,
+    timestamp: u64
+}
+```
+
+### Outpost Management
+```move
+create_outpost(creator: &signer, name: String, description: String, uri: String)
+toggle_emergency_pause(owner: &signer, outpost: Object<OutpostData>)
+```
+
+### CheerOrBoo Actions
+```move
+cheer_or_boo(sender: &signer, target: address, participants: vector<address>, is_cheer: bool, amount: u64, target_allocation: u64, unique_identifier: vector<u8>)
+```
 
 ## Development Setup
 
 ### Prerequisites
-- Movement CLI
+- movement CLI
+- Move compiler
 - Node.js (v16+)
-- TypeScript
-- Yarn or npm
 
 ### Installation
-npm install
-
-### Deployment
-
-The deployment script supports selective deployment of components and a dry-run mode for testing:
-
 ```bash
-# Deploy CheerOrBoo only
-npm run deploy cheerorboo
-
-# Deploy Podium Protocol only (PodiumOutpost, PodiumPassCoin, PodiumPass)
-npm run deploy podium
-
-# Deploy everything
-npm run deploy all
-
-# Test deployment without making transactions (dry-run)
-npm run deploy podium --dry-run
-npm run deploy cheerorboo --dry-run
-npm run deploy all --dry-run
+npm install
 ```
 
-### Deployment Order
-When deploying Podium Protocol, modules are deployed and initialized in this order:
-1. PodiumOutpost - Handles outpost (creator space) management
-2. PodiumPassCoin - Fungible asset implementation for passes
-3. PodiumPass - Core business logic for pass trading and subscriptions
+### Testing
+```bash
+movement move test
+```
 
-### Initial Configuration
-During deployment, the system is initialized with:
-- PodiumOutpost collection creation
-- Initial outpost price set to 1000 APT
-- PodiumPassCoin module initialization
-- PodiumPass module initialization with default parameters
+### Deployment
+```bash
+movement move publish --profile podium
+```
 
-## Testing Framework
-
-### PodiumPass Test Coverage
-
-#### Core Pass Operations
-1. **Pass Creation & Purchase (`test_buy_pass`)**
-   - Validates pass minting process
-   - Verifies token creation and ownership
-   - Checks correct balance updates
-   - Tests deterministic address derivation
-
-2. **Subscription Management**
-   - `test_subscription`: Basic subscription creation and verification
-   - `test_subscription_flow`: Complete subscription lifecycle
-   - `test_subscription_expiration`: Time-based expiration mechanics
-   - `test_duplicate_subscription`: Duplicate prevention
-
-3. **Pass Trading System**
-   - `test_pass_trading`: Pass transfers between users
-   - `test_unauthorized_mint`: Security checks
-   - `test_mint_and_transfer`: Complete trading flow
-
-4. **Referral System**
-   - `test_subscription_with_referral`: Referral fee distribution
-   - Validates correct fee calculations
-   - Verifies payment distributions
-
-5. **Administrative Controls**
-   - `test_outpost_creation_flow`: Outpost initialization
-   - `test_admin_price_control`: Price management
-   - `test_outpost_price_permissions`: Access control
-   - `test_outpost_purchase_flow`: Purchase process validation
-
-### Test Setup
-
-#### Prerequisites
-
-### Key Test Files
-- `PodiumPass_test.move`: Core protocol tests
-- `PodiumOutpost_test.move`: Outpost management tests
-- `PodiumPassCoin_test.move`: Token implementation tests
-- `CheerOrBoo_test.move`: Tipping system tests
-
-## Security Features
+## Security Considerations
 
 1. **Access Control**
-   - Role-based permissions
-   - Owner-only operations
-   - Admin controls
+   - Admin-only functions protected
+   - Owner verification for outpost operations
+   - Balance checks for all transfers
 
 2. **Economic Security**
-   - Fee limits
-   - Price controls
+   - Fee limits enforced
+   - Bonding curve parameters fixed
    - Vault system for redemptions
 
 3. **Emergency Controls**
-   - Pause functionality
+   - Pause functionality per outpost
    - Admin override capabilities
-   - Error handling
+   - Error handling with custom codes
 
 ## Events and Monitoring
 
-The protocol emits events for:
+The protocol emits events for all major operations:
 - Pass purchases and sales
 - Subscription changes
 - Outpost updates
 - Cheer/Boo interactions
 - Administrative actions
 
-## Integration Points
+## Known Limitations
 
-1. **Frontend Integration**
-   - Pass trading interface
-   - Subscription management
-   - Tipping functionality
+1. **Trading**
+   - No slippage protection
+   - Fixed bonding curve parameters
+   - Single asset symbol ("T1")
 
-2. **Analytics Integration**
-   - Event monitoring
-   - Price tracking
-   - User activity analysis
+2. **Subscriptions**
+   - No maximum tier limit
+   - Fixed duration options
+   - No partial refunds
 
+3. **CheerOrBoo**
+   - Fixed fee percentage
+   - Hardcoded fee recipient
+   - No upgradability
 
-deploy
-movement move publish --profile podium
+## Future Improvements
+
+1. **Trading Enhancements**
+   - Unique asset symbols per target
+
+2. **Subscription Updates**
+   - Configurable tier limits
+   - Flexible duration options
+   - Partial refund mechanism
+
+3. **CheerOrBoo Upgrades**
+   - Configurable fees
+   - Dynamic fee recipient
+   - Upgradeable architecture
