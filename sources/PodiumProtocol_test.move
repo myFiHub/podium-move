@@ -9,7 +9,7 @@ module podium::PodiumProtocol_test {
     use aptos_framework::coin;
     use aptos_framework::timestamp;
     use aptos_framework::aptos_coin::AptosCoin;
-    use podium::PodiumProtocol::{Self, OutpostData};
+    use podium::PodiumProtocol::{Self, OutpostData, Config};
     use aptos_token_objects::collection;
     use aptos_token_objects::token;
     use aptos_framework::fungible_asset;
@@ -498,5 +498,180 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"[test_pass_auto_creation] Final pass balance:"));
         debug::print(&final_pass_balance);
         assert!(final_pass_balance == amount - sell_amount, 3);
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
+    public fun test_view_functions(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        creator: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, creator, creator, creator);
+        
+        // Test is_initialized
+        assert!(PodiumProtocol::is_initialized(), 0);
+        
+        // Create test outpost
+        let outpost = create_test_outpost(creator);
+        let outpost_addr = object::object_address(&outpost);
+        
+        // Test get_collection_name
+        let collection_name = PodiumProtocol::get_collection_name();
+        assert!(collection_name == string::utf8(b"PodiumOutposts"), 1);
+        
+        // Test get_outpost_purchase_price
+        let purchase_price = PodiumProtocol::get_outpost_purchase_price();
+        assert!(purchase_price > 0, 2);
+        
+        // Test verify_ownership
+        assert!(PodiumProtocol::verify_ownership(outpost, signer::address_of(creator)), 3);
+        assert!(!PodiumProtocol::verify_ownership(outpost, @user1), 4);
+        
+        // Test has_outpost_data
+        assert!(PodiumProtocol::has_outpost_data(outpost), 5);
+        
+        // Create subscription tier for testing subscription views
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"test_tier"),
+            SUBSCRIPTION_WEEK_PRICE,
+            1, // DURATION_WEEK
+        );
+        
+        // Test get_tier_count
+        assert!(PodiumProtocol::get_tier_count(outpost) == 1, 6);
+        
+        // Test get_tier_details
+        let (tier_name, tier_price, tier_duration) = PodiumProtocol::get_tier_details(outpost, 0);
+        assert!(tier_name == string::utf8(b"test_tier"), 7);
+        assert!(tier_price == SUBSCRIPTION_WEEK_PRICE, 8);
+        assert!(tier_duration == 1, 9);
+        
+        // Test verify_subscription (when no subscription exists)
+        assert!(!PodiumProtocol::verify_subscription(signer::address_of(creator), outpost, 0), 10);
+        
+        // Subscribe to test subscription views
+        PodiumProtocol::subscribe(creator, outpost, 0, option::none());
+        
+        // Test verify_subscription (with active subscription)
+        assert!(PodiumProtocol::verify_subscription(signer::address_of(creator), outpost, 0), 11);
+        
+        // Test get_subscription
+        let (sub_tier_id, start_time, end_time) = PodiumProtocol::get_subscription(signer::address_of(creator), outpost);
+        assert!(sub_tier_id == 0, 12);
+        assert!(end_time > start_time, 13);
+        
+        // Test is_paused
+        assert!(!PodiumProtocol::is_paused(outpost), 14);
+        PodiumProtocol::toggle_emergency_pause(creator, outpost);
+        assert!(PodiumProtocol::is_paused(outpost), 15);
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
+    public fun test_self_trading(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        creator: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, creator, creator, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"Self Trade Pass"),
+            string::utf8(b"Test Pass for Self Trading"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Record initial balances
+        let initial_apt_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        // Buy passes as creator
+        let buy_amount = PASS_AMOUNT;
+        PodiumProtocol::buy_pass(creator, target_addr, buy_amount, option::none());
+        
+        // Verify pass balance
+        let asset_symbol = PodiumProtocol::get_asset_symbol(target_addr);
+        let pass_balance = PodiumProtocol::get_balance(signer::address_of(creator), asset_symbol);
+        assert!(pass_balance == buy_amount, 0);
+        
+        // Calculate fees from buy
+        let (base_price, protocol_fee, subject_fee, referral_fee) = 
+            PodiumProtocol::calculate_buy_price_with_fees(target_addr, buy_amount, option::none());
+        let total_buy_cost = base_price + protocol_fee + subject_fee + referral_fee;
+        
+        // Verify APT balance after buy (should include received subject fee)
+        let post_buy_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        assert!(post_buy_balance == initial_apt_balance - total_buy_cost + subject_fee, 1);
+        
+        // Sell half the passes
+        let sell_amount = buy_amount / 2;
+        PodiumProtocol::sell_pass(creator, target_addr, sell_amount);
+        
+        // Verify updated pass balance
+        let final_pass_balance = PodiumProtocol::get_balance(signer::address_of(creator), asset_symbol);
+        assert!(final_pass_balance == buy_amount - sell_amount, 2);
+        
+        // Calculate sell fees
+        let (sell_amount_received, sell_protocol_fee, sell_subject_fee) = 
+            PodiumProtocol::calculate_sell_price_with_fees(target_addr, sell_amount);
+        
+        // Verify final APT balance (should include received subject fee from sell)
+        let final_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        assert!(final_balance == post_buy_balance + sell_amount_received + sell_subject_fee, 3);
+    }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
+    public fun test_self_subscription(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        creator: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, creator, creator, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create subscription tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"self_tier"),
+            SUBSCRIPTION_WEEK_PRICE,
+            1, // DURATION_WEEK
+        );
+        
+        // Record initial balance
+        let initial_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        // Subscribe to own outpost
+        PodiumProtocol::subscribe(creator, outpost, 0, option::none());
+        
+        // Verify subscription is active
+        assert!(PodiumProtocol::verify_subscription(signer::address_of(creator), outpost, 0), 0);
+        
+        // Calculate total cost and fees
+        let total_cost = SUBSCRIPTION_WEEK_PRICE;
+        let protocol_fee = (total_cost * 4) / 100; // 4% protocol fee
+        let subject_fee = (total_cost * 8) / 100; // 8% subject fee
+        
+        // Verify final balance (should only be reduced by protocol fee since subject fee returns to creator)
+        let final_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        assert!(final_balance == initial_balance - total_cost + subject_fee, 1);
+        
+        // Cancel own subscription
+        PodiumProtocol::cancel_subscription(creator, outpost);
+        
+        // Verify subscription is cancelled
+        assert!(!PodiumProtocol::verify_subscription(signer::address_of(creator), outpost, 0), 2);
     }
 } 

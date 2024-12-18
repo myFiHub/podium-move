@@ -245,7 +245,7 @@ module podium::PodiumProtocol {
     // ============ Initialization Functions ============
 
     /// Initialize the protocol
-    public fun initialize(admin: &signer) {
+    public entry fun initialize(admin: &signer) {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
         
         if (!exists<Config>(@podium)) {

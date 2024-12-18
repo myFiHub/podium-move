@@ -218,6 +218,9 @@ movement move test
 ### Deployment
 ```bash
 movement move publish --profile podium
+movement move run \
+  --profile podium \
+  --function-id 'podium::PodiumProtocol::initialize'
 ```
 
 ## Security Considerations
