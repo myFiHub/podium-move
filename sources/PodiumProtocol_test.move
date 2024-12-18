@@ -214,13 +214,16 @@ module podium::PodiumProtocol_test {
         creator: &signer,
         user1: &signer,
     ) {
+        debug::print(&string::utf8(b"[test_pass_trading] Starting test"));
         setup_test(aptos_framework, podium_signer, user1, user1, creator);
         
-        // Create outpost and setup
+        debug::print(&string::utf8(b"[test_pass_trading] Creating outpost"));
         let outpost = create_test_outpost(creator);
         let target_addr = object::object_address(&outpost);
+        debug::print(&string::utf8(b"[test_pass_trading] Target address:"));
+        debug::print(&target_addr);
         
-        // Create pass token
+        debug::print(&string::utf8(b"[test_pass_trading] Creating pass token"));
         PodiumProtocol::create_pass_token(
             creator,
             target_addr,
@@ -229,22 +232,53 @@ module podium::PodiumProtocol_test {
             string::utf8(b"https://test.uri"),
         );
         
-        // Record initial balances
+        debug::print(&string::utf8(b"[test_pass_trading] Recording initial balance"));
         let initial_apt_balance = coin::balance<AptosCoin>(signer::address_of(user1));
+        debug::print(&string::utf8(b"Initial APT balance:"));
+        debug::print(&initial_apt_balance);
         
-        // Buy pass
+        debug::print(&string::utf8(b"[test_pass_trading] Calculating buy price"));
+        let (buy_price, protocol_fee, subject_fee, referral_fee) = PodiumProtocol::calculate_buy_price_with_fees(target_addr, PASS_AMOUNT, option::none());
+        debug::print(&string::utf8(b"Buy price:"));
+        debug::print(&buy_price);
+        debug::print(&string::utf8(b"Protocol fee:"));
+        debug::print(&protocol_fee);
+        debug::print(&string::utf8(b"Subject fee:"));
+        debug::print(&subject_fee);
+        debug::print(&string::utf8(b"Referral fee:"));
+        debug::print(&referral_fee);
+        debug::print(&string::utf8(b"Total cost:"));
+        debug::print(&(buy_price + protocol_fee + subject_fee + referral_fee));
+        
+        debug::print(&string::utf8(b"[test_pass_trading] Buying pass"));
         PodiumProtocol::buy_pass(user1, target_addr, PASS_AMOUNT, option::none());
         
-        // Verify pass was received
+        debug::print(&string::utf8(b"[test_pass_trading] Verifying pass received"));
         let asset_symbol = PodiumProtocol::get_asset_symbol(target_addr);
         assert!(PodiumProtocol::get_balance(signer::address_of(user1), asset_symbol) == PASS_AMOUNT, 0);
+        
+        debug::print(&string::utf8(b"[test_pass_trading] Checking balance after buy"));
+        let balance_after_buy = coin::balance<AptosCoin>(signer::address_of(user1));
+        debug::print(&string::utf8(b"Balance after buy:"));
+        debug::print(&balance_after_buy);
+        debug::print(&string::utf8(b"Expected balance after buy:"));
+        let expected_balance = initial_apt_balance - (buy_price + protocol_fee + subject_fee + referral_fee);
+        debug::print(&expected_balance);
+        
+        assert!(balance_after_buy == expected_balance, 1);
+        
+        // Calculate expected sell price
+        let (amount_received, _, _) = PodiumProtocol::calculate_sell_price_with_fees(target_addr, PASS_AMOUNT);
         
         // Sell pass
         PodiumProtocol::sell_pass(user1, target_addr, PASS_AMOUNT);
         
         // Verify pass was sold
-        assert!(PodiumProtocol::get_balance(signer::address_of(user1), asset_symbol) == 0, 1);
-        assert!(coin::balance<AptosCoin>(signer::address_of(user1)) > initial_apt_balance, 2);
+        assert!(PodiumProtocol::get_balance(signer::address_of(user1), asset_symbol) == 0, 2);
+        
+        // Verify final balance
+        let final_balance = coin::balance<AptosCoin>(signer::address_of(user1));
+        assert!(final_balance == balance_after_buy + amount_received, 3);
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, unauthorized_user = @user1)]

@@ -521,7 +521,7 @@ module podium::PodiumProtocol {
     public fun calculate_buy_price_with_fees(
         target_addr: address,
         amount: u64,
-        _referrer: Option<address>
+        referrer: Option<address>
     ): (u64, u64, u64, u64) acquires Config {
         // Get current supply
         let current_supply = get_total_supply(target_addr);
@@ -529,8 +529,17 @@ module podium::PodiumProtocol {
         // Get raw price from bonding curve
         let price = calculate_price(current_supply, amount, false);
         
-        // Return price without fees, matching Solidity
-        (price, 0, 0, 0)
+        // Calculate fees
+        let config = borrow_global<Config>(@podium);
+        let protocol_fee = (price * config.protocol_fee_percent) / 100;
+        let subject_fee = (price * config.subject_fee_percent) / 100;
+        let referral_fee = if (option::is_some(&referrer)) {
+            (price * config.referral_fee_percent) / 100
+        } else {
+            0
+        };
+        
+        (price, protocol_fee, subject_fee, referral_fee)
     }
 
     /// Calculate sell price and fees when selling passes
@@ -548,10 +557,18 @@ module podium::PodiumProtocol {
         };
 
         // Get raw price from bonding curve
-        let price = calculate_price(current_supply, amount, true);
+        // For sells, we calculate based on the supply AFTER the sell
+        let price = calculate_price(current_supply - amount, amount, true);
         
-        // Return price as-is without fee calculations
-        (price, 0, 0)
+        // Calculate fees based on total price
+        let config = borrow_global<Config>(@podium);
+        let protocol_fee = (price * config.protocol_fee_percent) / 100;
+        let subject_fee = (price * config.subject_fee_percent) / 100;
+        
+        // Seller receives price minus all fees
+        let amount_received = price - protocol_fee - subject_fee;
+        
+        (amount_received, protocol_fee, subject_fee)
     }
 
     /// Calculate price using bonding curve
@@ -562,20 +579,19 @@ module podium::PodiumProtocol {
         let scaled_supply = scale_down(supply);
         let scaled_amount = scale_down(amount);
 
-        // For sells, we calculate based on the supply after selling
-        let adjusted_supply = if (is_sell) {
-            scaled_supply - scaled_amount
-        } else {
-            scaled_supply
+        // Add adjustment factor to supply
+        let adjusted_supply = scaled_supply + config.weight_c;
+        if (adjusted_supply == 0) {
+            return INITIAL_PRICE
         };
 
         // Calculate summation for current supply
-        let n1 = adjusted_supply;
-        let sum1 = (n1 * (n1 + 1) * (2 * n1 + 1)) / 6;
+        let n1 = adjusted_supply - 1;
+        let sum1 = (n1 * adjusted_supply * (2 * n1 + 1)) / 6;
         
         // Calculate summation for supply + amount
-        let n2 = adjusted_supply + scaled_amount;
-        let sum2 = (n2 * (n2 + 1) * (2 * n2 + 1)) / 6;
+        let n2 = n1 + scaled_amount;
+        let sum2 = ((n2) * (adjusted_supply + scaled_amount) * (2 * n2 + 1)) / 6;
         
         // Calculate price using weight factors
         let summation = config.weight_a * (sum2 - sum1);
@@ -601,24 +617,50 @@ module podium::PodiumProtocol {
         // Initialize pass stats if needed
         init_pass_stats(target_addr);
         
-        // Calculate prices
-        let (raw_price, protocol_fee, subject_fee, referral_fee) = calculate_buy_price_with_fees(target_addr, amount, referrer);
+        // Calculate prices and fees
+        let (base_price, protocol_fee, subject_fee, referral_fee) = calculate_buy_price_with_fees(target_addr, amount, referrer);
+        let total_payment_required = base_price + protocol_fee + subject_fee + referral_fee;
         
-        // Extract base amount for redemption pool
-        let redemption_coins = coin::withdraw<AptosCoin>(buyer, raw_price);
-        deposit_to_vault(redemption_coins);  // Base price goes to vault for future sellers
+        // Withdraw full payment from buyer
+        let payment_coins = coin::withdraw<AptosCoin>(buyer, total_payment_required);
+        
+        // Extract base price for redemption pool
+        let redemption_coins = coin::extract(&mut payment_coins, base_price);
+        deposit_to_vault(redemption_coins);
         
         // Handle fee distributions
         let config = borrow_global<Config>(@podium);
+        
+        // Protocol fee to treasury
         if (protocol_fee > 0) {
-            transfer_with_check(buyer, config.treasury, protocol_fee);  // Protocol fee
+            let protocol_coins = coin::extract(&mut payment_coins, protocol_fee);
+            if (!coin::is_account_registered<AptosCoin>(config.treasury)) {
+                aptos_account::create_account(config.treasury);
+            };
+            coin::deposit(config.treasury, protocol_coins);
         };
+        
+        // Subject fee to target
         if (subject_fee > 0) {
-            transfer_with_check(buyer, target_addr, subject_fee);  // Subject fee
+            let subject_coins = coin::extract(&mut payment_coins, subject_fee);
+            if (!coin::is_account_registered<AptosCoin>(target_addr)) {
+                aptos_account::create_account(target_addr);
+            };
+            coin::deposit(target_addr, subject_coins);
         };
+        
+        // Referral fee if applicable
         if (referral_fee > 0 && option::is_some(&referrer)) {
-            transfer_with_check(buyer, option::extract(&mut referrer), referral_fee);  // Referral fee
+            let referrer_addr = option::extract(&mut referrer);
+            let referral_coins = coin::extract(&mut payment_coins, referral_fee);
+            if (!coin::is_account_registered<AptosCoin>(referrer_addr)) {
+                aptos_account::create_account(referrer_addr);
+            };
+            coin::deposit(referrer_addr, referral_coins);
         };
+        
+        // Any remaining dust goes to treasury
+        coin::deposit(config.treasury, payment_coins);
         
         // Mint and transfer passes
         let asset_symbol = get_asset_symbol(target_addr);
@@ -626,10 +668,10 @@ module podium::PodiumProtocol {
         primary_fungible_store::deposit(signer::address_of(buyer), fa);
         
         // Update stats
-        update_stats(target_addr, amount, raw_price, false);
+        update_stats(target_addr, amount, base_price, false);
         
         // Emit purchase event
-        emit_purchase_event(signer::address_of(buyer), target_addr, amount, raw_price, referrer);
+        emit_purchase_event(signer::address_of(buyer), target_addr, amount, base_price, referrer);
     }
 
     /// Sell passes
@@ -641,32 +683,57 @@ module podium::PodiumProtocol {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Calculate sell price and fees
-        let (sell_price, protocol_fee, subject_fee) = calculate_sell_price_with_fees(target_addr, amount);
-        assert!(sell_price > 0, error::invalid_argument(EINVALID_AMOUNT));
+        let (amount_received, protocol_fee, subject_fee) = calculate_sell_price_with_fees(target_addr, amount);
+        assert!(amount_received > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Get asset symbol and burn the passes
         let asset_symbol = get_asset_symbol(target_addr);
         let fa = primary_fungible_store::withdraw(seller, *table::borrow(&borrow_global<AssetCapabilities>(@podium).metadata_objects, asset_symbol), amount);
         burn_pass(seller, asset_symbol, fa);
         
-        // Withdraw from vault and transfer to seller
-        let payment = withdraw_from_vault(sell_price);
-        if (!coin::is_account_registered<AptosCoin>(signer::address_of(seller))) {
+        // Withdraw total price from vault
+        let total_price = amount_received + protocol_fee + subject_fee;
+        let total_payment = withdraw_from_vault(total_price);
+        
+        // Split payments
+        let config = borrow_global<Config>(@podium);
+        
+        // Protocol fee
+        if (protocol_fee > 0) {
+            let protocol_coins = coin::extract(&mut total_payment, protocol_fee);
+            if (!coin::is_account_registered<AptosCoin>(config.treasury)) {
+                aptos_account::create_account(config.treasury);
+            };
+            coin::deposit(config.treasury, protocol_coins);
+        };
+        
+        // Subject fee
+        if (subject_fee > 0) {
+            let subject_coins = coin::extract(&mut total_payment, subject_fee);
+            if (!coin::is_account_registered<AptosCoin>(target_addr)) {
+                aptos_account::create_account(target_addr);
+            };
+            coin::deposit(target_addr, subject_coins);
+        };
+        
+        // Seller payment (remaining amount)
+        let seller_addr = signer::address_of(seller);
+        if (!coin::is_account_registered<AptosCoin>(seller_addr)) {
             coin::register<AptosCoin>(seller);
         };
-        coin::deposit(signer::address_of(seller), payment);
+        coin::deposit(signer::address_of(seller), total_payment);
         
         // Update stats
-        update_stats(target_addr, amount, sell_price, true);
+        update_stats(target_addr, amount, total_price, true);
         
         // Emit sell event
         event::emit_event(
             &mut borrow_global_mut<Config>(@podium).pass_sell_events,
             PassSellEvent {
-                seller: signer::address_of(seller),
+                seller: seller_addr,
                 target_or_outpost: target_addr,
                 amount,
-                price: sell_price,
+                price: total_price,
             },
         );
     }
