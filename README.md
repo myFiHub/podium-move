@@ -258,3 +258,7 @@ The protocol emits events for:
    - Event monitoring
    - Price tracking
    - User activity analysis
+
+
+deploy
+movement move publish --profile podium

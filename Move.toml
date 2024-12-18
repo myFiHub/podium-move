@@ -4,13 +4,10 @@ version = "0.0.1"
 authors = ["FiHub"]
 
 [addresses]
-podium = "0x3d0cdd46a11be2386e19e794b9ed72db3d3d623becfcde7f975265f9df142957"
+podium = "0x731721a2d14a94504d484f5fb4968e7dc0012edcb89f4f949cd07b82b722af47"
 fihub = "0x927d3b626f01d6a9b2ef25e706086bd8fb1633cf0898e24fcabd6ea95c360f0b"
 
-
 [dev-addresses]
-podium = "0x5325"
-fihub = "0x48675"
 user1 = "0x123"
 user2 = "0x234"
 target = "0x345"

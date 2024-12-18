@@ -123,7 +123,8 @@ module podium::PodiumProtocol {
         subscription_cancelled_events: EventHandle<SubscriptionCancelledEvent>,
         tier_updated_events: EventHandle<TierUpdatedEvent>,
         config_updated_events: EventHandle<ConfigUpdatedEvent>,
-        outpost_created_events: EventHandle<OutpostCreatedEvent>
+        outpost_created_events: EventHandle<OutpostCreatedEvent>,
+        outpost_price: u64,
     }
 
     /// Asset capabilities for fungible tokens
@@ -279,7 +280,8 @@ module podium::PodiumProtocol {
                 subscription_cancelled_events: account::new_event_handle<SubscriptionCancelledEvent>(admin),
                 tier_updated_events: account::new_event_handle<TierUpdatedEvent>(admin),
                 config_updated_events: account::new_event_handle<ConfigUpdatedEvent>(admin),
-                outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin)
+                outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
+                outpost_price: 1000,
             });
 
             // Initialize asset capabilities
@@ -518,6 +520,7 @@ module podium::PodiumProtocol {
     // ============ Pass Trading & Bonding Curve Functions ============
 
     /// Calculate total buy price including all fees and referral bonus
+    #[view]
     public fun calculate_buy_price_with_fees(
         target_addr: address,
         amount: u64,
@@ -544,6 +547,7 @@ module podium::PodiumProtocol {
 
     /// Calculate sell price and fees when selling passes
     /// Returns (amount_received, protocol_fee, subject_fee)
+    #[view]
     public fun calculate_sell_price_with_fees(
         target_addr: address,
         amount: u64
@@ -605,7 +609,7 @@ module podium::PodiumProtocol {
         })
     }
 
-    /// Buy passes
+    /// Buy passes with automatic target asset creation
     public entry fun buy_pass(
         buyer: &signer,
         target_addr: address,
@@ -616,6 +620,22 @@ module podium::PodiumProtocol {
         
         // Initialize pass stats if needed
         init_pass_stats(target_addr);
+        
+        // Get or create the target asset
+        let asset_symbol = get_asset_symbol(target_addr);
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        if (!table::contains(&caps.metadata_objects, asset_symbol)) {
+            // Auto-create target asset with default metadata
+            let name = string::utf8(b"Pass Token for ");
+            string::append(&mut name, asset_symbol);
+            create_pass_token(
+                buyer,
+                target_addr,
+                name,
+                string::utf8(b"Automatically created pass token"),
+                string::utf8(b"https://podium.fi/pass/") // Default URI
+            );
+        };
         
         // Calculate prices and fees
         let (base_price, protocol_fee, subject_fee, referral_fee) = calculate_buy_price_with_fees(target_addr, amount, referrer);
@@ -885,22 +905,25 @@ module podium::PodiumProtocol {
     // ============ Helper Functions ============
 
     /// Get collection name
+    #[view]
     public fun get_collection_name(): String {
         string::utf8(COLLECTION_NAME_BYTES)
     }
 
     /// Get outpost purchase price
-    public fun get_outpost_purchase_price(): u64 {
-        // For now, return a fixed price. This could be made configurable later
-        1000
+    #[view]
+    public fun get_outpost_purchase_price(): u64 acquires Config {
+        borrow_global<Config>(@podium).outpost_price
     }
 
     /// Verify outpost ownership
+    #[view]
     public fun verify_ownership(outpost: Object<OutpostData>, owner: address): bool {
         object::is_owner(outpost, owner)
     }
 
     /// Check if an object has outpost data
+    #[view]
     public fun has_outpost_data(outpost: Object<OutpostData>): bool {
         exists<OutpostData>(object::object_address(&outpost))
     }
@@ -1130,6 +1153,7 @@ module podium::PodiumProtocol {
     }
 
     /// Verify if a subscription is valid
+    #[view]
     public fun verify_subscription(
         subscriber: address,
         outpost: Object<OutpostData>,
@@ -1153,6 +1177,7 @@ module podium::PodiumProtocol {
     }
 
     /// Get subscription details
+    #[view]
     public fun get_subscription(
         subscriber: address,
         outpost: Object<OutpostData>
@@ -1190,6 +1215,7 @@ module podium::PodiumProtocol {
     }
 
     /// Get subscription tier details
+    #[view]
     public fun get_tier_details(
         outpost: Object<OutpostData>,
         tier_id: u64
@@ -1206,6 +1232,7 @@ module podium::PodiumProtocol {
     }
 
     /// Get number of tiers
+    #[view]
     public fun get_tier_count(outpost: Object<OutpostData>): u64 acquires Config {
         let outpost_addr = object::object_address(&outpost);
         let config = borrow_global<Config>(@podium);
@@ -1233,12 +1260,16 @@ module podium::PodiumProtocol {
         code::publish_package_txn(admin, metadata_serialized, code);
     }
 
+    /// Get balance of passes
+    #[view]
     public fun get_balance(owner: address, asset_symbol: String): u64 acquires AssetCapabilities {
         let caps = borrow_global<AssetCapabilities>(@podium);
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
         primary_fungible_store::balance<Metadata>(owner, *metadata)
     }
 
+    /// Check if outpost is paused
+    #[view]
     public fun is_paused(outpost: Object<OutpostData>): bool acquires OutpostData {
         let outpost_data = borrow_global<OutpostData>(object::object_address(&outpost));
         outpost_data.emergency_pause
@@ -1332,6 +1363,7 @@ module podium::PodiumProtocol {
     }
 
     /// Check if the protocol is initialized
+    #[view]
     public fun is_initialized(): bool {
         exists<Config>(@podium)
     }

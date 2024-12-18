@@ -434,4 +434,69 @@ module podium::PodiumProtocol_test {
         // Verify initial balance is 0
         assert!(PodiumProtocol::get_balance(@podium, asset_symbol) == 0, 1);
     }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @user1)]
+    public fun test_pass_auto_creation(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+        user1: &signer,
+    ) {
+        debug::print(&string::utf8(b"[test_pass_auto_creation] Starting test"));
+        
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, user1, user1, user1);
+        
+        // Record initial balances
+        let user_addr = signer::address_of(user1);
+        let initial_apt_balance = coin::balance<AptosCoin>(user_addr);
+        let initial_target_balance = coin::balance<AptosCoin>(TARGET);
+        
+        debug::print(&string::utf8(b"[test_pass_auto_creation] Initial balances recorded"));
+        debug::print(&string::utf8(b"User APT balance:"));
+        debug::print(&initial_apt_balance);
+        
+        // Buy passes without pre-creating the target asset
+        let amount = PASS_AMOUNT;
+        debug::print(&string::utf8(b"[test_pass_auto_creation] Buying pass"));
+        PodiumProtocol::buy_pass(
+            user1,
+            TARGET,
+            amount,
+            option::none() // no referrer
+        );
+        
+        // Get asset symbol and verify balance
+        let asset_symbol = PodiumProtocol::get_asset_symbol(TARGET);
+        let pass_balance = PodiumProtocol::get_balance(user_addr, asset_symbol);
+        debug::print(&string::utf8(b"[test_pass_auto_creation] Pass balance after buy:"));
+        debug::print(&pass_balance);
+        assert!(pass_balance == amount, 0);
+        
+        // Verify APT balances changed appropriately
+        let final_user_balance = coin::balance<AptosCoin>(user_addr);
+        let final_target_balance = coin::balance<AptosCoin>(TARGET);
+        debug::print(&string::utf8(b"[test_pass_auto_creation] Final balances:"));
+        debug::print(&string::utf8(b"User APT balance:"));
+        debug::print(&final_user_balance);
+        debug::print(&string::utf8(b"Target APT balance:"));
+        debug::print(&final_target_balance);
+        
+        assert!(final_user_balance < initial_apt_balance, 1); // User spent APT
+        assert!(final_target_balance > initial_target_balance, 2); // Target received fee share
+        
+        // Try selling half the passes
+        let sell_amount = amount / 2;
+        debug::print(&string::utf8(b"[test_pass_auto_creation] Selling passes"));
+        PodiumProtocol::sell_pass(
+            user1,
+            TARGET,
+            sell_amount
+        );
+        
+        // Verify updated pass balance after sell
+        let final_pass_balance = PodiumProtocol::get_balance(user_addr, asset_symbol);
+        debug::print(&string::utf8(b"[test_pass_auto_creation] Final pass balance:"));
+        debug::print(&final_pass_balance);
+        assert!(final_pass_balance == amount - sell_amount, 3);
+    }
 } 
