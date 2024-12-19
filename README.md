@@ -222,7 +222,11 @@ movement move run \
   --profile podium \
   --function-id 'podium::PodiumProtocol::initialize'
 ```
+### Upgrade
+```bash
+movement move publish   --profile podium   --included-artifacts sparse   --assume-yes   --named-addresses podium=0x......af47,fihub=0x9.........b
 
+```
 ## Security Considerations
 
 1. **Access Control**

@@ -20,6 +20,7 @@ module podium::PodiumProtocol {
     use aptos_framework::primary_fungible_store;
     use aptos_framework::account;
     use aptos_framework::aptos_account;
+    use std::bcs;
 
     // Error codes - Combined from all modules
     const ENOT_ADMIN: u64 = 1;
@@ -125,6 +126,9 @@ module podium::PodiumProtocol {
         config_updated_events: EventHandle<ConfigUpdatedEvent>,
         outpost_created_events: EventHandle<OutpostCreatedEvent>,
         outpost_price: u64,
+        protocol_subscription_fee: u64, // basis points (e.g. 500 = 5%)
+        protocol_pass_fee: u64,        // basis points
+        referrer_fee: u64,             // basis points
     }
 
     /// Asset capabilities for fungible tokens
@@ -282,6 +286,9 @@ module podium::PodiumProtocol {
                 config_updated_events: account::new_event_handle<ConfigUpdatedEvent>(admin),
                 outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
                 outpost_price: 1000,
+                protocol_subscription_fee: 500,  // 5% default
+                protocol_pass_fee: 250,         // 2.5% default
+                referrer_fee: 1000,            // 10% default
             });
 
             // Initialize asset capabilities
@@ -843,7 +850,28 @@ module podium::PodiumProtocol {
     /// Get asset symbol for a target/outpost
     public fun get_asset_symbol(target: address): String {
         debug::print(&string::utf8(b"[get_asset_symbol] Creating symbol"));
-        let symbol = string::utf8(b"T1");
+        // Create a prefix for the symbol
+        let symbol = string::utf8(b"P");
+        
+        // Convert address to bytes and take first few bytes
+        let addr_bytes = bcs::to_bytes(&target);
+        let len = vector::length<u8>(&addr_bytes);
+        let take_bytes = if (len > 3) 3 else len;
+        
+        // Convert bytes to hex string and append
+        let hex_chars = b"0123456789ABCDEF";
+        let i = 0;
+        while (i < take_bytes) {
+            let byte = *vector::borrow(&addr_bytes, i);
+            let hi = byte >> 4;
+            let lo = byte & 0xF;
+            let hi_char = vector::singleton(*vector::borrow(&hex_chars, (hi as u64)));
+            let lo_char = vector::singleton(*vector::borrow(&hex_chars, (lo as u64)));
+            string::append(&mut symbol, string::utf8(hi_char));
+            string::append(&mut symbol, string::utf8(lo_char));
+            i = i + 1;
+        };
+        
         debug::print(&string::utf8(b"Generated symbol:"));
         debug::print(&symbol);
         symbol
@@ -1040,13 +1068,14 @@ module podium::PodiumProtocol {
         assert!(!table::contains(&sub_config.subscriptions, subscriber_addr), error::already_exists(ESUBSCRIPTION_ALREADY_EXISTS));
 
         // Handle fee distribution
-        let protocol_fee = (price * config.protocol_fee_percent) / 100;
-        let subject_fee = (price * config.subject_fee_percent) / 100;
+        let protocol_fee = (price * config.protocol_subscription_fee) / 10000;
         let referral_fee = if (option::is_some(&referrer)) {
-            (price * config.referral_fee_percent) / 100
+            (price * config.referrer_fee) / 10000
         } else {
             0
         };
+        // Subject gets everything remaining after protocol and referral fees
+        let subject_fee = price - protocol_fee - referral_fee;
 
         // Transfer fees
         transfer_with_check(subscriber, config.treasury, protocol_fee);
@@ -1262,10 +1291,17 @@ module podium::PodiumProtocol {
 
     /// Get balance of passes
     #[view]
-    public fun get_balance(owner: address, asset_symbol: String): u64 acquires AssetCapabilities {
+    public fun get_balance(owner: address, target: address): u64 acquires AssetCapabilities {
+        let asset_symbol = get_asset_symbol(target);
         let caps = borrow_global<AssetCapabilities>(@podium);
+        
+        // Check if the target's pass token exists
+        if (!table::contains(&caps.metadata_objects, asset_symbol)) {
+            return 0
+        };
+        
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
-        primary_fungible_store::balance<Metadata>(owner, *metadata)
+        primary_fungible_store::balance(owner, *metadata)
     }
 
     /// Check if outpost is paused
@@ -1366,5 +1402,61 @@ module podium::PodiumProtocol {
     #[view]
     public fun is_initialized(): bool {
         exists<Config>(@podium)
+    }
+
+    // ============ Admin Functions ============
+
+    /// Set protocol subscription fee
+    public entry fun update_protocol_subscription_fee(
+        admin: &signer,
+        new_fee: u64,
+    ) acquires Config {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE));
+        
+        let config = borrow_global_mut<Config>(@podium);
+        config.protocol_subscription_fee = new_fee;
+    }
+
+    /// Set protocol pass fee
+    public entry fun update_protocol_pass_fee(
+        admin: &signer,
+        new_fee: u64,
+    ) acquires Config {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE));
+        
+        let config = borrow_global_mut<Config>(@podium);
+        config.protocol_pass_fee = new_fee;
+    }
+
+    /// Set referrer fee
+    public entry fun update_referrer_fee(
+        admin: &signer,
+        new_fee: u64,
+    ) acquires Config {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE));
+        
+        let config = borrow_global_mut<Config>(@podium);
+        config.referrer_fee = new_fee;
+    }
+
+    /// Get protocol subscription fee
+    #[view]
+    public fun get_protocol_subscription_fee(): u64 acquires Config {
+        borrow_global<Config>(@podium).protocol_subscription_fee
+    }
+
+    /// Get protocol pass fee
+    #[view]
+    public fun get_protocol_pass_fee(): u64 acquires Config {
+        borrow_global<Config>(@podium).protocol_pass_fee
+    }
+
+    /// Get referrer fee
+    #[view]
+    public fun get_referrer_fee(): u64 acquires Config {
+        borrow_global<Config>(@podium).referrer_fee
     }
 }
