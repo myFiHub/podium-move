@@ -284,3 +284,79 @@ The protocol emits events for all major operations:
    - Configurable fees
    - Dynamic fee recipient
    - Upgradeable architecture
+
+## Fee Structure
+
+### Protocol Fees
+The protocol implements separate fee structures for different operations:
+
+1. **Subscription Fees**
+   - Protocol Fee: 5% (500 basis points)
+   - Referrer Fee: 10% (1000 basis points)
+   - Subject Fee: Remaining amount (85% without referrer, 75% with referrer)
+
+2. **Pass Trading Fees**
+   - Buy:
+     * Protocol Fee: Up to 4% (configurable)
+     * Subject Fee: Up to 8% (configurable)
+     * Referral Fee: Up to 2% (configurable) if applicable
+   - Sell:
+     * Protocol Fee: Up to 4% (configurable)
+     * Subject Fee: Up to 8% (configurable)
+     * 5% sell discount applied to base price
+
+### Fee Management
+Fees can be updated by protocol admin through the following functions:
+```move
+// Update subscription protocol fee (in basis points)
+update_protocol_subscription_fee(admin: &signer, new_fee: u64)
+
+// Update pass trading protocol fee (in basis points)
+update_protocol_pass_fee(admin: &signer, new_fee: u64)
+
+// Update referrer fee (in basis points)
+update_referrer_fee(admin: &signer, new_fee: u64)
+```
+
+View functions to check current fees:
+```move
+get_protocol_subscription_fee(): u64
+get_protocol_pass_fee(): u64
+get_referrer_fee(): u64
+```
+
+### Fee Distribution Examples
+
+1. **Subscription Payment (100 APT)**
+   - With Referrer:
+     * Protocol: 5 APT (5%)
+     * Referrer: 10 APT (10%)
+     * Subject: 85 APT (85%)
+   - Without Referrer:
+     * Protocol: 5 APT (5%)
+     * Subject: 95 APT (95%)
+
+2. **Pass Trading (100 APT base price)**
+   - Buy:
+     * Protocol: Up to 4 APT (configurable)
+     * Subject: Up to 8 APT (configurable)
+     * Referrer: Up to 2 APT (configurable) if applicable
+     * Total cost to buyer: Varies based on configured fees
+   - Sell:
+     * Base price after 5% discount: 95 APT
+     * Protocol: Up to 3.8 APT (4% of 95, configurable)
+     * Subject: Up to 7.6 APT (8% of 95, configurable)
+     * Seller receives: Varies based on configured fees
+
+### Fee Constraints
+- All fees are specified in basis points (1/100th of a percent)
+- Maximum fee: 10000 basis points (100%)
+- Fees can only be updated by protocol admin
+- Fee updates require validation checks
+
+### Trading Mechanics
+The protocol implements a 5% sell discount to:
+- Create a natural spread between buy and sell prices
+- Discourage short-term speculation
+- Provide market stability
+- Protect existing holders from rapid sell-offs

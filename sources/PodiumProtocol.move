@@ -101,7 +101,11 @@ module podium::PodiumProtocol {
         protocol_fee_percent: u64,
         subject_fee_percent: u64,
         referral_fee_percent: u64,
+        protocol_subscription_fee: u64, // basis points (e.g. 500 = 5%)
+        protocol_pass_fee: u64,        // basis points
+        referrer_fee: u64,             // basis points
         treasury: address,
+        
         
         // Bonding curve parameters
         weight_a: u64,
@@ -126,9 +130,6 @@ module podium::PodiumProtocol {
         config_updated_events: EventHandle<ConfigUpdatedEvent>,
         outpost_created_events: EventHandle<OutpostCreatedEvent>,
         outpost_price: u64,
-        protocol_subscription_fee: u64, // basis points (e.g. 500 = 5%)
-        protocol_pass_fee: u64,        // basis points
-        referrer_fee: u64,             // basis points
     }
 
     /// Asset capabilities for fungible tokens
@@ -269,6 +270,9 @@ module podium::PodiumProtocol {
                 protocol_fee_percent: MAX_PROTOCOL_FEE_PERCENT,
                 subject_fee_percent: MAX_SUBJECT_FEE_PERCENT,
                 referral_fee_percent: MAX_REFERRAL_FEE_PERCENT,
+                protocol_subscription_fee: 500,  // 5% default
+                protocol_pass_fee: 250,         // 2.5% default
+                referrer_fee: 1000,            // 10% default
                 treasury: @podium,
                 weight_a: DEFAULT_WEIGHT_A,
                 weight_b: DEFAULT_WEIGHT_B,
@@ -286,9 +290,6 @@ module podium::PodiumProtocol {
                 config_updated_events: account::new_event_handle<ConfigUpdatedEvent>(admin),
                 outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
                 outpost_price: 1000,
-                protocol_subscription_fee: 500,  // 5% default
-                protocol_pass_fee: 250,         // 2.5% default
-                referrer_fee: 1000,            // 10% default
             });
 
             // Initialize asset capabilities
