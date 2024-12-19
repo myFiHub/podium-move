@@ -55,7 +55,6 @@ module podium::PodiumProtocol {
     const MAX_REFERRAL_FEE_PERCENT: u64 = 2; // 2%
     const MAX_PROTOCOL_FEE_PERCENT: u64 = 4; // 4%
     const MAX_SUBJECT_FEE_PERCENT: u64 = 8; // 8%
-    const SELL_DISCOUNT_PERCENT: u64 = 5; // 5% discount on sells
     const DEFAULT_WEIGHT_A: u64 = 80; // 80%
     const DEFAULT_WEIGHT_B: u64 = 50; // 50%
     const DEFAULT_WEIGHT_C: u64 = 2;  // Adjustment factor
