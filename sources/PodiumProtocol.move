@@ -55,8 +55,8 @@ module podium::PodiumProtocol {
     const MAX_REFERRAL_FEE_PERCENT: u64 = 2; // 2%
     const MAX_PROTOCOL_FEE_PERCENT: u64 = 4; // 4%
     const MAX_SUBJECT_FEE_PERCENT: u64 = 8; // 8%
-    const DEFAULT_WEIGHT_A: u64 = 80; // 80%
-    const DEFAULT_WEIGHT_B: u64 = 50; // 50%
+    const DEFAULT_WEIGHT_A: u64 = 30000000; // 0.3 * 10^8
+    const DEFAULT_WEIGHT_B: u64 = 20000000; // 0.2 * 10^8
     const DEFAULT_WEIGHT_C: u64 = 2;  // Adjustment factor
     const INITIAL_PRICE: u64 = 1; // Initial price in $MOVE
     const DECIMALS: u8 = 8;
@@ -583,37 +583,34 @@ module podium::PodiumProtocol {
     }
 
     /// Calculate price using bonding curve
-    fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
+    #[view]
+    public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
-        
-        // Scale down for calculations
-        let scaled_supply = scale_down(supply);
-        let scaled_amount = scale_down(amount);
 
         // Add adjustment factor to supply
-        let adjusted_supply = scaled_supply + config.weight_c;
+        let adjusted_supply = supply + config.weight_c;
         if (adjusted_supply == 0) {
             return INITIAL_PRICE
         };
 
-        // Calculate summation for current supply
+        // Calculate first summation
         let n1 = adjusted_supply - 1;
         let sum1 = (n1 * adjusted_supply * (2 * n1 + 1)) / 6;
         
-        // Calculate summation for supply + amount
-        let n2 = n1 + scaled_amount;
-        let sum2 = ((n2) * (adjusted_supply + scaled_amount) * (2 * n2 + 1)) / 6;
+        // Calculate second summation
+        let n2 = n1 + amount;
+        let sum2 = (n2 * (adjusted_supply + amount) * (2 * n2 + 1)) / 6;
         
         // Calculate price using weight factors
         let summation = config.weight_a * (sum2 - sum1);
-        let price = (config.weight_b * summation * INITIAL_PRICE) / (1000000 * 1000000);
+        let price = (config.weight_b * summation * INITIAL_PRICE) / (SCALING_FACTOR * SCALING_FACTOR);
         
-        // Scale up result and use initial price as floor
-        scale_up(if (price < INITIAL_PRICE) {
+        // Return the maximum of calculated price and initial price
+        if (price < INITIAL_PRICE) {
             INITIAL_PRICE
         } else {
             price
-        })
+        }
     }
 
     /// Buy passes with automatic target asset creation

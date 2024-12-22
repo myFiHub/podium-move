@@ -1,0 +1,100 @@
+jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
+DEFAULT_WEIGHT_A: 80000000.0
+DEFAULT_WEIGHT_B: 50000000.0
+WAD: 100000000
+INITIAL_PRICE: 100000000
+Purchase 1: Price = 1.59999999
+Purchase 2: Price = 3.59999999
+Purchase 3: Price = 6.39999999
+Purchase 4: Price = 10.0
+Purchase 5: Price = 14.39999999
+Purchase 6: Price = 19.6
+Purchase 7: Price = 25.59999999
+Purchase 8: Price = 32.4
+Purchase 9: Price = 40.0
+Purchase 10: Price = 48.39999999
+Purchase 11: Price = 57.59999999
+Purchase 12: Price = 67.59999999
+Purchase 13: Price = 78.4
+Purchase 14: Price = 90.0
+Purchase 15: Price = 102.39999999
+Purchase 16: Price = 115.59999999
+Purchase 17: Price = 129.6
+Purchase 18: Price = 144.4
+Purchase 19: Price = 160.0
+Purchase 20: Price = 176.39999999
+jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
+DEFAULT_WEIGHT_A: 50000000.0
+DEFAULT_WEIGHT_B: 50000000.0
+WAD: 100000000
+INITIAL_PRICE: 100000000
+Purchase 1: Price = 1.0
+Purchase 2: Price = 2.25
+Purchase 3: Price = 3.99999999
+Purchase 4: Price = 6.25
+Purchase 5: Price = 9.0
+Purchase 6: Price = 12.25
+Purchase 7: Price = 15.99999999
+Purchase 8: Price = 20.25
+Purchase 9: Price = 25.0
+Purchase 10: Price = 30.24999999
+Purchase 11: Price = 36.0
+Purchase 12: Price = 42.25
+Purchase 13: Price = 49.0
+Purchase 14: Price = 56.24999999
+Purchase 15: Price = 63.99999999
+Purchase 16: Price = 72.24999999
+Purchase 17: Price = 81.0
+Purchase 18: Price = 90.25
+Purchase 19: Price = 100.0
+Purchase 20: Price = 110.25
+jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
+DEFAULT_WEIGHT_A: 10000000.0
+DEFAULT_WEIGHT_B: 50000000.0
+WAD: 100000000
+INITIAL_PRICE: 100000000
+Purchase 1: Price = 1.0
+Purchase 2: Price = 1.0
+Purchase 3: Price = 1.0
+Purchase 4: Price = 1.25
+Purchase 5: Price = 1.79999999
+Purchase 6: Price = 2.45
+Purchase 7: Price = 3.19999999
+Purchase 8: Price = 4.05
+Purchase 9: Price = 5.0
+Purchase 10: Price = 6.04999999
+Purchase 11: Price = 7.19999999
+Purchase 12: Price = 8.44999999
+Purchase 13: Price = 9.8
+Purchase 14: Price = 11.25
+Purchase 15: Price = 12.79999999
+Purchase 16: Price = 14.44999999
+Purchase 17: Price = 16.2
+Purchase 18: Price = 18.05
+Purchase 19: Price = 20.0
+Purchase 20: Price = 22.04999999
+jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
+DEFAULT_WEIGHT_A: 5000000.0
+DEFAULT_WEIGHT_B: 50000000.0
+WAD: 100000000
+INITIAL_PRICE: 100000000
+Purchase 1: Price = 1.0
+Purchase 2: Price = 1.0
+Purchase 3: Price = 1.0
+Purchase 4: Price = 1.0
+Purchase 5: Price = 1.0
+Purchase 6: Price = 1.225
+Purchase 7: Price = 1.59999999
+Purchase 8: Price = 2.025
+Purchase 9: Price = 2.5
+Purchase 10: Price = 3.02499999
+Purchase 11: Price = 3.59999999
+Purchase 12: Price = 4.22499999
+Purchase 13: Price = 4.9
+Purchase 14: Price = 5.625
+Purchase 15: Price = 6.39999999
+Purchase 16: Price = 7.22499999
+Purchase 17: Price = 8.1
+Purchase 18: Price = 9.025
+Purchase 19: Price = 10.0
+Purchase 20: Price = 11.02499999

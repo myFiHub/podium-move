@@ -30,10 +30,10 @@ module podium::PodiumProtocol_test {
     const ENOT_OWNER: u64 = 15;
 
     // Test constants
-    const PASS_AMOUNT: u64 = 100000000; // 1 pass (1 * 10^8)
-    const SUBSCRIPTION_WEEK_PRICE: u64 = 10000000000; // 100 MOVE
-    const SUBSCRIPTION_MONTH_PRICE: u64 = 30000000000; // 300 MOVE
-    const SUBSCRIPTION_YEAR_PRICE: u64 = 300000000000; // 3000 MOVE
+    const PASS_AMOUNT: u64 = 1000000; // 0.01 pass (0.01 * 10^8)
+    const SUBSCRIPTION_WEEK_PRICE: u64 = 100000000; // 1 MOVE
+    const SUBSCRIPTION_MONTH_PRICE: u64 = 300000000; // 3 MOVE
+    const SUBSCRIPTION_YEAR_PRICE: u64 = 3000000000; // 30 MOVE
     const TEST_OUTPOST_FEE_SHARE: u64 = 500; // 5%
     const TEST_MAX_FEE_PERCENTAGE: u64 = 10000; // 100% in basis points
     const BALANCE_TOLERANCE_BPS: u64 = 50; // 0.5% tolerance in basis points
@@ -49,21 +49,44 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"[setup_test] Starting setup"));
         
         // Create test accounts with proper initialization
-        account::create_account_for_test(@0x1);
+        // Only create accounts if they don't exist
+        if (!account::exists_at(@0x1)) {
+            account::create_account_for_test(@0x1);
+        };
+        
         assert!(signer::address_of(podium_signer) == @podium, 0);
-        account::create_account_for_test(signer::address_of(podium_signer));
-        account::create_account_for_test(signer::address_of(user1));
-        account::create_account_for_test(signer::address_of(user2));
-        account::create_account_for_test(signer::address_of(target));
+        if (!account::exists_at(signer::address_of(podium_signer))) {
+            account::create_account_for_test(signer::address_of(podium_signer));
+        };
+        
+        if (!account::exists_at(signer::address_of(user1))) {
+            account::create_account_for_test(signer::address_of(user1));
+        };
+        
+        if (!account::exists_at(signer::address_of(user2))) {
+            account::create_account_for_test(signer::address_of(user2));
+        };
+        
+        if (!account::exists_at(signer::address_of(target))) {
+            account::create_account_for_test(signer::address_of(target));
+        };
 
         // Setup coin for testing
         let (burn_cap, mint_cap) = aptos_framework::aptos_coin::initialize_for_test(aptos_framework);
         
-        // Register and fund accounts
-        coin::register<AptosCoin>(podium_signer);
-        coin::register<AptosCoin>(user1);
-        coin::register<AptosCoin>(user2);
-        coin::register<AptosCoin>(target);
+        // Register accounts for AptosCoin if not already registered
+        if (!coin::is_account_registered<AptosCoin>(signer::address_of(podium_signer))) {
+            coin::register<AptosCoin>(podium_signer);
+        };
+        if (!coin::is_account_registered<AptosCoin>(signer::address_of(user1))) {
+            coin::register<AptosCoin>(user1);
+        };
+        if (!coin::is_account_registered<AptosCoin>(signer::address_of(user2))) {
+            coin::register<AptosCoin>(user2);
+        };
+        if (!coin::is_account_registered<AptosCoin>(signer::address_of(target))) {
+            coin::register<AptosCoin>(target);
+        };
         
         // Fund accounts with test MOVE
         let initial_balance = 10000000 * 100000000; // 10M MOVE
@@ -444,6 +467,15 @@ module podium::PodiumProtocol_test {
         
         // Setup test environment
         setup_test(aptos_framework, podium_signer, user1, user1, user1);
+        
+        // Ensure TARGET account exists and is registered for AptosCoin
+        if (!account::exists_at(TARGET)) {
+            account::create_account_for_test(TARGET);
+        };
+        if (!coin::is_account_registered<AptosCoin>(TARGET)) {
+            let target_signer = account::create_signer_for_test(TARGET);
+            coin::register<AptosCoin>(&target_signer);
+        };
         
         // Record initial balances
         let user_addr = signer::address_of(user1);

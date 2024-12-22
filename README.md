@@ -325,29 +325,6 @@ get_protocol_pass_fee(): u64
 get_referrer_fee(): u64
 ```
 
-### Fee Distribution Examples
-
-1. **Subscription Payment (100 APT)**
-   - With Referrer:
-     * Protocol: 5 APT (5%)
-     * Referrer: 10 APT (10%)
-     * Subject: 85 APT (85%)
-   - Without Referrer:
-     * Protocol: 5 APT (5%)
-     * Subject: 95 APT (95%)
-
-2. **Pass Trading (100 APT base price)**
-   - Buy:
-     * Protocol: Up to 4 APT (configurable)
-     * Subject: Up to 8 APT (configurable)
-     * Referrer: Up to 2 APT (configurable) if applicable
-     * Total cost to buyer: Varies based on configured fees
-   - Sell:
-     * Base price after 5% discount: 95 APT
-     * Protocol: Up to 3.8 APT (4% of 95, configurable)
-     * Subject: Up to 7.6 APT (8% of 95, configurable)
-     * Seller receives: Varies based on configured fees
-
 ### Fee Constraints
 - All fees are specified in basis points (1/100th of a percent)
 - Maximum fee: 10000 basis points (100%)
@@ -355,8 +332,46 @@ get_referrer_fee(): u64
 - Fee updates require validation checks
 
 ### Trading Mechanics
-The protocol implements a 5% sell discount to:
-- Create a natural spread between buy and sell prices
-- Discourage short-term speculation
-- Provide market stability
-- Protect existing holders from rapid sell-offs
+The protocol implements a bonding curve mechanism for pass trading with the following mechanics:
+
+### Bonding Curve
+- Uses a polynomial bonding curve formula to calculate prices
+- Price increases as supply increases and decreases as supply decreases
+- Key parameters:
+  * Weight A: 80% - Controls curve steepness
+  * Weight B: 50% - Controls price scaling
+  * Weight C: 2 - Supply adjustment factor
+  * Initial price: 1 APT
+
+### Buy Mechanics
+1. Price is calculated based on current supply and amount being purchased
+2. Total cost includes:
+   - Base price from bonding curve
+   - Protocol fee (up to 4%)
+   - Subject fee (up to 8%) 
+   - Referral fee if applicable (up to 2%)
+3. Base price is added to redemption vault
+4. Fees are distributed to respective recipients
+5. Pass tokens are minted to buyer
+
+### Sell Mechanics
+1. Price is calculated with 5% discount from bonding curve
+2. Seller receives:
+   - Base discounted price minus fees
+   - Protocol fee deducted (up to 4%)
+   - Subject fee deducted (up to 8%)
+3. Redemption coins withdrawn from vault
+4. Pass tokens are burned
+5. Fees distributed to protocol and subject
+
+### Key Features
+- Automatic price discovery through bonding curve
+- Guaranteed liquidity through redemption vault
+- Fee sharing between protocol, subjects and referrers
+- Built-in sell discount to encourage trading
+- Emergency pause functionality for outposts
+
+### Stats Tracking
+- Total supply tracked per target/outpost
+- Last trade price recorded
+- Events emitted for buys and sells
