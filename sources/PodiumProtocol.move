@@ -51,16 +51,19 @@ module podium::PodiumProtocol {
     const MAX_FEE_PERCENTAGE: u64 = 10000; // 100% = 10000 basis points
     const OUTPOST_FEE_SHARE: u64 = 500;
 
-    // Constants - Pass related
+    // Constants - Pass Fees related
     const MAX_REFERRAL_FEE_PERCENT: u64 = 2; // 2%
     const MAX_PROTOCOL_FEE_PERCENT: u64 = 4; // 4%
     const MAX_SUBJECT_FEE_PERCENT: u64 = 8; // 8%
+ 
+     // Constants for bonding curve calculations
+    const INPUT_SCALE: u64 = 1000; // 10^3 for input scaling
+    const WAD: u64 = 100000000; // 10^8 for price calculations
+    const INITIAL_PRICE: u64 = 100000000; // 1 * 10^8 (same as WAD)
     const DEFAULT_WEIGHT_A: u64 = 30000000; // 0.3 * 10^8
     const DEFAULT_WEIGHT_B: u64 = 20000000; // 0.2 * 10^8
     const DEFAULT_WEIGHT_C: u64 = 2;  // Adjustment factor
-    const INITIAL_PRICE: u64 = 1; // Initial price in $MOVE
     const DECIMALS: u8 = 8;
-    const SCALING_FACTOR: u64 = 100000000; // 10^8
 
     // Time constants
     const SECONDS_PER_WEEK: u64 = 7 * 24 * 60 * 60;
@@ -69,6 +72,8 @@ module podium::PodiumProtocol {
     const DURATION_WEEK: u64 = 1;
     const DURATION_MONTH: u64 = 2;
     const DURATION_YEAR: u64 = 3;
+
+   
 
     // ============ Core Data Structures ============
 
@@ -588,24 +593,46 @@ module podium::PodiumProtocol {
         let config = borrow_global<Config>(@podium);
 
         // Add adjustment factor to supply
-        let adjusted_supply = supply + config.weight_c;
+        let adjusted_supply: u64 = supply + config.weight_c;
         if (adjusted_supply == 0) {
             return INITIAL_PRICE
         };
 
-        // Calculate first summation
-        let n1 = adjusted_supply - 1;
-        let sum1 = (n1 * adjusted_supply * (2 * n1 + 1)) / 6;
+        // Calculate first summation in parts to prevent overflow
+        let n1: u64 = adjusted_supply - 1;
         
-        // Calculate second summation
-        let n2 = n1 + amount;
-        let sum2 = (n2 * (adjusted_supply + amount) * (2 * n2 + 1)) / 6;
+        // Scale down early to prevent overflow
+        let scaled_n1: u64 = n1 / INPUT_SCALE;
+        let scaled_supply: u64 = adjusted_supply / INPUT_SCALE;
         
-        // Calculate price using weight factors
-        let summation = config.weight_a * (sum2 - sum1);
-        let price = (config.weight_b * summation * INITIAL_PRICE) / (SCALING_FACTOR * SCALING_FACTOR);
+        // Calculate first sum with scaled values
+        let sum1: u64 = (scaled_n1 * scaled_supply * (2 * scaled_n1 + 1)) / 6;
         
-        // Return the maximum of calculated price and initial price
+        // Calculate second summation with scaled values
+        let scaled_amount: u64 = amount / INPUT_SCALE;
+        let n2: u64 = scaled_n1 + scaled_amount;
+        let sum2: u64 = (n2 * (scaled_supply + scaled_amount) * (2 * n2 + 1)) / 6;
+        
+        // Calculate summation difference
+        let summation_diff: u64 = sum2 - sum1;
+        
+        // Apply weights in parts with intermediate scaling
+        let step1: u64 = (summation_diff * (config.weight_a / INPUT_SCALE)) / WAD;
+        let step2: u64 = (step1 * (config.weight_b / INPUT_SCALE)) / WAD;
+        
+        // Scale up the final result
+        let price: u64 = step2 * INITIAL_PRICE;
+        
+        debug::print(&string::utf8(b"Price calculation steps:"));
+        debug::print(&string::utf8(b"Summation diff:"));
+        debug::print(&summation_diff);
+        debug::print(&string::utf8(b"Step 1:"));
+        debug::print(&step1);
+        debug::print(&string::utf8(b"Step 2:"));
+        debug::print(&step2);
+        debug::print(&string::utf8(b"Final price:"));
+        debug::print(&price);
+
         if (price < INITIAL_PRICE) {
             INITIAL_PRICE
         } else {
@@ -836,12 +863,12 @@ module podium::PodiumProtocol {
 
     /// Helper function to scale down amount for calculations
     fun scale_down(amount: u64): u64 {
-        amount / SCALING_FACTOR
+        amount / INPUT_SCALE
     }
 
     /// Helper function to scale up result after calculations
     fun scale_up(amount: u64): u64 {
-        amount * SCALING_FACTOR
+        amount * INPUT_SCALE
     }
 
     /// Get asset symbol for a target/outpost

@@ -3,27 +3,37 @@ import numpy as np
 from matplotlib.ticker import FuncFormatter
 
 # Constants based on the bonding curve implementation
-DEFAULT_WEIGHT_A = 0.3 * 10**8  # Scaled by WAD
-DEFAULT_WEIGHT_B = 0.2 * 10**8  # Scaled by WAD
+DEFAULT_WEIGHT_A = 30000000  # 0.3 * 10^8
+DEFAULT_WEIGHT_B = 20000000  # 0.2 * 10^8
 DEFAULT_WEIGHT_C = 2
-WAD = 10**8  # Adjusted scaling factor for precision
+WAD = 100000000  # 10^8 (SCALING_FACTOR)
 INITIAL_PRICE = 1 * WAD  # Ensure starting price is exactly 1
 
 def get_price(supply, amount):
-    # Adjusted supply
+    # Add adjustment factor to supply
     adjusted_supply = supply + DEFAULT_WEIGHT_C
+    if adjusted_supply == 0:
+        return INITIAL_PRICE
 
     # Calculate summations
-    sum1 = ((adjusted_supply - 1) * adjusted_supply * (2 * (adjusted_supply - 1) + 1)) // 6
-    sum2 = ((adjusted_supply - 1 + amount) * (adjusted_supply + amount) * (2 * (adjusted_supply - 1 + amount) + 1)) // 6
-
-    # Summation difference
+    n1 = adjusted_supply - 1
+    
+    # Calculate first summation
+    # Divide operations into steps to prevent overflow
+    sum1_part1 = n1 * adjusted_supply
+    sum1_part2 = (2 * n1 + 1)
+    sum1 = (sum1_part1 * sum1_part2) // 6
+    
+    # Calculate summation for supply + amount
+    n2 = n1 + amount
+    sum2_part1 = n2 * (adjusted_supply + amount)
+    sum2_part2 = (2 * n2 + 1)
+    sum2 = (sum2_part1 * sum2_part2) // 6
+    
+    # Calculate final price with intermediate scaling to prevent overflow
     summation = DEFAULT_WEIGHT_A * (sum2 - sum1)
-
-    # Price calculation
-    price = (DEFAULT_WEIGHT_B * summation * INITIAL_PRICE) // (WAD * WAD)
-
-    # Return the maximum of calculated price and initial price
+    price = ((DEFAULT_WEIGHT_B * summation) // WAD * INITIAL_PRICE) // WAD
+    
     return max(price, INITIAL_PRICE)
 
 # Print the constants
@@ -40,14 +50,17 @@ for supply in supply_range:
     price = get_price(supply, 1) / WAD  # Convert to human-readable format
     prices.append(price)
 
-# Debugging: Print some price values
-print("\nPrice values for the first few supplies:")
+# Print first 20 prices
+print("\nPrice values for the first 20 supplies:")
 for i in range(20):
     print(f"Supply {i}: Price = {prices[i]:.2f} MOVE")
 
-# Debugging: Print calculated prices for specific supply values
+
+
+# Print calculated prices for key supply points
+print("\nPrices at key supply points:")
 for supply in [1, 10, 25, 50, 100, 250, 500, 1000, 2000]:
-    price = get_price(supply, 1) / WAD  # Convert to human-readable format
+    price = get_price(supply, 1) / WAD
     print(f"Supply {supply}: Price = {price:.2f} MOVE")
 
 # Create the plot
@@ -69,7 +82,8 @@ print(f"Min Price: {min(prices):.2f} MOVE")
 print(f"Max Price: {max(prices):.2f} MOVE")
 print(f"Price at Supply 1000: {prices[1000]:.2f} MOVE")
 print(f"Price at Supply 2000: {prices[2000]:.2f} MOVE")
+
 # Save the plot to a file
-plt.savefig('bonding_curve.png')  # Save the plot as a PNG file
+plt.savefig('bonding_curve.png')
 
 
