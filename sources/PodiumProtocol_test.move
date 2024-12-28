@@ -895,4 +895,43 @@ module podium::PodiumProtocol_test {
         // Should fail when fee > 100%
         PodiumProtocol::update_protocol_subscription_fee(admin, 10001);
     }
+
+    #[test(aptos_framework = @0x1, podium_signer = @podium)]
+    public fun test_price_progression(
+        aptos_framework: &signer,
+        podium_signer: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, podium_signer, podium_signer, podium_signer, podium_signer);
+        PodiumProtocol::initialize(podium_signer);  // Make sure protocol is initialized
+
+        // Print constants
+        debug::print(&string::utf8(b"\nConstants:"));
+        debug::print(&string::utf8(b"INPUT_SCALE:"));
+        debug::print(&PodiumProtocol::get_input_scale());
+        debug::print(&string::utf8(b"WAD:"));
+        debug::print(&PodiumProtocol::get_wad());
+        debug::print(&string::utf8(b"INITIAL_PRICE:"));
+        debug::print(&PodiumProtocol::get_initial_price());
+        debug::print(&string::utf8(b"DEFAULT_WEIGHT_A:"));
+        debug::print(&PodiumProtocol::get_weight_a());
+        debug::print(&string::utf8(b"DEFAULT_WEIGHT_B:"));
+        debug::print(&PodiumProtocol::get_weight_b());
+        debug::print(&string::utf8(b"DEFAULT_WEIGHT_C:"));
+        debug::print(&PodiumProtocol::get_weight_c());
+
+        // Print price progression for first 20 purchases
+        debug::print(&string::utf8(b"\nPrice progression for first 20 purchases:"));
+        let supply = 0;
+        let i = 0;
+        while (i < 20) {
+            let price = PodiumProtocol::calculate_price(supply, 1, false);
+            debug::print(&string::utf8(b"Supply:"));
+            debug::print(&supply);
+            debug::print(&string::utf8(b"Price (APT):"));
+            debug::print(&(price / PodiumProtocol::get_wad()));
+            supply = supply + 1;
+            i = i + 1;
+        };
+    }
 } 

@@ -590,49 +590,54 @@ module podium::PodiumProtocol {
     /// Calculate price using bonding curve
     #[view]
     public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
-        let config = borrow_global<Config>(@podium);
-
-        // Add adjustment factor to supply
-        let adjusted_supply: u64 = supply + config.weight_c;
+        let adjusted_supply = supply + DEFAULT_WEIGHT_C;
         if (adjusted_supply == 0) {
             return INITIAL_PRICE
         };
 
-        // Calculate first summation in parts to prevent overflow
-        let n1: u64 = adjusted_supply - 1;
+        let n1 = adjusted_supply - 1;
+        
+        // Add debug prints
+        debug::print(&string::utf8(b"Calculation steps:"));
+        debug::print(&string::utf8(b"adjusted_supply:"));
+        debug::print(&adjusted_supply);
+        debug::print(&string::utf8(b"n1:"));
+        debug::print(&n1);
         
         // Scale down early to prevent overflow
-        let scaled_n1: u64 = n1 / INPUT_SCALE;
-        let scaled_supply: u64 = adjusted_supply / INPUT_SCALE;
+        let scaled_n1 = n1 / INPUT_SCALE;
+        let scaled_supply = adjusted_supply / INPUT_SCALE;
+        
+        debug::print(&string::utf8(b"scaled_n1:"));
+        debug::print(&scaled_n1);
+        debug::print(&string::utf8(b"scaled_supply:"));
+        debug::print(&scaled_supply);
         
         // Calculate first sum with scaled values
-        let sum1: u64 = (scaled_n1 * scaled_supply * (2 * scaled_n1 + 1)) / 6;
+        let sum1 = (scaled_n1 * scaled_supply * (2 * scaled_n1 + 1)) / 6;
         
         // Calculate second summation with scaled values
-        let scaled_amount: u64 = amount / INPUT_SCALE;
-        let n2: u64 = scaled_n1 + scaled_amount;
-        let sum2: u64 = (n2 * (scaled_supply + scaled_amount) * (2 * n2 + 1)) / 6;
+        let scaled_amount = amount / INPUT_SCALE;
+        let n2 = scaled_n1 + scaled_amount;
+        let sum2 = (n2 * (scaled_supply + scaled_amount) * (2 * n2 + 1)) / 6;
         
         // Calculate summation difference
-        let summation_diff: u64 = sum2 - sum1;
+        let summation_diff = sum2 - sum1;
+        
+        debug::print(&string::utf8(b"sum1:"));
+        debug::print(&sum1);
+        debug::print(&string::utf8(b"sum2:"));
+        debug::print(&sum2);
+        debug::print(&string::utf8(b"summation_diff:"));
+        debug::print(&summation_diff);
         
         // Apply weights in parts with intermediate scaling
-        let step1: u64 = (summation_diff * (config.weight_a / INPUT_SCALE)) / WAD;
-        let step2: u64 = (step1 * (config.weight_b / INPUT_SCALE)) / WAD;
+        let step1 = (summation_diff * (DEFAULT_WEIGHT_A / INPUT_SCALE)) / WAD;
+        let step2 = (step1 * (DEFAULT_WEIGHT_B / INPUT_SCALE)) / WAD;
         
-        // Scale up the final result
-        let price: u64 = step2 * INITIAL_PRICE;
+        // Scale up final result
+        let price = step2 * INITIAL_PRICE;
         
-        debug::print(&string::utf8(b"Price calculation steps:"));
-        debug::print(&string::utf8(b"Summation diff:"));
-        debug::print(&summation_diff);
-        debug::print(&string::utf8(b"Step 1:"));
-        debug::print(&step1);
-        debug::print(&string::utf8(b"Step 2:"));
-        debug::print(&step2);
-        debug::print(&string::utf8(b"Final price:"));
-        debug::print(&price);
-
         if (price < INITIAL_PRICE) {
             INITIAL_PRICE
         } else {
@@ -1483,4 +1488,23 @@ module podium::PodiumProtocol {
     public fun get_referrer_fee(): u64 acquires Config {
         borrow_global<Config>(@podium).referrer_fee
     }
+
+    // Getter functions for constants
+    #[view]
+    public fun get_input_scale(): u64 { INPUT_SCALE }
+    
+    #[view]
+    public fun get_wad(): u64 { WAD }
+    
+    #[view]
+    public fun get_initial_price(): u64 { INITIAL_PRICE }
+    
+    #[view]
+    public fun get_weight_a(): u64 { DEFAULT_WEIGHT_A }
+    
+    #[view]
+    public fun get_weight_b(): u64 { DEFAULT_WEIGHT_B }
+    
+    #[view]
+    public fun get_weight_c(): u64 { DEFAULT_WEIGHT_C }
 }
