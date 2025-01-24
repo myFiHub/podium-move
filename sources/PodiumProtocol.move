@@ -589,7 +589,7 @@ module podium::PodiumProtocol {
 
     /// Calculate price using bonding curve
     #[view]
-    public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
+    public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 {
         let adjusted_supply = supply + DEFAULT_WEIGHT_C;
         if (adjusted_supply == 0) {
             return INITIAL_PRICE

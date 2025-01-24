@@ -110,12 +110,7 @@ module podium::PodiumProtocol_test {
 
     // Helper function to create test outpost
     fun create_test_outpost(creator: &signer): Object<OutpostData> {
-        debug::print(&string::utf8(b"=== Starting create_test_outpost ==="));
-        
         let creator_addr = signer::address_of(creator);
-        debug::print(&string::utf8(b"Creator address:"));
-        debug::print(&creator_addr);
-        
         let name = string::utf8(b"Test Outpost");
         
         // Create outpost
@@ -129,7 +124,6 @@ module podium::PodiumProtocol_test {
         // Initialize subscription config
         PodiumProtocol::init_subscription_config(creator, outpost);
         
-        debug::print(&string::utf8(b"=== Finished create_test_outpost ==="));
         outpost
     }
 
@@ -177,6 +171,10 @@ module podium::PodiumProtocol_test {
         
         // Verify pass balance
         assert!(PodiumProtocol::get_balance(signer::address_of(buyer), target_addr) == PASS_AMOUNT, 0);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_outpost_creation_and_pass_buying: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1, user2 = @user2)]
@@ -229,6 +227,10 @@ module podium::PodiumProtocol_test {
         );
         assert!(tier_id == 1, 1);
         assert!(end_time > start_time, 2);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_subscription_flow: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1)]
@@ -302,6 +304,10 @@ module podium::PodiumProtocol_test {
         // Verify final balance
         let final_balance = coin::balance<AptosCoin>(signer::address_of(user1));
         assert!(final_balance == balance_after_buy + amount_received, 3);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_pass_trading: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, unauthorized_user = @user1)]
@@ -323,6 +329,10 @@ module podium::PodiumProtocol_test {
             SUBSCRIPTION_WEEK_PRICE,
             1, // DURATION_WEEK
         );
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_unauthorized_tier_creation: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1)]
@@ -352,6 +362,10 @@ module podium::PodiumProtocol_test {
             SUBSCRIPTION_WEEK_PRICE,
             1, // DURATION_WEEK
         );
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_duplicate_tier_creation: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1)]
@@ -397,6 +411,10 @@ module podium::PodiumProtocol_test {
             outpost,
             0
         ), 1);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_subscription_expiration: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target, user1 = @user1)]
@@ -420,6 +438,10 @@ module podium::PodiumProtocol_test {
         
         // Verify unpaused
         assert!(!PodiumProtocol::is_paused(outpost), 1);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_outpost_emergency_pause: PASS"));
     }
 
     #[test(creator = @podium)]
@@ -455,6 +477,10 @@ module podium::PodiumProtocol_test {
 
         // Verify initial balance is 0
         assert!(PodiumProtocol::get_balance(@podium, metadata_addr) == 0, 1);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_create_target_asset: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @user1)]
@@ -528,6 +554,10 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"[test_pass_auto_creation] Final pass balance:"));
         debug::print(&final_pass_balance);
         assert!(final_pass_balance == amount - sell_amount, 3);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_pass_auto_creation: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
@@ -597,6 +627,10 @@ module podium::PodiumProtocol_test {
         assert!(!PodiumProtocol::is_paused(outpost), 14);
         PodiumProtocol::toggle_emergency_pause(creator, outpost);
         assert!(PodiumProtocol::is_paused(outpost), 15);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_view_functions: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
@@ -683,6 +717,10 @@ module podium::PodiumProtocol_test {
         };
         let percent_diff = (difference * 10000) / post_buy_balance;
         assert!(percent_diff <= BALANCE_TOLERANCE_BPS, 3);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_self_trading: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
@@ -745,6 +783,10 @@ module podium::PodiumProtocol_test {
         };
         let percent_diff = (difference * 10000) / initial_balance;
         assert!(percent_diff <= BALANCE_TOLERANCE_BPS, 1);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_self_subscription: PASS"));
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, referrer = @0x123, subject = @0x456)]
@@ -797,6 +839,10 @@ module podium::PodiumProtocol_test {
         // Cleanup
         coin::destroy_burn_cap(burn_cap);
         coin::destroy_mint_cap(mint_cap);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_fee_distribution: PASS"));
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, subject = @0x456)]
@@ -842,6 +888,10 @@ module podium::PodiumProtocol_test {
         // Cleanup
         coin::destroy_burn_cap(burn_cap);
         coin::destroy_mint_cap(mint_cap);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_pass_payment: PASS"));
     }
 
     #[test(aptos_framework = @0x1, admin = @podium)]
@@ -864,6 +914,10 @@ module podium::PodiumProtocol_test {
         // Test updating referrer fee
         PodiumProtocol::update_referrer_fee(admin, 500); // 5%
         assert!(PodiumProtocol::get_referrer_fee() == 500, 2);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_fee_updates: PASS"));
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, non_admin = @0x123)]
@@ -933,5 +987,9 @@ module podium::PodiumProtocol_test {
             supply = supply + 1;
             i = i + 1;
         };
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_price_progression: PASS"));
     }
 } 
