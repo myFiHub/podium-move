@@ -43,6 +43,9 @@ module podium::PodiumProtocol {
     const ESUBSCRIPTION_ALREADY_EXISTS: u64 = 18;
     const EINVALID_SUBSCRIPTION_DURATION: u64 = 19;
     const EINVALID_SUBSCRIPTION_TIER: u64 = 20;
+    const EINVALID_FEE_VALUE: u64 = 2;
+    const EUNAUTHORIZED: u64 = 3;
+    const EACCOUNT_NOT_REGISTERED: u64 = 4;
 
     // Constants - Outpost related
     const COLLECTION_NAME_BYTES: vector<u8> = b"PodiumOutposts";
@@ -57,12 +60,12 @@ module podium::PodiumProtocol {
     const MAX_SUBJECT_FEE_PERCENT: u64 = 8; // 8%
  
      // Constants for bonding curve calculations
-    const INPUT_SCALE: u64 = 1000; // 10^3 for input scaling
-    const WAD: u64 = 100000000; // 10^8 for price calculations
-    const INITIAL_PRICE: u64 = 100000000; // 1 * 10^8 (same as WAD)
-    const DEFAULT_WEIGHT_A: u64 = 30000000; // 0.3 * 10^8
-    const DEFAULT_WEIGHT_B: u64 = 20000000; // 0.2 * 10^8
-    const DEFAULT_WEIGHT_C: u64 = 2;  // Adjustment factor
+    const INITIAL_PRICE: u64 = 100000000; // 1 APT = 10^8
+    const INPUT_SCALE: u64 = 1000000;     // Scale factor to handle Move's u64 limitations
+    const WAD: u64 = 10000;               // Base for percentage calculations (100% = 10000)
+    const DEFAULT_WEIGHT_A: u64 = 3000;           // 0.3 scaled to basis points
+    const DEFAULT_WEIGHT_B: u64 = 2000;           // 0.2 scaled to basis points
+    const DEFAULT_WEIGHT_C: u64 = 2;              // Adjustment factor C
     const DECIMALS: u8 = 8;
 
     // Time constants
@@ -73,7 +76,8 @@ module podium::PodiumProtocol {
     const DURATION_MONTH: u64 = 2;
     const DURATION_YEAR: u64 = 3;
 
-   
+    // Calculate the minimum unit (1 whole pass)
+    const MIN_WHOLE_PASS: u64 = 100000000; // 10^8, one whole pass unit
 
     // ============ Core Data Structures ============
 
@@ -531,7 +535,11 @@ module podium::PodiumProtocol {
 
     // ============ Pass Trading & Bonding Curve Functions ============
 
-    /// Calculate total buy price including all fees and referral bonus
+    /// Calculates total buy price including all fees and referral bonus
+    /// * `target_addr` - The target address for the pass
+    /// * `amount` - Amount of passes to buy
+    /// * `referrer` - Optional referrer address
+    /// * Returns (price, protocol_fee, subject_fee, referral_fee)
     #[view]
     public fun calculate_buy_price_with_fees(
         target_addr: address,
@@ -557,8 +565,10 @@ module podium::PodiumProtocol {
         (price, protocol_fee, subject_fee, referral_fee)
     }
 
-    /// Calculate sell price and fees when selling passes
-    /// Returns (amount_received, protocol_fee, subject_fee)
+    /// Calculates sell price and fees when selling passes
+    /// * `target_addr` - The target address for the pass
+    /// * `amount` - Amount of passes to sell
+    /// * Returns (amount_received, protocol_fee, subject_fee)
     #[view]
     public fun calculate_sell_price_with_fees(
         target_addr: address,
@@ -581,68 +591,147 @@ module podium::PodiumProtocol {
         let protocol_fee = (price * config.protocol_fee_percent) / 100;
         let subject_fee = (price * config.subject_fee_percent) / 100;
         
+        // Add debug prints
+        debug::print(&string::utf8(b"[calculate_sell_price_with_fees] Calculation:"));
+        debug::print(&string::utf8(b"Current supply:"));
+        debug::print(&current_supply);
+        debug::print(&string::utf8(b"Amount to sell:"));
+        debug::print(&amount);
+        debug::print(&string::utf8(b"Raw price:"));
+        debug::print(&price);
+        debug::print(&string::utf8(b"Protocol fee:"));
+        debug::print(&protocol_fee);
+        debug::print(&string::utf8(b"Subject fee:"));
+        debug::print(&subject_fee);
+        
         // Seller receives price minus all fees
         let amount_received = price - protocol_fee - subject_fee;
         
         (amount_received, protocol_fee, subject_fee)
     }
 
-    /// Calculate price using bonding curve
+    /// Calculates price using bonding curve
+    /// * `supply` - Current supply of passes
+    /// * `amount` - Amount of passes to buy/sell
+    /// * `is_sell` - Whether this is a sell operation
+    /// * Returns the calculated price
     #[view]
     public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 {
-        let adjusted_supply = supply + DEFAULT_WEIGHT_C;
-        if (adjusted_supply == 0) {
+        debug::print(&string::utf8(b"=== Starting price calculation ==="));
+        debug::print(&string::utf8(b"Input parameters:"));
+        debug::print(&string::utf8(b"Supply:"));
+        debug::print(&supply);
+        debug::print(&string::utf8(b"Amount:"));
+        debug::print(&amount);
+        debug::print(&string::utf8(b"Is sell:"));
+        debug::print(&is_sell);
+        
+        // Early return for first purchase
+        if (supply == 0) {
+            debug::print(&string::utf8(b"First purchase - returning initial price"));
             return INITIAL_PRICE
         };
 
-        let n1 = adjusted_supply - 1;
-        
-        // Add debug prints
-        debug::print(&string::utf8(b"Calculation steps:"));
-        debug::print(&string::utf8(b"adjusted_supply:"));
-        debug::print(&adjusted_supply);
-        debug::print(&string::utf8(b"n1:"));
+        // Calculate n1 = (s + c - 1) / k
+        let s_plus_c = supply + DEFAULT_WEIGHT_C;
+        if (s_plus_c <= 1) {
+            debug::print(&string::utf8(b"Supply + C <= 1 - returning initial price"));
+            return INITIAL_PRICE
+        };
+        let n1 = (s_plus_c - 1) / INPUT_SCALE;
+        debug::print(&string::utf8(b"n1 calculated:"));
         debug::print(&n1);
+
+        // Calculate n2 based on buy/sell
+        let n2 = if (is_sell) {
+            let supply_minus_amount = if (s_plus_c > amount) {
+                s_plus_c - amount
+            } else {
+                1
+            };
+            (supply_minus_amount - 1) / INPUT_SCALE
+        } else {
+            ((s_plus_c + amount - 1) / INPUT_SCALE)
+        };
+        debug::print(&string::utf8(b"n2 calculated:"));
+        debug::print(&n2);
+
+        // Calculate S1 = (n1 * (n1 + 1) * (2n1 + 1)) / 6
+        let s1 = calculate_summation(n1);
+        debug::print(&string::utf8(b"S1 calculated:"));
+        debug::print(&s1);
+
+        // Calculate S2 = (n2 * (n2 + 1) * (2n2 + 1)) / 6
+        let s2 = calculate_summation(n2);
+        debug::print(&string::utf8(b"S2 calculated:"));
+        debug::print(&s2);
+
+        // Calculate S2 - S1, handling potential negative case for sells
+        let s_diff = if (s2 > s1) {
+            s2 - s1
+        } else if (is_sell) {
+            s1 - s2
+        } else {
+            0
+        };
+        debug::print(&string::utf8(b"S_diff calculated:"));
+        debug::print(&s_diff);
+
+        // Apply weights: ((S2 - S1) * Wa * Wb) / (WAD^2)
+        let step1 = (s_diff * DEFAULT_WEIGHT_A) / WAD;  // First weight application
+        debug::print(&string::utf8(b"After first weight application:"));
+        debug::print(&step1);
         
-        // Scale down early to prevent overflow
-        let scaled_n1 = n1 / INPUT_SCALE;
-        let scaled_supply = adjusted_supply / INPUT_SCALE;
-        
-        debug::print(&string::utf8(b"scaled_n1:"));
-        debug::print(&scaled_n1);
-        debug::print(&string::utf8(b"scaled_supply:"));
-        debug::print(&scaled_supply);
-        
-        // Calculate first sum with scaled values
-        let sum1 = (scaled_n1 * scaled_supply * (2 * scaled_n1 + 1)) / 6;
-        
-        // Calculate second summation with scaled values
-        let scaled_amount = amount / INPUT_SCALE;
-        let n2 = scaled_n1 + scaled_amount;
-        let sum2 = (n2 * (scaled_supply + scaled_amount) * (2 * n2 + 1)) / 6;
-        
-        // Calculate summation difference
-        let summation_diff = sum2 - sum1;
-        
-        debug::print(&string::utf8(b"sum1:"));
-        debug::print(&sum1);
-        debug::print(&string::utf8(b"sum2:"));
-        debug::print(&sum2);
-        debug::print(&string::utf8(b"summation_diff:"));
-        debug::print(&summation_diff);
-        
-        // Apply weights in parts with intermediate scaling
-        let step1 = (summation_diff * (DEFAULT_WEIGHT_A / INPUT_SCALE)) / WAD;
-        let step2 = (step1 * (DEFAULT_WEIGHT_B / INPUT_SCALE)) / WAD;
-        
-        // Scale up final result
+        let step2 = (step1 * DEFAULT_WEIGHT_B) / WAD;   // Second weight application
+        debug::print(&string::utf8(b"After second weight application:"));
+        debug::print(&step2);
+
+        // Scale back up and apply initial price
         let price = step2 * INITIAL_PRICE;
-        
-        if (price < INITIAL_PRICE) {
+        debug::print(&string::utf8(b"Final price before minimum check:"));
+        debug::print(&price);
+
+        // Return at least initial price
+        let final_price = if (price < INITIAL_PRICE) {
+            debug::print(&string::utf8(b"Price below initial price, returning initial price"));
             INITIAL_PRICE
         } else {
             price
-        }
+        };
+        
+        debug::print(&string::utf8(b"=== Final price calculated ==="));
+        debug::print(&final_price);
+        final_price
+    }
+
+    /// Helper function to calculate summation term: (n * (n + 1) * (2n + 1)) / 6
+    fun calculate_summation(n: u64): u64 {
+        if (n == 0) {
+            return 0
+        };
+
+        debug::print(&string::utf8(b"Calculating summation for n:"));
+        debug::print(&n);
+
+        // Calculate components separately to avoid overflow
+        let n_plus_1 = n + 1;
+        let two_n_plus_1 = 2 * n + 1;
+
+        // Use intermediate divisions to prevent overflow
+        // (n * (n + 1) / 2) * ((2n + 1) / 3)
+        let term1 = (n * n_plus_1) / 2;
+        debug::print(&string::utf8(b"Term1 calculated:"));
+        debug::print(&term1);
+        
+        let term2 = two_n_plus_1 / 3;
+        debug::print(&string::utf8(b"Term2 calculated:"));
+        debug::print(&term2);
+        
+        let result = term1 * term2;
+        debug::print(&string::utf8(b"Final summation result:"));
+        debug::print(&result);
+        
+        result
     }
 
     /// Buy passes with automatic target asset creation
@@ -652,7 +741,12 @@ module podium::PodiumProtocol {
         amount: u64,
         referrer: Option<address>
     ) acquires Config, RedemptionVault, AssetCapabilities {
+        // Validate amount is a whole number of passes
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
+        assert!(amount % MIN_WHOLE_PASS == 0, error::invalid_argument(EINVALID_AMOUNT));
+        
+        // Calculate with normalized amount (convert from 8 decimal places to whole units)
+        let normalized_amount = amount / MIN_WHOLE_PASS;
         
         // Initialize pass stats if needed
         init_pass_stats(target_addr);
@@ -673,8 +767,9 @@ module podium::PodiumProtocol {
             );
         };
         
-        // Calculate prices and fees
-        let (base_price, protocol_fee, subject_fee, referral_fee) = calculate_buy_price_with_fees(target_addr, amount, referrer);
+        // Calculate prices and fees with normalized amount
+        let (base_price, protocol_fee, subject_fee, referral_fee) = 
+            calculate_buy_price_with_fees(target_addr, normalized_amount, referrer);
         let total_payment_required = base_price + protocol_fee + subject_fee + referral_fee;
         
         // Withdraw full payment from buyer
@@ -718,16 +813,16 @@ module podium::PodiumProtocol {
         // Any remaining dust goes to treasury
         coin::deposit(config.treasury, payment_coins);
         
-        // Mint and transfer passes
+        // Mint and transfer passes - use original amount to maintain decimal precision
         let asset_symbol = get_asset_symbol(target_addr);
         let fa = mint_pass(buyer, asset_symbol, amount);
         primary_fungible_store::deposit(signer::address_of(buyer), fa);
         
-        // Update stats
-        update_stats(target_addr, amount, base_price, false);
+        // Update stats with normalized amount
+        update_stats(target_addr, normalized_amount, base_price, false);
         
-        // Emit purchase event
-        emit_purchase_event(signer::address_of(buyer), target_addr, amount, base_price, referrer);
+        // Emit purchase event with normalized amount
+        emit_purchase_event(signer::address_of(buyer), target_addr, normalized_amount, base_price, referrer);
     }
 
     /// Sell passes
@@ -737,58 +832,69 @@ module podium::PodiumProtocol {
         amount: u64
     ) acquires Config, RedemptionVault, AssetCapabilities {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
+        assert!(amount % MIN_WHOLE_PASS == 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        // Calculate sell price and fees
-        let (amount_received, protocol_fee, subject_fee) = calculate_sell_price_with_fees(target_addr, amount);
+        let normalized_amount = amount / MIN_WHOLE_PASS;
+        
+        let (amount_received, protocol_fee, subject_fee) = 
+            calculate_sell_price_with_fees(target_addr, normalized_amount);
         assert!(amount_received > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Get asset symbol and burn the passes
         let asset_symbol = get_asset_symbol(target_addr);
-        let fa = primary_fungible_store::withdraw(seller, *table::borrow(&borrow_global<AssetCapabilities>(@podium).metadata_objects, asset_symbol), amount);
+        let caps = borrow_global<AssetCapabilities>(@podium);
+        let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
+        let fa = primary_fungible_store::withdraw(seller, *metadata, normalized_amount);
         burn_pass(seller, asset_symbol, fa);
         
-        // Withdraw total price from vault
+        // Get total payment amount
         let total_price = amount_received + protocol_fee + subject_fee;
-        let total_payment = withdraw_from_vault(total_price);
         
-        // Split payments
-        let config = borrow_global<Config>(@podium);
+        // Withdraw from redemption vault
+        let vault = borrow_global_mut<RedemptionVault>(@podium);
+        debug::print(&string::utf8(b"[vault] Attempting withdrawal from vault:"));
+        debug::print(&total_price);
+        debug::print(&string::utf8(b"[vault] Current vault balance:"));
+        debug::print(&coin::value(&vault.coins));
         
-        // Protocol fee
+        let total_payment = coin::extract<AptosCoin>(&mut vault.coins, total_price);
+        
+        // Protocol fee payment
         if (protocol_fee > 0) {
-            let protocol_coins = coin::extract(&mut total_payment, protocol_fee);
-            if (!coin::is_account_registered<AptosCoin>(config.treasury)) {
-                aptos_account::create_account(config.treasury);
-            };
-            coin::deposit(config.treasury, protocol_coins);
+            assert!(
+                coin::is_account_registered<AptosCoin>(@podium),
+                error::not_found(EACCOUNT_NOT_REGISTERED)
+            );
+            coin::deposit(@podium, coin::extract(&mut total_payment, protocol_fee));
         };
         
-        // Subject fee
+        // Subject fee payment
         if (subject_fee > 0) {
-            let subject_coins = coin::extract(&mut total_payment, subject_fee);
-            if (!coin::is_account_registered<AptosCoin>(target_addr)) {
-                aptos_account::create_account(target_addr);
-            };
-            coin::deposit(target_addr, subject_coins);
+            assert!(
+                coin::is_account_registered<AptosCoin>(target_addr),
+                error::not_found(EACCOUNT_NOT_REGISTERED)
+            );
+            coin::deposit(target_addr, coin::extract(&mut total_payment, subject_fee));
         };
         
         // Seller payment (remaining amount)
         let seller_addr = signer::address_of(seller);
-        if (!coin::is_account_registered<AptosCoin>(seller_addr)) {
-            coin::register<AptosCoin>(seller);
-        };
+        assert!(
+            coin::is_account_registered<AptosCoin>(seller_addr),
+            error::not_found(EACCOUNT_NOT_REGISTERED)
+        );
         coin::deposit(signer::address_of(seller), total_payment);
         
-        // Update stats
-        update_stats(target_addr, amount, total_price, true);
+        // Update stats with normalized amount
+        update_stats(target_addr, normalized_amount, total_price, true);
         
-        // Emit sell event
+        // Emit sell event with normalized amount
         event::emit_event(
             &mut borrow_global_mut<Config>(@podium).pass_sell_events,
             PassSellEvent {
                 seller: seller_addr,
                 target_or_outpost: target_addr,
-                amount,
+                amount: normalized_amount,
                 price: total_price,
             },
         );
@@ -864,16 +970,6 @@ module podium::PodiumProtocol {
             stats.total_supply = stats.total_supply + amount;
         };
         stats.last_price = price;
-    }
-
-    /// Helper function to scale down amount for calculations
-    fun scale_down(amount: u64): u64 {
-        amount / INPUT_SCALE
-    }
-
-    /// Helper function to scale up result after calculations
-    fun scale_up(amount: u64): u64 {
-        amount * INPUT_SCALE
     }
 
     /// Get asset symbol for a target/outpost
@@ -1491,13 +1587,10 @@ module podium::PodiumProtocol {
 
     // Getter functions for constants
     #[view]
-    public fun get_input_scale(): u64 { INPUT_SCALE }
-    
-    #[view]
-    public fun get_wad(): u64 { WAD }
-    
-    #[view]
     public fun get_initial_price(): u64 { INITIAL_PRICE }
+    
+    #[view]
+    public fun get_price_scale(): u64 { INPUT_SCALE }
     
     #[view]
     public fun get_weight_a(): u64 { DEFAULT_WEIGHT_A }

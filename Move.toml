@@ -9,12 +9,16 @@ fihub = "0x927d3b626f01d6a9b2ef25e706086bd8fb1633cf0898e24fcabd6ea95c360f0b"
 user1 = "_"
 user2 = "_"
 target = "_"
+user3 = "_"
+user4 = "_"
 
 
 [dev-addresses]
 user1 = "0x123"
 user2 = "0x234"
 target = "0x345"
+user3 = "0x456"
+user4 = "0x567"
 
 [dependencies]
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework/", rev = "aptos-node-v1.7.2" }
