@@ -1,0 +1,195 @@
+# Cursor Rules for Move/Aptos Development
+
+## General Rules
+- Use explicit visibility modifiers (`public`, `public(friend)`, `entry`)
+- Follow Move naming: snake_case for functions/variables, PascalCase for structs/modules
+- Implement comprehensive events for all state changes
+- Follow Checks-Effects-Interactions pattern
+- Document extensively with inline comments
+- Use Move's type system for safety guarantees
+
+## Numeric Handling and Safety
+
+### U64 Arithmetic
+- All integer arithmetic uses u64 by default
+- No built-in overflow protection unlike Solidity 0.8+
+- Always check for potential overflow/underflow
+- Use multiplication before division to prevent precision loss
+- Scale values appropriately for decimal handling
+
+### Overflow Prevention
+- Check addition: `assert!(a <= MAX_U64 - b, EOVERFLOW);`
+- Check multiplication: `assert!(a == 0 || b <= MAX_U64 / a, EOVERFLOW);`
+- Check subtraction: `assert!(a >= b, EUNDERFLOW);`
+- Use intermediate calculations for complex math
+- Scale down large numbers before operations
+- Document all numeric assumptions
+
+### Financial Calculations
+- Use basis points (BPS) for percentage calculations
+- Scale large numbers appropriately (e.g., OCTA = 10^8)
+- Document all scaling factors and units
+- Implement safe math helpers for common operations
+- Validate all numeric inputs against bounds
+- Consider precision loss in division operations
+
+### Constants
+```move
+const MAX_U64: u64 = 18446744073709551615;
+const BPS_DENOMINATOR: u64 = 10000;  // 100% = 10000
+const OCTA: u64 = 100000000;  // 10^8 scaling
+```
+
+## Code Structure
+
+### Module Organization
+1. Uses - ordered by framework then custom
+2. Error Constants - prefixed with 'E'
+3. Other Constants
+4. Structs - capabilities first
+5. Events
+6. Public/Entry Functions
+7. Public View Functions
+8. Internal Functions
+
+### Function Structure
+1. Authorization checks
+2. Input validation
+3. State changes
+4. External calls
+5. Event emission
+
+## Best Practices
+
+### Security
+- Use Move Prover for formal verification
+- Implement comprehensive access control
+- Use `acquires` for explicit resource access
+- Validate all inputs thoroughly
+- Use `assert!` with custom error codes
+- Implement emergency pause mechanisms
+- Use friend modules for controlled access
+
+### Testing
+- Write comprehensive unit tests
+- Test error cases explicitly
+- Use test-only modules for test helpers
+- Implement integration tests
+- Verify event emission
+
+### Performance
+- Pack struct fields efficiently
+- Use table/vector for large collections
+- Minimize storage reads/writes
+- Use `copy` instead of `move` for small types
+- Implement efficient indexing strategies
+
+### Error Handling
+- Use descriptive error constants
+- Implement comprehensive error checks
+- Use custom error types
+- Validate early and fail fast
+
+### Events
+- Emit events for all state changes
+- Include relevant context in events
+- Use consistent event naming
+- Document event structures
+
+### Resource Management
+- Implement proper capability patterns
+- Use resource accounts where appropriate
+- Follow Move's ownership rules
+- Implement proper cleanup
+
+## Development Workflow
+1. Design
+   - Document module interfaces
+   - Define error codes
+   - Plan resource structure
+   - Design event schema
+
+2. Implementation
+   - Write core functionality
+   - Add comprehensive tests
+   - Document all functions
+   - Implement events
+
+3. Testing
+   - Unit tests per module
+   - Integration tests
+   - Use Move Prover
+   - Test error cases
+
+4. Deployment
+   - Use proper deployment scripts
+   - Verify all modules
+   - Check event emission
+   - Monitor initial usage
+
+## Documentation
+
+### Required Documentation Elements
+1. Module Purpose
+2. Function Behavior
+3. Parameter Descriptions
+4. Error Conditions
+5. Event Emissions
+6. Security Considerations
+7. Example Usage
+
+### Style Guide
+- Use consistent indentation (4 spaces)
+- Group related functions together
+- Order functions by visibility
+- Keep functions focused and small
+- Use descriptive variable names
+- Comment complex logic
+- Document public interfaces thoroughly
+
+## Project-Specific Rules
+
+### Podium Protocol Patterns
+1. Implement bonding curve calculations in separate functions
+2. Use proper decimal handling for financial calculations
+3. Implement comprehensive fee distribution logic
+4. Use proper access control for admin functions
+5. Implement proper subscription management
+6. Handle token transfers safely
+7. Implement proper vault management
+8. Use proper event tracking for all operations
+
+### CheerOrBoo Patterns
+1. Implement proper fee calculations
+2. Handle participant distributions safely
+3. Implement proper event tracking
+4. Use safe transfer patterns
+5. Validate all inputs thoroughly
+
+## Quality Assurance
+- Run Move Prover on all modules
+- Test all error conditions
+- Verify event emissions
+- Check resource cleanup
+- Validate access control
+- Test upgrade paths
+- Verify fee calculations
+- Test emergency procedures
+
+## Deployment Safety
+- Use proper deployment scripts
+- Verify module publishing
+- Check initialization
+- Monitor early usage
+- Have rollback plans
+- Test in testnet first
+- Verify all capabilities
+
+## Maintenance
+- Keep documentation updated
+- Monitor contract usage
+- Plan for upgrades
+- Track issues
+- Update tests
+- Monitor events
+- Track gas usage

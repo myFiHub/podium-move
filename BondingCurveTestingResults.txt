@@ -1,7 +1,7 @@
 jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
 DEFAULT_WEIGHT_A: 80000000.0
 DEFAULT_WEIGHT_B: 50000000.0
-WAD: 100000000
+OCTA: 100000000
 INITIAL_PRICE: 100000000
 Purchase 1: Price = 1.59999999
 Purchase 2: Price = 3.59999999
@@ -26,7 +26,7 @@ Purchase 20: Price = 176.39999999
 jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
 DEFAULT_WEIGHT_A: 50000000.0
 DEFAULT_WEIGHT_B: 50000000.0
-WAD: 100000000
+OCTA: 100000000
 INITIAL_PRICE: 100000000
 Purchase 1: Price = 1.0
 Purchase 2: Price = 2.25
@@ -51,7 +51,7 @@ Purchase 20: Price = 110.25
 jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
 DEFAULT_WEIGHT_A: 10000000.0
 DEFAULT_WEIGHT_B: 50000000.0
-WAD: 100000000
+OCTA: 100000000
 INITIAL_PRICE: 100000000
 Purchase 1: Price = 1.0
 Purchase 2: Price = 1.0
@@ -76,7 +76,7 @@ Purchase 20: Price = 22.04999999
 jomari@L:/mnt/c/Users/Jomari/Documents/Dev/FiHub/podium-move$ python3 bondingcurve.py
 DEFAULT_WEIGHT_A: 5000000.0
 DEFAULT_WEIGHT_B: 50000000.0
-WAD: 100000000
+OCTA: 100000000
 INITIAL_PRICE: 100000000
 Purchase 1: Price = 1.0
 Purchase 2: Price = 1.0

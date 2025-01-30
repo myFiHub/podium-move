@@ -22,30 +22,41 @@ module podium::PodiumProtocol {
     use aptos_framework::aptos_account;
     use std::bcs;
 
-    // Error codes - Combined from all modules
+    // Error constants - Core Protocol
     const ENOT_ADMIN: u64 = 1;
-    const EINVALID_AMOUNT: u64 = 2;
-    const EINVALID_FEE: u64 = 3;
-    const EINVALID_DURATION: u64 = 4;
-    const EINVALID_TIER: u64 = 5;
-    const ESUBSCRIPTION_NOT_FOUND: u64 = 6;
-    const ESUBSCRIPTION_EXPIRED: u64 = 7;
-    const ETIER_EXISTS: u64 = 8;
-    const ETIER_NOT_FOUND: u64 = 9;
-    const EINVALID_PRICE: u64 = 10;
-    const EINSUFFICIENT_BALANCE: u64 = 11;
-    const EPASS_NOT_FOUND: u64 = 12;
-    const EOUTPOST_EXISTS: u64 = 13;
-    const EOUTPOST_NOT_FOUND: u64 = 14;
-    const ENOT_OWNER: u64 = 15;
-    const EEMERGENCY_PAUSE: u64 = 16;
-    const INSUFFICIENT_BALANCE: u64 = 17;
-    const ESUBSCRIPTION_ALREADY_EXISTS: u64 = 18;
-    const EINVALID_SUBSCRIPTION_DURATION: u64 = 19;
-    const EINVALID_SUBSCRIPTION_TIER: u64 = 20;
     const EINVALID_FEE_VALUE: u64 = 2;
     const EUNAUTHORIZED: u64 = 3;
     const EACCOUNT_NOT_REGISTERED: u64 = 4;
+    const EINVALID_AMOUNT: u64 = 5;
+    const EINVALID_FEE: u64 = 6;
+    const EPROTOCOL_NOT_INITIALIZED: u64 = 7;
+
+    // Error constants - Outpost Related
+    const EOUTPOST_EXISTS: u64 = 8;
+    const EOUTPOST_NOT_FOUND: u64 = 9;
+    const EINVALID_PRICE: u64 = 10;
+    const EINSUFFICIENT_BALANCE: u64 = 11;
+    const ENOT_OWNER: u64 = 12;
+    const EEMERGENCY_PAUSE: u64 = 13;
+
+    // Error constants - Pass Related
+    const EPASS_NOT_FOUND: u64 = 14;
+    const INSUFFICIENT_BALANCE: u64 = 15;
+
+    // Error constants - Subscription Related
+    const ESUBSCRIPTION_NOT_FOUND: u64 = 16;
+    const ESUBSCRIPTION_EXPIRED: u64 = 17;
+    const ESUBSCRIPTION_ALREADY_EXISTS: u64 = 18;
+    const EINVALID_SUBSCRIPTION_DURATION: u64 = 19;
+    const EINVALID_SUBSCRIPTION_TIER: u64 = 20;
+
+    // Error constants - Tier Related
+    const EINVALID_TIER: u64 = 21;
+    const ETIER_EXISTS: u64 = 22;
+    const ETIER_NOT_FOUND: u64 = 23;
+    const EINVALID_DURATION: u64 = 24;
+    const EINVALID_TIER_PRICE: u64 = 25;
+    const EINVALID_TIER_DURATION: u64 = 26;
 
     // Constants - Outpost related
     const COLLECTION_NAME_BYTES: vector<u8> = b"PodiumOutposts";
@@ -54,19 +65,20 @@ module podium::PodiumProtocol {
     const MAX_FEE_PERCENTAGE: u64 = 10000; // 100% = 10000 basis points
     const OUTPOST_FEE_SHARE: u64 = 500;
 
-    // Constants - Pass Fees related
-    const MAX_REFERRAL_FEE_PERCENT: u64 = 2; // 2%
-    const MAX_PROTOCOL_FEE_PERCENT: u64 = 4; // 4%
-    const MAX_SUBJECT_FEE_PERCENT: u64 = 8; // 8%
- 
-     // Constants for bonding curve calculations
-    const INITIAL_PRICE: u64 = 100000000; // 1 APT = 10^8
-    const INPUT_SCALE: u64 = 1000000;     // Scale factor to handle Move's u64 limitations
-    const WAD: u64 = 10000;               // Base for percentage calculations (100% = 10000)
-    const DEFAULT_WEIGHT_A: u64 = 3000;           // 0.3 scaled to basis points
-    const DEFAULT_WEIGHT_B: u64 = 2000;           // 0.2 scaled to basis points
-    const DEFAULT_WEIGHT_C: u64 = 2;              // Adjustment factor C
-    const DECIMALS: u8 = 8;
+    // Constants - Fee related (in basis points)
+    const BPS: u64 = 10000; // 100% = 10000 basis points
+    const MAX_REFERRAL_FEE_PERCENT: u64 = 200; // 2% in basis points
+    const MAX_PROTOCOL_FEE_PERCENT: u64 = 400; // 4% in basis points
+    const MAX_SUBJECT_FEE_PERCENT: u64 = 800; // 8% in basis points
+
+    // Constants for scaling and bonding curve calculations
+    const OCTA: u64 = 100000000; // 10^8 for APT price scaling
+    const INPUT_SCALE: u64 = 1000000; // K factor for overflow prevention
+    const INITIAL_PRICE: u64 = 100000000; // 1 APT in OCTA units (10^8)
+    const DEFAULT_WEIGHT_A: u64 = 40000; // 400 in basis points
+    const DEFAULT_WEIGHT_B: u64 = 30000; // 300 in basis points
+    const DEFAULT_WEIGHT_C: u64 = 2; // Constant offset for supply adjustment
+    const DECIMALS: u8 = 8; // 8 decimals for OCTA
 
     // Time constants
     const SECONDS_PER_WEEK: u64 = 7 * 24 * 60 * 60;
@@ -77,7 +89,7 @@ module podium::PodiumProtocol {
     const DURATION_YEAR: u64 = 3;
 
     // Calculate the minimum unit (1 whole pass)
-    const MIN_WHOLE_PASS: u64 = 100000000; // 10^8, one whole pass unit
+    const MIN_WHOLE_PASS: u64 = 100000000; // One whole pass unit (10^8)
 
     // ============ Core Data Structures ============
 
@@ -329,6 +341,12 @@ module podium::PodiumProtocol {
         description: String,
         uri: String,
     ): Object<OutpostData> acquires Config {
+        // Verify protocol is initialized
+        assert!(exists<Config>(@podium), error::not_found(EPROTOCOL_NOT_INITIALIZED));
+
+        // Verify creator has a valid account
+        assert!(account::exists_at(signer::address_of(creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
+
         debug::print(&string::utf8(b"=== Starting create_outpost_internal ==="));
         
         // Handle payment and print
@@ -552,12 +570,12 @@ module podium::PodiumProtocol {
         // Get raw price from bonding curve
         let price = calculate_price(current_supply, amount, false);
         
-        // Calculate fees
+        // Calculate fees using basis points (BPS = 10000)
         let config = borrow_global<Config>(@podium);
-        let protocol_fee = (price * config.protocol_fee_percent) / 100;
-        let subject_fee = (price * config.subject_fee_percent) / 100;
+        let protocol_fee = (price * config.protocol_fee_percent) / BPS;
+        let subject_fee = (price * config.subject_fee_percent) / BPS;
         let referral_fee = if (option::is_some(&referrer)) {
-            (price * config.referral_fee_percent) / 100
+            (price * config.referral_fee_percent) / BPS
         } else {
             0
         };
@@ -586,10 +604,10 @@ module podium::PodiumProtocol {
         // For sells, we calculate based on the supply AFTER the sell
         let price = calculate_price(current_supply - amount, amount, true);
         
-        // Calculate fees based on total price
+        // Calculate fees based on total price using basis points
         let config = borrow_global<Config>(@podium);
-        let protocol_fee = (price * config.protocol_fee_percent) / 100;
-        let subject_fee = (price * config.subject_fee_percent) / 100;
+        let protocol_fee = (price * config.protocol_fee_percent) / BPS;
+        let subject_fee = (price * config.subject_fee_percent) / BPS;
         
         // Add debug prints
         debug::print(&string::utf8(b"[calculate_sell_price_with_fees] Calculation:"));
@@ -604,24 +622,25 @@ module podium::PodiumProtocol {
         debug::print(&string::utf8(b"Subject fee:"));
         debug::print(&subject_fee);
         
-        // Seller receives price minus all fees
-        let amount_received = price - protocol_fee - subject_fee;
+        // Calculate amount received first to avoid overflow
+        let total_fee_percent = config.protocol_fee_percent + config.subject_fee_percent;
+        let amount_received = (price * (BPS - total_fee_percent)) / BPS;
         
         (amount_received, protocol_fee, subject_fee)
     }
 
     /// Calculates price using bonding curve
-    /// * `supply` - Current supply of passes
-    /// * `amount` - Amount of passes to buy/sell
+    /// * `supply` - Current supply of passes (in actual units, e.g., 1 = one pass)
+    /// * `amount` - Amount of passes to buy/sell (in actual units)
     /// * `is_sell` - Whether this is a sell operation
-    /// * Returns the calculated price
+    /// * Returns the calculated price in OCTA units (scaled for APT)
     #[view]
     public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 {
         debug::print(&string::utf8(b"=== Starting price calculation ==="));
         debug::print(&string::utf8(b"Input parameters:"));
-        debug::print(&string::utf8(b"Supply:"));
+        debug::print(&string::utf8(b"Supply (actual units):"));
         debug::print(&supply);
-        debug::print(&string::utf8(b"Amount:"));
+        debug::print(&string::utf8(b"Amount (actual units):"));
         debug::print(&amount);
         debug::print(&string::utf8(b"Is sell:"));
         debug::print(&is_sell);
@@ -651,7 +670,7 @@ module podium::PodiumProtocol {
             };
             (supply_minus_amount - 1) / INPUT_SCALE
         } else {
-            ((s_plus_c + amount - 1) / INPUT_SCALE)
+            (s_plus_c + amount - 1) / INPUT_SCALE
         };
         debug::print(&string::utf8(b"n2 calculated:"));
         debug::print(&n2);
@@ -677,18 +696,18 @@ module podium::PodiumProtocol {
         debug::print(&string::utf8(b"S_diff calculated:"));
         debug::print(&s_diff);
 
-        // Apply weights: ((S2 - S1) * Wa * Wb) / (WAD^2)
-        let step1 = (s_diff * DEFAULT_WEIGHT_A) / WAD;  // First weight application
+        // Apply weights in basis points
+        let step1 = (s_diff * DEFAULT_WEIGHT_A) / BPS;
         debug::print(&string::utf8(b"After first weight application:"));
         debug::print(&step1);
         
-        let step2 = (step1 * DEFAULT_WEIGHT_B) / WAD;   // Second weight application
+        let step2 = (step1 * DEFAULT_WEIGHT_B) / BPS;
         debug::print(&string::utf8(b"After second weight application:"));
         debug::print(&step2);
 
-        // Scale back up and apply initial price
-        let price = step2 * INITIAL_PRICE;
-        debug::print(&string::utf8(b"Final price before minimum check:"));
+        // Scale to OCTA units for APT price
+        let price = step2 * OCTA;
+        debug::print(&string::utf8(b"After OCTA scaling for APT:"));
         debug::print(&price);
 
         // Return at least initial price
@@ -705,6 +724,8 @@ module podium::PodiumProtocol {
     }
 
     /// Helper function to calculate summation term: (n * (n + 1) * (2n + 1)) / 6
+    /// This calculates the area under the curve from 0 to n
+    /// We use strategic factoring and intermediate steps to prevent overflow while maintaining precision
     fun calculate_summation(n: u64): u64 {
         if (n == 0) {
             return 0
@@ -713,40 +734,77 @@ module podium::PodiumProtocol {
         debug::print(&string::utf8(b"Calculating summation for n:"));
         debug::print(&n);
 
-        // Calculate components separately to avoid overflow
-        let n_plus_1 = n + 1;
-        let two_n_plus_1 = 2 * n + 1;
+        // First, handle 2n + 1
+        let two_n = 2 * n;  // This won't overflow as n is u64
+        let two_n_plus_1 = two_n + 1;
+        
+        // Now we need to calculate (n * (n + 1) * (2n + 1)) / 6
+        // To prevent overflow, we can factor this as:
+        // n * ((n + 1) * (2n + 1)) / 6
+        // = n * (2n² + 3n + 1) / 6
+        
+        // Calculate (n + 1) * (2n + 1) = 2n² + 3n + 1
+        // Do this in steps to prevent overflow
+        let n_squared = n * n;
+        let two_n_squared = 2 * n_squared;
+        let three_n = 3 * n;
+        
+        // 2n² + 3n + 1
+        let inner_sum = two_n_squared + three_n + 1;
+        
+        // Finally multiply by n and divide by 6
+        // To minimize precision loss, we:
+        // 1. First check if inner_sum is divisible by 2 or 3
+        // 2. Apply those divisions first before multiplying by n
+        // 3. Then apply remaining division
+        
+        let mut_inner_sum = inner_sum;
+        let mut_n = n;
+        let mut_result = 0;
+        
+        // Try to divide by 2 first if possible
+        if (mut_inner_sum % 2 == 0) {
+            mut_inner_sum = mut_inner_sum / 2;
+        } else if (mut_n % 2 == 0) {
+            mut_n = mut_n / 2;
+        };
+        
+        // Try to divide by 3 if possible
+        if (mut_inner_sum % 3 == 0) {
+            mut_inner_sum = mut_inner_sum / 3;
+        } else if (mut_n % 3 == 0) {
+            mut_n = mut_n / 3;
+        };
+        
+        // Now multiply remaining terms
+        mut_result = mut_n * mut_inner_sum;
+        
+        // Apply any remaining divisions needed
+        if (inner_sum % 2 != 0 && n % 2 != 0) {
+            mut_result = mut_result / 2;
+        };
+        if (inner_sum % 3 != 0 && n % 3 != 0) {
+            mut_result = mut_result / 3;
+        };
 
-        // Use intermediate divisions to prevent overflow
-        // (n * (n + 1) / 2) * ((2n + 1) / 3)
-        let term1 = (n * n_plus_1) / 2;
-        debug::print(&string::utf8(b"Term1 calculated:"));
-        debug::print(&term1);
-        
-        let term2 = two_n_plus_1 / 3;
-        debug::print(&string::utf8(b"Term2 calculated:"));
-        debug::print(&term2);
-        
-        let result = term1 * term2;
         debug::print(&string::utf8(b"Final summation result:"));
-        debug::print(&result);
+        debug::print(&mut_result);
         
-        result
+        mut_result
     }
 
     /// Buy passes with automatic target asset creation
     public entry fun buy_pass(
         buyer: &signer,
         target_addr: address,
-        amount: u64,
+        amount: u64,  // amount in interface units (1 = one whole pass)
         referrer: Option<address>
     ) acquires Config, RedemptionVault, AssetCapabilities {
-        // Validate amount is a whole number of passes
+        // Validate amount is a whole number
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-        assert!(amount % MIN_WHOLE_PASS == 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        // Calculate with normalized amount (convert from 8 decimal places to whole units)
-        let normalized_amount = amount / MIN_WHOLE_PASS;
+        // Get current supply in interface units
+        let current_supply = get_total_supply(target_addr);
         
         // Initialize pass stats if needed
         init_pass_stats(target_addr);
@@ -767,10 +825,17 @@ module podium::PodiumProtocol {
             );
         };
         
-        // Calculate prices and fees with normalized amount
+        // Calculate prices and fees with interface units
         let (base_price, protocol_fee, subject_fee, referral_fee) = 
-            calculate_buy_price_with_fees(target_addr, normalized_amount, referrer);
+            calculate_buy_price_with_fees(target_addr, amount, referrer);
         let total_payment_required = base_price + protocol_fee + subject_fee + referral_fee;
+        
+        // Debug prints for tracking
+        debug::print(&string::utf8(b"[buy_pass] Details:"));
+        debug::print(&string::utf8(b"Amount (interface/internal units):"));
+        debug::print(&amount);
+        debug::print(&string::utf8(b"Total cost (OCTA):"));
+        debug::print(&total_payment_required);
         
         // Withdraw full payment from buyer
         let payment_coins = coin::withdraw<AptosCoin>(buyer, total_payment_required);
@@ -813,38 +878,43 @@ module podium::PodiumProtocol {
         // Any remaining dust goes to treasury
         coin::deposit(config.treasury, payment_coins);
         
-        // Mint and transfer passes - use original amount to maintain decimal precision
+        // Mint and transfer passes using internal units
         let asset_symbol = get_asset_symbol(target_addr);
         let fa = mint_pass(buyer, asset_symbol, amount);
         primary_fungible_store::deposit(signer::address_of(buyer), fa);
         
-        // Update stats with normalized amount
-        update_stats(target_addr, normalized_amount, base_price, false);
+        // Update stats with interface units
+        update_stats(target_addr, amount, base_price, false);
         
-        // Emit purchase event with normalized amount
-        emit_purchase_event(signer::address_of(buyer), target_addr, normalized_amount, base_price, referrer);
+        // Emit purchase event with interface units
+        emit_purchase_event(signer::address_of(buyer), target_addr, amount, base_price, referrer);
     }
 
     /// Sell passes
     public entry fun sell_pass(
         seller: &signer,
         target_addr: address,
-        amount: u64
+        amount: u64  // amount in interface units (1 = one whole pass)
     ) acquires Config, RedemptionVault, AssetCapabilities {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-        assert!(amount % MIN_WHOLE_PASS == 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        let normalized_amount = amount / MIN_WHOLE_PASS;
-        
+        // Calculate sell price and fees using interface units
         let (amount_received, protocol_fee, subject_fee) = 
-            calculate_sell_price_with_fees(target_addr, normalized_amount);
+            calculate_sell_price_with_fees(target_addr, amount);
         assert!(amount_received > 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        // Get asset symbol and burn the passes
+        // Debug prints for tracking
+        debug::print(&string::utf8(b"[sell_pass] Details:"));
+        debug::print(&string::utf8(b"Amount (interface/internal units):"));
+        debug::print(&amount);
+        debug::print(&string::utf8(b"Amount received (OCTA):"));
+        debug::print(&amount_received);
+        
+        // Get asset symbol and burn the passes using internal units
         let asset_symbol = get_asset_symbol(target_addr);
         let caps = borrow_global<AssetCapabilities>(@podium);
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
-        let fa = primary_fungible_store::withdraw(seller, *metadata, normalized_amount);
+        let fa = primary_fungible_store::withdraw(seller, *metadata, amount);
         burn_pass(seller, asset_symbol, fa);
         
         // Get total payment amount
@@ -883,21 +953,13 @@ module podium::PodiumProtocol {
             coin::is_account_registered<AptosCoin>(seller_addr),
             error::not_found(EACCOUNT_NOT_REGISTERED)
         );
-        coin::deposit(signer::address_of(seller), total_payment);
+        coin::deposit(seller_addr, total_payment);
         
-        // Update stats with normalized amount
-        update_stats(target_addr, normalized_amount, total_price, true);
+        // Update stats with interface units
+        update_stats(target_addr, amount, amount_received, true);
         
-        // Emit sell event with normalized amount
-        event::emit_event(
-            &mut borrow_global_mut<Config>(@podium).pass_sell_events,
-            PassSellEvent {
-                seller: seller_addr,
-                target_or_outpost: target_addr,
-                amount: normalized_amount,
-                price: total_price,
-            },
-        );
+        // Emit sell event with interface units
+        emit_sell_event(seller_addr, target_addr, amount, amount_received);
     }
 
     // ============ Vault Management Functions ============
@@ -1051,6 +1113,24 @@ module podium::PodiumProtocol {
                 amount,
                 price,
                 referrer,
+            },
+        );
+    }
+
+    /// Emit sell event
+    fun emit_sell_event(
+        seller_addr: address,
+        target_addr: address,
+        amount: u64,
+        amount_received: u64
+    ) acquires Config {
+        event::emit_event(
+            &mut borrow_global_mut<Config>(@podium).pass_sell_events,
+            PassSellEvent {
+                seller: seller_addr,
+                target_or_outpost: target_addr,
+                amount,
+                price: amount_received,
             },
         );
     }
