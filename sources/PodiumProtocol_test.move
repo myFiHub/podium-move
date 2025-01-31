@@ -711,7 +711,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
-    public fun test_self_trading(
+    public fun test_self_pass_trading(
         aptos_framework: &signer,
         podium_signer: &signer,
         creator: &signer,
@@ -719,21 +719,19 @@ module podium::PodiumProtocol_test {
         // Setup test environment
         setup_test(aptos_framework, podium_signer, creator, creator, creator);
         
-        // Create test outpost
-        let outpost = create_test_outpost(creator);
-        let target_addr = object::object_address(&outpost);
+        let creator_addr = signer::address_of(creator);
         
         // Create pass token
         PodiumProtocol::create_pass_token(
             creator,
-            target_addr,
+            creator_addr,
             string::utf8(b"Self Trade Pass"),
             string::utf8(b"Test Pass for Self Trading"),
             string::utf8(b"https://test.uri")
         );
         
         // Record initial balances
-        let initial_apt_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        let initial_apt_balance = coin::balance<AptosCoin>(creator_addr);
         
         // Buy passes - use actual units
         let buy_amount = 1; // 1 whole pass
@@ -741,7 +739,7 @@ module podium::PodiumProtocol_test {
         
         // Calculate buy price and fees
         let (base_price, protocol_fee, subject_fee, referral_fee) = 
-            PodiumProtocol::calculate_buy_price_with_fees(target_addr, buy_amount, option::none());
+            PodiumProtocol::calculate_buy_price_with_fees(creator_addr, buy_amount, option::none());
         
         // Creator pays full amount upfront
         let total_buy_cost = base_price + protocol_fee + subject_fee + referral_fee;
@@ -759,16 +757,16 @@ module podium::PodiumProtocol_test {
         debug::print(&total_buy_cost);
         
         // Buy passes as creator
-        PodiumProtocol::buy_pass(creator, target_addr, buy_amount, option::none());
+        PodiumProtocol::buy_pass(creator, creator_addr, buy_amount, option::none());
         
         // Verify pass balance
-        let pass_balance = PodiumProtocol::get_balance(signer::address_of(creator), target_addr);
+        let pass_balance = PodiumProtocol::get_balance(creator_addr, creator_addr);
         debug::print(&string::utf8(b"Pass balance after buy:"));
         debug::print(&pass_balance);
         assert!(pass_balance == buy_amount, 0);
         
         // Verify APT balance after buy
-        let post_buy_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        let post_buy_balance = coin::balance<AptosCoin>(creator_addr);
         
         // Creator should have lost money equal to:
         // 1. Base price (affects bonding curve) - they'll get back a different amount on sell due to curve
@@ -798,7 +796,7 @@ module podium::PodiumProtocol_test {
         
         // Calculate sell price and fees
         let (sell_base_price, sell_protocol_fee, sell_subject_fee) = 
-            PodiumProtocol::calculate_sell_price_with_fees(target_addr, sell_amount);
+            PodiumProtocol::calculate_sell_price_with_fees(creator_addr, sell_amount);
         
         debug::print(&string::utf8(b"Sell details:"));
         debug::print(&string::utf8(b"Sell base price:"));
@@ -808,24 +806,18 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"Sell subject fee:"));
         debug::print(&sell_subject_fee);
         
-        PodiumProtocol::sell_pass(creator, target_addr, sell_amount);
+        PodiumProtocol::sell_pass(creator, creator_addr, sell_amount);
         
         // Verify final pass balance
-        let final_pass_balance = PodiumProtocol::get_balance(signer::address_of(creator), target_addr);
+        let final_pass_balance = PodiumProtocol::get_balance(creator_addr, creator_addr);
         debug::print(&string::utf8(b"Final pass balance:"));
         debug::print(&final_pass_balance);
         assert!(final_pass_balance == 0, 2);
         
         // Verify final APT balance
-        let final_balance = coin::balance<AptosCoin>(signer::address_of(creator));
+        let final_balance = coin::balance<AptosCoin>(creator_addr);
         let total_loss = initial_apt_balance - final_balance;
-        
-        // By the end, creator should have lost:
-        // 1. Protocol fee from buy (4000000)
-        // 2. Protocol fee from sell (4000000)
-        // 3. Price difference due to bonding curve (base_price - sell_base_price)
-        // Note: Subject fees are immediately returned to creator since they are the target
-        let expected_total_loss = protocol_fee + sell_protocol_fee + (base_price - sell_base_price);
+        let expected_total_loss = protocol_fee + sell_protocol_fee; // Only protocol fees since subject fees are returned
         
         debug::print(&string::utf8(b"Final balance check:"));
         debug::print(&string::utf8(b"Initial balance:"));
@@ -844,11 +836,28 @@ module podium::PodiumProtocol_test {
         } else {
             expected_total_loss - total_loss
         };
+        let tolerance = BALANCE_TOLERANCE_BPS * expected_total_loss / 10000;
+        
+        debug::print(&string::utf8(b"Loss difference calculation:"));
+        debug::print(&string::utf8(b"Loss difference:"));
+        debug::print(&loss_diff);
+        debug::print(&string::utf8(b"Tolerance calculation:"));
+        debug::print(&string::utf8(b"BALANCE_TOLERANCE_BPS:"));
+        debug::print(&BALANCE_TOLERANCE_BPS);
+        debug::print(&string::utf8(b"Expected total loss:"));
+        debug::print(&expected_total_loss);
+        debug::print(&string::utf8(b"Calculated tolerance:"));
+        debug::print(&tolerance);
+        debug::print(&string::utf8(b"Assertion will check:"));
+        debug::print(&loss_diff);
+        debug::print(&string::utf8(b"<="));
+        debug::print(&tolerance);
+        
         assert!(loss_diff <= BALANCE_TOLERANCE_BPS * expected_total_loss / 10000, 4); // Within tolerance
 
         // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_self_trading: PASS"));
+        debug::print(&string::utf8(b"test_self_pass_trading: PASS"));
     }
 
     #[test(admin = @podium)]

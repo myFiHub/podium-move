@@ -632,11 +632,8 @@ module podium::PodiumProtocol {
         debug::print(&string::utf8(b"Subject fee:"));
         debug::print(&subject_fee);
         
-        // Calculate amount received first to avoid overflow
-        let total_fee_percent = config.protocol_fee_percent + config.subject_fee_percent;
-        let amount_received = (price * (BPS - total_fee_percent)) / BPS;
-        
-        (amount_received, protocol_fee, subject_fee)
+        // Return raw price and fees
+        (price, protocol_fee, subject_fee)
     }
 
     /// Calculates price using bonding curve
@@ -916,8 +913,9 @@ module podium::PodiumProtocol {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Calculate sell price and fees using interface units
-        let (amount_received, protocol_fee, subject_fee) = 
+        let (base_price, protocol_fee, subject_fee) = 
             calculate_sell_price_with_fees(target_addr, amount);
+        let amount_received = base_price - protocol_fee - subject_fee;
         assert!(amount_received > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Debug prints for tracking
@@ -934,17 +932,14 @@ module podium::PodiumProtocol {
         let fa = primary_fungible_store::withdraw(seller, *metadata, amount);
         burn_pass(seller, asset_symbol, fa);
         
-        // Get total payment amount
-        let total_price = amount_received + protocol_fee + subject_fee;
-        
         // Withdraw from redemption vault
         let vault = borrow_global_mut<RedemptionVault>(@podium);
         debug::print(&string::utf8(b"[vault] Attempting withdrawal from vault:"));
-        debug::print(&total_price);
+        debug::print(&base_price);
         debug::print(&string::utf8(b"[vault] Current vault balance:"));
         debug::print(&coin::value(&vault.coins));
         
-        let total_payment = coin::extract<AptosCoin>(&mut vault.coins, total_price);
+        let total_payment = coin::extract<AptosCoin>(&mut vault.coins, base_price);
         
         // Protocol fee payment
         if (protocol_fee > 0) {
@@ -973,7 +968,7 @@ module podium::PodiumProtocol {
         coin::deposit(seller_addr, total_payment);
         
         // Update stats with interface units
-        update_stats(target_addr, amount, amount_received, true);
+        update_stats(target_addr, amount, base_price, true);
         
         // Emit sell event with interface units
         emit_sell_event(seller_addr, target_addr, amount, amount_received);
