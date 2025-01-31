@@ -147,7 +147,8 @@ module podium::PodiumProtocol {
         subscription_created_events: EventHandle<SubscriptionCreatedEvent>,
         subscription_cancelled_events: EventHandle<SubscriptionCancelledEvent>,
         tier_updated_events: EventHandle<TierUpdatedEvent>,
-        config_updated_events: EventHandle<ConfigUpdatedEvent>,
+        outpost_config_events: EventHandle<OutpostSubscriptionConfigEvent>,
+        fee_update_events: EventHandle<ProtocolFeeUpdateEvent>,
         outpost_created_events: EventHandle<OutpostCreatedEvent>,
         outpost_price: u64,
     }
@@ -260,10 +261,18 @@ module podium::PodiumProtocol {
         timestamp: u64
     }
 
-    /// Event for config updates
-    struct ConfigUpdatedEvent has drop, store {
+    /// Event for outpost subscription configuration updates
+    struct OutpostSubscriptionConfigEvent has drop, store {
         outpost_addr: address,
         max_tiers: u64,
+        timestamp: u64
+    }
+
+    /// Event for protocol fee updates
+    struct ProtocolFeeUpdateEvent has drop, store {
+        old_fee: u64,
+        new_fee: u64,
+        fee_type: String,  // Identifies which fee was updated (subscription, pass, referrer)
         timestamp: u64
     }
 
@@ -307,7 +316,8 @@ module podium::PodiumProtocol {
                 subscription_created_events: account::new_event_handle<SubscriptionCreatedEvent>(admin),
                 subscription_cancelled_events: account::new_event_handle<SubscriptionCancelledEvent>(admin),
                 tier_updated_events: account::new_event_handle<TierUpdatedEvent>(admin),
-                config_updated_events: account::new_event_handle<ConfigUpdatedEvent>(admin),
+                outpost_config_events: account::new_event_handle<OutpostSubscriptionConfigEvent>(admin),
+                fee_update_events: account::new_event_handle<ProtocolFeeUpdateEvent>(admin),
                 outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
                 outpost_price: 1000,
             });
@@ -644,7 +654,35 @@ module podium::PodiumProtocol {
         debug::print(&amount);
         debug::print(&string::utf8(b"Is sell:"));
         debug::print(&is_sell);
+
+        let total_price = 0;
+        let i = 0;
         
+        while (i < amount) {
+            let current_supply = if (is_sell) {
+                supply - i
+            } else {
+                supply + i
+            };
+            
+            // Calculate price for this single pass
+            let pass_price = calculate_single_pass_price(current_supply, is_sell);
+            total_price = total_price + pass_price;
+            
+            i = i + 1;
+        };
+        
+        debug::print(&string::utf8(b"=== Final total price calculated ==="));
+        debug::print(&total_price);
+        total_price
+    }
+
+    /// Calculate price for a single pass
+    /// * `supply` - Current supply of passes (in actual units)
+    /// * `is_sell` - Whether this is a sell operation
+    /// * Returns the calculated price in OCTA units (scaled for APT)
+    #[view]
+    public fun calculate_single_pass_price(supply: u64, is_sell: bool): u64 {
         // Early return for first purchase
         if (supply == 0) {
             debug::print(&string::utf8(b"First purchase - returning initial price"));
@@ -658,32 +696,26 @@ module podium::PodiumProtocol {
             return INITIAL_PRICE
         };
         let n1 = (s_plus_c - 1) / INPUT_SCALE;
-        debug::print(&string::utf8(b"n1 calculated:"));
-        debug::print(&n1);
 
-        // Calculate n2 based on buy/sell
+        // For sells, we want the buy price at supply-1
         let n2 = if (is_sell) {
-            let supply_minus_amount = if (s_plus_c > amount) {
-                s_plus_c - amount
+            let supply_minus_one = if (supply > 1) { supply - 1 } else { 0 };
+            let s_minus_one_plus_c = supply_minus_one + DEFAULT_WEIGHT_C;
+            if (s_minus_one_plus_c <= 1) {
+                n1
             } else {
-                1
-            };
-            (supply_minus_amount - 1) / INPUT_SCALE
+                (s_minus_one_plus_c - 1) / INPUT_SCALE
+            }
         } else {
-            (s_plus_c + amount - 1) / INPUT_SCALE
+            // For buys, we want the price at current supply
+            n1
         };
-        debug::print(&string::utf8(b"n2 calculated:"));
-        debug::print(&n2);
 
         // Calculate S1 = (n1 * (n1 + 1) * (2n1 + 1)) / 6
         let s1 = calculate_summation(n1);
-        debug::print(&string::utf8(b"S1 calculated:"));
-        debug::print(&s1);
 
         // Calculate S2 = (n2 * (n2 + 1) * (2n2 + 1)) / 6
         let s2 = calculate_summation(n2);
-        debug::print(&string::utf8(b"S2 calculated:"));
-        debug::print(&s2);
 
         // Calculate S2 - S1, handling potential negative case for sells
         let s_diff = if (s2 > s1) {
@@ -693,33 +725,21 @@ module podium::PodiumProtocol {
         } else {
             0
         };
-        debug::print(&string::utf8(b"S_diff calculated:"));
-        debug::print(&s_diff);
 
         // Apply weights in basis points
         let step1 = (s_diff * DEFAULT_WEIGHT_A) / BPS;
-        debug::print(&string::utf8(b"After first weight application:"));
-        debug::print(&step1);
-        
         let step2 = (step1 * DEFAULT_WEIGHT_B) / BPS;
-        debug::print(&string::utf8(b"After second weight application:"));
-        debug::print(&step2);
 
         // Scale to OCTA units for APT price
         let price = step2 * OCTA;
-        debug::print(&string::utf8(b"After OCTA scaling for APT:"));
-        debug::print(&price);
 
         // Return at least initial price
         let final_price = if (price < INITIAL_PRICE) {
-            debug::print(&string::utf8(b"Price below initial price, returning initial price"));
             INITIAL_PRICE
         } else {
             price
         };
-        
-        debug::print(&string::utf8(b"=== Final price calculated ==="));
-        debug::print(&final_price);
+
         final_price
     }
 
@@ -731,8 +751,7 @@ module podium::PodiumProtocol {
             return 0
         };
 
-        debug::print(&string::utf8(b"Calculating summation for n:"));
-        debug::print(&n);
+      
 
         // First, handle 2n + 1
         let two_n = 2 * n;  // This won't overflow as n is u64
@@ -741,15 +760,15 @@ module podium::PodiumProtocol {
         // Now we need to calculate (n * (n + 1) * (2n + 1)) / 6
         // To prevent overflow, we can factor this as:
         // n * ((n + 1) * (2n + 1)) / 6
-        // = n * (2n² + 3n + 1) / 6
+        // = n * (2n^2 + 3n + 1) / 6
         
-        // Calculate (n + 1) * (2n + 1) = 2n² + 3n + 1
+        // Calculate (n + 1) * (2n + 1) = 2n^2 + 3n + 1
         // Do this in steps to prevent overflow
         let n_squared = n * n;
         let two_n_squared = 2 * n_squared;
         let three_n = 3 * n;
         
-        // 2n² + 3n + 1
+        // 2n^2 + 3n + 1
         let inner_sum = two_n_squared + three_n + 1;
         
         // Finally multiply by n and divide by 6
@@ -787,8 +806,6 @@ module podium::PodiumProtocol {
             mut_result = mut_result / 3;
         };
 
-        debug::print(&string::utf8(b"Final summation result:"));
-        debug::print(&mut_result);
         
         mut_result
     }
@@ -1376,14 +1393,7 @@ module podium::PodiumProtocol {
         subscription_config.max_tiers = max_tiers;
 
         // Emit config updated event
-        event::emit_event(
-            &mut config.config_updated_events,
-            ConfigUpdatedEvent {
-                outpost_addr,
-                max_tiers,
-                timestamp: timestamp::now_seconds(),
-            }
-        );
+        emit_outpost_config_event(outpost_addr, max_tiers);
     }
 
     /// Verify if a subscription is valid
@@ -1611,16 +1621,56 @@ module podium::PodiumProtocol {
 
     // ============ Admin Functions ============
 
+    /// Emit fee update event
+    fun emit_fee_update_event(
+        old_fee: u64,
+        new_fee: u64,
+        fee_type: String,
+    ) acquires Config {
+        event::emit_event(
+            &mut borrow_global_mut<Config>(@podium).fee_update_events,
+            ProtocolFeeUpdateEvent {
+                old_fee,
+                new_fee,
+                fee_type,
+                timestamp: timestamp::now_seconds(),
+            },
+        );
+    }
+
+    /// Emit outpost subscription config update event
+    fun emit_outpost_config_event(
+        outpost_addr: address,
+        max_tiers: u64,
+    ) acquires Config {
+        event::emit_event(
+            &mut borrow_global_mut<Config>(@podium).outpost_config_events,
+            OutpostSubscriptionConfigEvent {
+                outpost_addr,
+                max_tiers,
+                timestamp: timestamp::now_seconds(),
+            },
+        );
+    }
+
     /// Set protocol subscription fee
     public entry fun update_protocol_subscription_fee(
         admin: &signer,
         new_fee: u64,
     ) acquires Config {
+        // Verify admin
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
-        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE));
         
+        // Verify fee is valid
+        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE_VALUE));
+        
+        // Update fee
         let config = borrow_global_mut<Config>(@podium);
+        let old_fee = config.protocol_subscription_fee;
         config.protocol_subscription_fee = new_fee;
+        
+        // Emit event
+        emit_fee_update_event(old_fee, new_fee, string::utf8(b"subscription"));
     }
 
     /// Set protocol pass fee
@@ -1629,10 +1679,14 @@ module podium::PodiumProtocol {
         new_fee: u64,
     ) acquires Config {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
-        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE));
+        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE_VALUE));
         
         let config = borrow_global_mut<Config>(@podium);
+        let old_fee = config.protocol_pass_fee;
         config.protocol_pass_fee = new_fee;
+
+        // Emit event
+        emit_fee_update_event(old_fee, new_fee, string::utf8(b"pass"));
     }
 
     /// Set referrer fee
@@ -1641,10 +1695,14 @@ module podium::PodiumProtocol {
         new_fee: u64,
     ) acquires Config {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
-        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE));
+        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE_VALUE));
         
         let config = borrow_global_mut<Config>(@podium);
+        let old_fee = config.referrer_fee;
         config.referrer_fee = new_fee;
+
+        // Emit event
+        emit_fee_update_event(old_fee, new_fee, string::utf8(b"referrer"));
     }
 
     /// Get protocol subscription fee

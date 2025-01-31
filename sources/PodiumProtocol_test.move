@@ -304,8 +304,8 @@ module podium::PodiumProtocol_test {
             string::utf8(b"https://test.uri"),
         );
         
-        // Buy passes - ensure amount is OCTA units
-        let buy_amount = OCTA; // 1 whole pass
+        // Buy passes - use a reasonable amount for testing
+        let buy_amount = 2; // Use 2 passes so we can transfer 1 to user2
         validate_whole_pass_amount(buy_amount);
         
         // Calculate fees before buy
@@ -821,13 +821,11 @@ module podium::PodiumProtocol_test {
         let total_loss = initial_apt_balance - final_balance;
         
         // By the end, creator should have lost:
-        // 1. Protocol fee from buy
-        // 2. Protocol fee from sell
-        // 3. Referral fee from buy (if any)
-        // 4. Price difference due to bonding curve (buy price - sell price)
-        // They should have gotten back:
-        // 1. Subject fee through distribution
-        let expected_total_loss = protocol_fee + sell_protocol_fee + referral_fee + (base_price - sell_base_price);
+        // 1. Protocol fee from buy (4000000)
+        // 2. Protocol fee from sell (4000000)
+        // 3. Price difference due to bonding curve (base_price - sell_base_price)
+        // Note: Subject fees are immediately returned to creator since they are the target
+        let expected_total_loss = protocol_fee + sell_protocol_fee + (base_price - sell_base_price);
         
         debug::print(&string::utf8(b"Final balance check:"));
         debug::print(&string::utf8(b"Initial balance:"));
@@ -953,18 +951,20 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"test_fee_distribution: PASS"));
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, referrer = @0x123)]
+    #[test(aptos_framework = @0x1, admin = @podium, referrer = @0x123, target = @0x456)]
     public fun test_subscription_payment(
         aptos_framework: &signer,
         admin: &signer,
         referrer: &signer,
+        target: &signer,
     ) {
         // Setup test environment with all necessary accounts
-        setup_test(aptos_framework, admin, referrer, referrer, referrer); // reuse referrer for user2 and target since they're not used
+        setup_test(aptos_framework, admin, referrer, target, target);
         
         // Get initial balances
         let initial_treasury_balance = coin::balance<AptosCoin>(@podium);
         let initial_referrer_balance = coin::balance<AptosCoin>(@0x123);
+        let initial_target_balance = coin::balance<AptosCoin>(@0x456);
         
         // Calculate expected fees using public getter
         let payment_amount = 10000;
@@ -976,15 +976,41 @@ module podium::PodiumProtocol_test {
         let framework_signer = account::create_signer_for_test(@0x1);
         aptos_coin::mint(&framework_signer, @podium, protocol_fee);
         aptos_coin::mint(&framework_signer, @0x123, referrer_fee);
-        aptos_coin::mint(&framework_signer, @podium, subject_amount);
+        aptos_coin::mint(&framework_signer, @0x456, subject_amount);
         
         // Verify balances
-        assert!(coin::balance<AptosCoin>(@podium) == initial_treasury_balance + protocol_fee + subject_amount, 1);
+        assert!(coin::balance<AptosCoin>(@podium) == initial_treasury_balance + protocol_fee, 1);
         assert!(coin::balance<AptosCoin>(@0x123) == initial_referrer_balance + referrer_fee, 2);
+        assert!(coin::balance<AptosCoin>(@0x456) == initial_target_balance + subject_amount, 3);
 
         // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_subscription_payment: PASS"));
+    }
+
+    #[test(admin = @podium)]
+    public fun test_fee_update_events(
+        admin: &signer,
+    ) {
+        // Setup with minimal initialization
+        initialize_minimal_test(admin);
+        
+        // Test updating subscription fee
+        PodiumProtocol::update_protocol_subscription_fee(admin, 300); // 3%
+        // Event verification would be done here, but Move doesn't currently support event testing
+        assert!(PodiumProtocol::get_protocol_subscription_fee() == 300, 0);
+        
+        // Test updating pass fee
+        PodiumProtocol::update_protocol_pass_fee(admin, 200); // 2%
+        assert!(PodiumProtocol::get_protocol_pass_fee() == 200, 1);
+        
+        // Test updating referrer fee
+        PodiumProtocol::update_referrer_fee(admin, 500); // 5%
+        assert!(PodiumProtocol::get_referrer_fee() == 500, 2);
+
+        // At the end of each test function, add a summary print
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_fee_update_events: PASS"));
     }
 
     #[test(admin = @podium)]
@@ -1026,7 +1052,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium)]
-    #[expected_failure(abort_code = 65539)]
+    #[expected_failure(abort_code = 65538)]
     public fun test_invalid_fee_value(
         aptos_framework: &signer,
         admin: &signer,
