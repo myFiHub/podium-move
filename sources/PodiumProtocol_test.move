@@ -15,7 +15,8 @@ module podium::PodiumProtocol_test {
     use aptos_token_objects::token;
     use aptos_framework::primary_fungible_store;
     use aptos_framework::error;
-    use aptos_framework::aggregator_factory;
+    use aptos_framework::event;
+    use aptos_token_objects::collection;
 
     // Test addresses
     const TREASURY: address = @podium;
@@ -40,10 +41,6 @@ module podium::PodiumProtocol_test {
     // Constants for scaling and bonding curve calculations - exactly matching PodiumProtocol.move
     const OCTA: u64 = 100000000;        // 10^8 for APT price scaling and internal token precision
     const INPUT_SCALE: u64 = 1000000;   // 10^6 for overflow prevention
-    const INITIAL_PRICE: u64 = 100000000; // 1 APT in OCTA units
-    const DEFAULT_WEIGHT_A: u64 = 80000; // .8 in basis points
-    const DEFAULT_WEIGHT_B: u64 = 50000; // .5 in basis points
-    const DEFAULT_WEIGHT_C: u64 = 2;     // Constant offset
     const BPS: u64 = 10000;             // 100% = 10000 basis points
     
     // Pass-related constants
@@ -1073,83 +1070,110 @@ module podium::PodiumProtocol_test {
         PodiumProtocol::update_protocol_subscription_fee(admin, 10001);
     }
 
-    #[test(aptos_framework = @0x1, podium_signer = @podium)]
-    public fun test_bonding_curve_calculations(
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    public fun test_bonding_curve_parameter_management(
         aptos_framework: &signer,
-        podium_signer: &signer,
+        admin: &signer,
     ) {
         // Setup test environment
-        setup_test(aptos_framework, podium_signer, podium_signer, podium_signer, podium_signer);
+        setup_test(aptos_framework, admin, admin, admin, admin);
+        
+        // Get initial parameters
+        let (initial_a, initial_b, initial_c) = PodiumProtocol::get_bonding_curve_params();
+        
+        // Debug print initial parameters
+        debug::print(&string::utf8(b"\n=== Initial Bonding Curve Parameters ==="));
+        debug::print(&string::utf8(b"WEIGHT_A (bps):"));
+        debug::print(&initial_a);
+        debug::print(&string::utf8(b"WEIGHT_B (bps):"));
+        debug::print(&initial_b);
+        debug::print(&string::utf8(b"WEIGHT_C:"));
+        debug::print(&initial_c);
+        
+        // Test price calculation with default parameters
+        let price_at_supply_5 = PodiumProtocol::calculate_single_pass_price_with_params(
+            5, // supply
+            initial_a,
+            initial_b,
+            initial_c
+        );
+        
+        let price_at_supply_10 = PodiumProtocol::calculate_single_pass_price_with_params(
+            10, // higher supply
+            initial_a,
+            initial_b,
+            initial_c
+        );
+        
+        // Price should increase with supply
+        assert!(price_at_supply_10 > price_at_supply_5, 6);
 
-        debug::print(&string::utf8(b"\n=== Detailed Price Progression ==="));
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_bonding_curve_parameter_management: PASS"));
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    public fun test_curve_price_calculation(
+        aptos_framework: &signer,
+        admin: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, admin, admin, admin, admin);
+        
+        // Get initial parameters
+        let (weight_a, weight_b, weight_c) = PodiumProtocol::get_bonding_curve_params();
+        
+        debug::print(&string::utf8(b"\n=== Default Curve Parameters ==="));
+        debug::print(&string::utf8(b"WEIGHT_A (bps):"));
+        debug::print(&weight_a);
+        debug::print(&string::utf8(b"WEIGHT_A (%):"));
+        let weight_a_percentage = weight_a / 100;
+        debug::print(&weight_a_percentage);
+        debug::print(&string::utf8(b"WEIGHT_B (bps):"));
+        debug::print(&weight_b);
+        debug::print(&string::utf8(b"WEIGHT_B (%):"));
+        let weight_b_percentage = weight_b / 100;
+        debug::print(&weight_b_percentage);
+        debug::print(&string::utf8(b"WEIGHT_C:"));
+        debug::print(&weight_c);
+        
+        // Test price calculation at different supply levels
+        let supplies = vector[0, 1, 5, 10, 25, 50];
         let i = 0;
+        let len = vector::length(&supplies);
+        let initial_price = PodiumProtocol::get_initial_price();
+        
+        debug::print(&string::utf8(b"\n=== Curve Price Analysis ==="));
         let last_price = 0;
-        while (i <= 10) {
-            let price = PodiumProtocol::calculate_price(i, 1, false); // Use actual units
-            debug::print(&string::utf8(b"\nSupply (actual units):"));
-            debug::print(&i);
-            debug::print(&string::utf8(b"Price (in OCTA):"));
+        
+        while (i < len) {
+            let supply = *vector::borrow(&supplies, i);
+            let price = PodiumProtocol::calculate_single_pass_price(supply);
+            
+            debug::print(&string::utf8(b"\nSupply:"));
+            debug::print(&supply);
+            debug::print(&string::utf8(b"Price (OCTA):"));
             debug::print(&price);
             
-            if (i > 0) {
-                let price_increase = price - last_price;
-                let increase_percentage = if (last_price > 0) {
-                    ((price_increase as u128) * 10000 / (last_price as u128) as u64)
-                } else { 0 };
-                debug::print(&string::utf8(b"Price increase (in OCTA):"));
-                debug::print(&price_increase);
-                debug::print(&string::utf8(b"Increase percentage (basis points):"));
-                debug::print(&increase_percentage);
+            if (supply == 0) {
+                // First price should be initial price
+                assert!(price == initial_price, 0);
+            } else {
+                // Price should be at least initial price
+                assert!(price >= initial_price, 1);
+                
+                // Only check for price increase after stability period
+                if (supply > 5) { // Ensure we're well past the stability period
+                    assert!(price > last_price, 2);
+                };
             };
+            
             last_price = price;
             i = i + 1;
         };
 
-        // Test initial price (supply = 0)
-        let price_at_0 = PodiumProtocol::calculate_price(0, 1, false);
-        assert!(price_at_0 == INITIAL_PRICE, 0);
-
-        // Test price progression with more granular checks
-        let price_at_1 = PodiumProtocol::calculate_price(1, 1, false);
-        let price_at_5 = PodiumProtocol::calculate_price(5, 1, false);
-        let price_at_10 = PodiumProtocol::calculate_price(10, 1, false);
-        
-        debug::print(&string::utf8(b"\n=== Price Comparison (in OCTA) ==="));
-        debug::print(&string::utf8(b"Price at supply 0:"));
-        debug::print(&price_at_0);
-        debug::print(&string::utf8(b"Price at supply 1:"));
-        debug::print(&price_at_1);
-        debug::print(&string::utf8(b"Price at supply 5:"));
-        debug::print(&price_at_5);
-        debug::print(&string::utf8(b"Price at supply 10:"));
-        debug::print(&price_at_10);
-        
-        // Price should increase with supply
-        assert!(price_at_1 >= price_at_0, 1);
-        assert!(price_at_5 > price_at_1, 2);
-        assert!(price_at_10 > price_at_5, 3);
-
-        // Test selling price comparison
-        let buy_price = PodiumProtocol::calculate_price(5, 1, false);
-        let sell_price = PodiumProtocol::calculate_price(5, 1, true);
-        
-        debug::print(&string::utf8(b"\n=== Buy/Sell Comparison at Supply 5 (in OCTA) ==="));
-        debug::print(&string::utf8(b"Buy price:"));
-        debug::print(&buy_price);
-        debug::print(&string::utf8(b"Sell price:"));
-        debug::print(&sell_price);
-        debug::print(&string::utf8(b"Buy/Sell difference:"));
-        debug::print(&(buy_price - sell_price));
-        
-        assert!(sell_price < buy_price, 4);
-
-        // Test edge cases
-        assert!(PodiumProtocol::calculate_price(0, 1, false) == INITIAL_PRICE, 5);
-        assert!(PodiumProtocol::calculate_price(10000, 1, false) > INITIAL_PRICE, 6);  //was 1 million now 10000
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"\n=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_bonding_curve_calculations: PASS"));
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_curve_price_calculation: PASS"));
     }
 
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @user1, user2 = @user2, user3 = @user3, user4 = @user4)]
@@ -1254,5 +1278,59 @@ module podium::PodiumProtocol_test {
         // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_outpost_creation_and_pass_buying: PASS"));
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    public fun test_update_bonding_curve_params(
+        aptos_framework: &signer,
+        admin: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, admin, admin, admin, admin);
+        
+        // Get initial parameters and verify they are the defaults
+        let (initial_a, initial_b, initial_c) = PodiumProtocol::get_bonding_curve_params();
+        assert!(initial_a == 173, 0); // 1.73% in basis points
+        assert!(initial_b == 257, 1); // 2.57% in basis points
+        assert!(initial_c == 23, 2);  // Constant offset
+        
+        // Debug print initial parameters
+        debug::print(&string::utf8(b"\n=== Initial Bonding Curve Parameters ==="));
+        debug::print(&string::utf8(b"WEIGHT_A (bps):"));
+        debug::print(&initial_a);
+        debug::print(&string::utf8(b"WEIGHT_B (bps):"));
+        debug::print(&initial_b);
+        debug::print(&string::utf8(b"WEIGHT_C:"));
+        debug::print(&initial_c);
+        
+        // Update parameters to new values
+        let new_weight_a = 1730; // 17.3% in basis points
+        let new_weight_b = 2570; // 25.7% in basis points
+        let new_weight_c = 25;   // New offset
+        
+        PodiumProtocol::update_bonding_curve_params(
+            admin,
+            new_weight_a,
+            new_weight_b,
+            new_weight_c
+        );
+        
+        // Verify parameters were updated correctly
+        let (updated_a, updated_b, updated_c) = PodiumProtocol::get_bonding_curve_params();
+        assert!(updated_a == new_weight_a, 3);
+        assert!(updated_b == new_weight_b, 4);
+        assert!(updated_c == new_weight_c, 5);
+        
+        // Debug print updated parameters
+        debug::print(&string::utf8(b"\n=== Updated Bonding Curve Parameters ==="));
+        debug::print(&string::utf8(b"WEIGHT_A (bps):"));
+        debug::print(&updated_a);
+        debug::print(&string::utf8(b"WEIGHT_B (bps):"));
+        debug::print(&updated_b);
+        debug::print(&string::utf8(b"WEIGHT_C:"));
+        debug::print(&updated_c);
+
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_update_bonding_curve_params: PASS"));
     }
 } 

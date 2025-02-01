@@ -30,6 +30,7 @@ module podium::PodiumProtocol {
     const EINVALID_AMOUNT: u64 = 5;
     const EINVALID_FEE: u64 = 6;
     const EPROTOCOL_NOT_INITIALIZED: u64 = 7;
+    const EINVALID_WEIGHT: u64 = 8;  // New error for invalid weight parameters
 
     // Error constants - Outpost Related
     const EOUTPOST_EXISTS: u64 = 8;
@@ -76,9 +77,13 @@ module podium::PodiumProtocol {
     const INITIAL_PRICE: u64 = 100000000; // 1 APT in OCTA units (10^8)
     const DEFAULT_WEIGHT_A: u64 = 173; // 1.73% in basis points
     const DEFAULT_WEIGHT_B: u64 = 257; // 2.57% in basis points
-    const DEFAULT_WEIGHT_C: u64 = 23; // 
-    const OCTA: u64 = 100000000; // 10^8 scaling
-    const DECIMALS: u8 = 8; // 8 decimals for OCTA
+    const DEFAULT_WEIGHT_C: u64 = 23; // Constant offset
+    const MIN_WEIGHT: u64 = 1; // 0.01% minimum weight in basis points
+    const MAX_WEIGHT: u64 = 10000; // 100% maximum weight in basis points
+    const MIN_WEIGHT_C: u64 = 1; // Minimum value for weight C
+    const MAX_WEIGHT_C: u64 = 100; // Maximum value for weight C
+    const OCTA: u64 = 100000000; // 10^8 scaling for APT
+    const DECIMALS: u8 = 8; // Number of decimal places
 
     // Time constants
     const SECONDS_PER_WEEK: u64 = 7 * 24 * 60 * 60;
@@ -101,7 +106,7 @@ module podium::PodiumProtocol {
         uri: String,
         price: u64,
         fee_share: u64,
-        emergency_pause: bool,
+        emergency_pause: bool
     }
 
     /// Pass token structure
@@ -151,6 +156,7 @@ module podium::PodiumProtocol {
         fee_update_events: EventHandle<ProtocolFeeUpdateEvent>,
         outpost_created_events: EventHandle<OutpostCreatedEvent>,
         outpost_price: u64,
+        bonding_curve_events: EventHandle<BondingCurveUpdateEvent>,
     }
 
     /// Asset capabilities for fungible tokens
@@ -196,6 +202,22 @@ module podium::PodiumProtocol {
     /// Upgrade capability
     struct UpgradeCapability has key, store {
         version: u64
+    }
+
+    /// Event for bonding curve parameter updates
+    struct BondingCurveUpdateEvent has drop, store {
+        outpost_addr: address,
+        weight_a: u64,
+        weight_b: u64,
+        weight_c: u64,
+        timestamp: u64
+    }
+
+    /// Bonding curve parameters for an outpost
+    struct BondingCurveParams has store {
+        weight_a: u64,
+        weight_b: u64,
+        weight_c: u64
     }
 
     // ============ Events ============
@@ -320,6 +342,7 @@ module podium::PodiumProtocol {
                 fee_update_events: account::new_event_handle<ProtocolFeeUpdateEvent>(admin),
                 outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
                 outpost_price: 1000,
+                bonding_curve_events: account::new_event_handle<BondingCurveUpdateEvent>(admin),
             });
 
             // Initialize asset capabilities
@@ -563,6 +586,61 @@ module podium::PodiumProtocol {
 
     // ============ Pass Trading & Bonding Curve Functions ============
 
+    /// Calculate price for a single pass at a given supply level
+    /// * `supply` - Current supply of passes (in actual units)
+    /// * Returns the calculated price in OCTA units (scaled for APT)
+    #[view]
+    public fun calculate_single_pass_price(supply: u64): u64 acquires Config {
+        let config = borrow_global<Config>(@podium);
+        calculate_single_pass_price_with_params(
+            supply,
+            config.weight_a,
+            config.weight_b,
+            config.weight_c
+        )
+    }
+
+    /// Calculates price using bonding curve
+    /// * `supply` - Current supply of passes (in actual units, e.g., 1 = one pass)
+    /// * `amount` - Amount of passes to buy/sell (in actual units)
+    /// * `is_sell` - Whether this is a sell operation
+    /// * Returns the calculated price in OCTA units (scaled for APT)
+    #[view]
+    public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
+        debug::print(&string::utf8(b"=== Starting price calculation ==="));
+        debug::print(&string::utf8(b"Input parameters:"));
+        debug::print(&string::utf8(b"Supply (actual units):"));
+        debug::print(&supply);
+        debug::print(&string::utf8(b"Amount (actual units):"));
+        debug::print(&amount);
+        debug::print(&string::utf8(b"Is sell:"));
+        debug::print(&is_sell);
+
+        let total_price = 0;
+        let i = 0;
+        
+        while (i < amount) {
+            let current_supply = if (is_sell) {
+                if (supply <= i + 1) {
+                    0
+                } else {
+                    supply - i - 1
+                }
+            } else {
+                supply + i
+            };
+            
+            let pass_price = calculate_single_pass_price(current_supply);
+            total_price = total_price + pass_price;
+            
+            i = i + 1;
+        };
+        
+        debug::print(&string::utf8(b"=== Final total price calculated ==="));
+        debug::print(&total_price);
+        total_price
+    }
+
     /// Calculates total buy price including all fees and referral bonus
     /// * `target_addr` - The target address for the pass
     /// * `amount` - Amount of passes to buy
@@ -577,11 +655,13 @@ module podium::PodiumProtocol {
         // Get current supply
         let current_supply = get_total_supply(target_addr);
         
-        // Get raw price from bonding curve
+        // Calculate raw price first to avoid dangling reference
         let price = calculate_price(current_supply, amount, false);
         
-        // Calculate fees using basis points (BPS = 10000)
+        // Get config for fee calculations after price calculation
         let config = borrow_global<Config>(@podium);
+        
+        // Calculate fees using basis points (BPS = 10000)
         let protocol_fee = (price * config.protocol_fee_percent) / BPS;
         let subject_fee = (price * config.subject_fee_percent) / BPS;
         let referral_fee = if (option::is_some(&referrer)) {
@@ -610,12 +690,13 @@ module podium::PodiumProtocol {
             return (0, 0, 0)
         };
 
-        // Get raw price from bonding curve
-        // For sells, we calculate based on the supply AFTER the sell
+        // Calculate raw price first to avoid dangling reference
         let price = calculate_price(current_supply - amount, amount, true);
         
-        // Calculate fees based on total price using basis points
+        // Get config for fee calculations after price calculation
         let config = borrow_global<Config>(@podium);
+
+        // Calculate fees based on total price using basis points
         let protocol_fee = (price * config.protocol_fee_percent) / BPS;
         let subject_fee = (price * config.subject_fee_percent) / BPS;
         
@@ -634,156 +715,6 @@ module podium::PodiumProtocol {
         
         // Return raw price and fees
         (price, protocol_fee, subject_fee)
-    }
-
-    /// Calculates price using bonding curve
-    /// * `supply` - Current supply of passes (in actual units, e.g., 1 = one pass)
-    /// * `amount` - Amount of passes to buy/sell (in actual units)
-    /// * `is_sell` - Whether this is a sell operation
-    /// * Returns the calculated price in OCTA units (scaled for APT)
-    #[view]
-    public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 {
-        debug::print(&string::utf8(b"=== Starting price calculation ==="));
-        debug::print(&string::utf8(b"Input parameters:"));
-        debug::print(&string::utf8(b"Supply (actual units):"));
-        debug::print(&supply);
-        debug::print(&string::utf8(b"Amount (actual units):"));
-        debug::print(&amount);
-        debug::print(&string::utf8(b"Is sell:"));
-        debug::print(&is_sell);
-
-        let total_price = 0;
-        let i = 0;
-        
-        while (i < amount) {
-            // For buys: calculate price at current supply level
-            // For sells: calculate price at current supply level - 1
-            // This ensures buying the Nth pass costs the same as selling the Nth pass
-            let current_supply = if (is_sell) {
-                // Prevent underflow for sells
-                if (supply <= i + 1) {
-                    0  // Return initial price for selling last pass
-                } else {
-                    supply - i - 1  // When selling, we look at price at supply-1
-                }
-            } else {
-                supply + i      // When buying, we look at price at current supply
-            };
-            
-            // Calculate price for this single pass
-            let pass_price = calculate_single_pass_price(current_supply);
-            total_price = total_price + pass_price;
-            
-            i = i + 1;
-        };
-        
-        debug::print(&string::utf8(b"=== Final total price calculated ==="));
-        debug::print(&total_price);
-        total_price
-    }
-
-    /// Calculate price for a single pass at a given supply level
-    /// * `supply` - Current supply of passes (in actual units)
-    /// * Returns the calculated price in OCTA units (scaled for APT)
-    #[view]
-    public fun calculate_single_pass_price(supply: u64): u64 {
-        // Early return for first purchase
-        if (supply == 0) {
-            debug::print(&string::utf8(b"First purchase - returning initial price"));
-            return INITIAL_PRICE
-        };
-
-        // Calculate n = s + c - 1
-        let s_plus_c = supply + DEFAULT_WEIGHT_C;
-        if (s_plus_c <= 1) {
-            debug::print(&string::utf8(b"Supply + C <= 1 - returning initial price"));
-            return INITIAL_PRICE
-        };
-        let n = s_plus_c - 1;
-
-        // Calculate summation at this supply level
-        let s = calculate_summation(n);
-
-        // Apply weights directly without scaling
-        let weighted_a = (s * DEFAULT_WEIGHT_A) / BPS;
-        let weighted_b = (weighted_a * DEFAULT_WEIGHT_B) / BPS;
-
-        // Scale to OCTA
-        let price = weighted_b * OCTA;
-
-        // Return at least initial price
-        if (price < INITIAL_PRICE) {
-            INITIAL_PRICE
-        } else {
-            price
-        }
-    }
-
-    /// Helper function to calculate summation term: (n * (n + 1) * (2n + 1)) / 6
-    /// This calculates the area under the curve from 0 to n
-    /// We use strategic factoring and intermediate steps to prevent overflow while maintaining precision
-    fun calculate_summation(n: u64): u64 {
-        if (n == 0) {
-            return 0
-        };
-
-      
-
-        // First, handle 2n + 1
-        let two_n = 2 * n;  // This won't overflow as n is u64
-        let two_n_plus_1 = two_n + 1;
-        
-        // Now we need to calculate (n * (n + 1) * (2n + 1)) / 6
-        // To prevent overflow, we can factor this as:
-        // n * ((n + 1) * (2n + 1)) / 6
-        // = n * (2n^2 + 3n + 1) / 6
-        
-        // Calculate (n + 1) * (2n + 1) = 2n^2 + 3n + 1
-        // Do this in steps to prevent overflow
-        let n_squared = n * n;
-        let two_n_squared = 2 * n_squared;
-        let three_n = 3 * n;
-        
-        // 2n^2 + 3n + 1
-        let inner_sum = two_n_squared + three_n + 1;
-        
-        // Finally multiply by n and divide by 6
-        // To minimize precision loss, we:
-        // 1. First check if inner_sum is divisible by 2 or 3
-        // 2. Apply those divisions first before multiplying by n
-        // 3. Then apply remaining division
-        
-        let mut_inner_sum = inner_sum;
-        let mut_n = n;
-        let mut_result = 0;
-        
-        // Try to divide by 2 first if possible
-        if (mut_inner_sum % 2 == 0) {
-            mut_inner_sum = mut_inner_sum / 2;
-        } else if (mut_n % 2 == 0) {
-            mut_n = mut_n / 2;
-        };
-        
-        // Try to divide by 3 if possible
-        if (mut_inner_sum % 3 == 0) {
-            mut_inner_sum = mut_inner_sum / 3;
-        } else if (mut_n % 3 == 0) {
-            mut_n = mut_n / 3;
-        };
-        
-        // Now multiply remaining terms
-        mut_result = mut_n * mut_inner_sum;
-        
-        // Apply any remaining divisions needed
-        if (inner_sum % 2 != 0 && n % 2 != 0) {
-            mut_result = mut_result / 2;
-        };
-        if (inner_sum % 3 != 0 && n % 3 != 0) {
-            mut_result = mut_result / 3;
-        };
-
-        
-        mut_result
     }
 
     /// Buy passes with automatic target asset creation
@@ -1709,4 +1640,142 @@ module podium::PodiumProtocol {
     
     #[view]
     public fun get_weight_c(): u64 { DEFAULT_WEIGHT_C }
+
+    /// Update bonding curve parameters (admin only)
+    public entry fun update_bonding_curve_params(
+        admin: &signer,
+        weight_a: u64,
+        weight_b: u64,
+        weight_c: u64
+    ) acquires Config {
+        // Verify admin
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        // Validate parameters
+        assert!(weight_a >= MIN_WEIGHT && weight_a <= MAX_WEIGHT, error::invalid_argument(EINVALID_WEIGHT));
+        assert!(weight_b >= MIN_WEIGHT && weight_b <= MAX_WEIGHT, error::invalid_argument(EINVALID_WEIGHT));
+        assert!(weight_c >= MIN_WEIGHT_C && weight_c <= MAX_WEIGHT_C, error::invalid_argument(EINVALID_WEIGHT));
+        
+        let config = borrow_global_mut<Config>(@podium);
+        
+        // Update parameters
+        config.weight_a = weight_a;
+        config.weight_b = weight_b;
+        config.weight_c = weight_c;
+        
+        // Emit update event
+        event::emit_event(
+            &mut config.bonding_curve_events,
+            BondingCurveUpdateEvent {
+                outpost_addr: @podium,  // Use protocol address since it's protocol-wide
+                weight_a,
+                weight_b,
+                weight_c,
+                timestamp: timestamp::now_seconds(),
+            }
+        );
+    }
+
+    /// Get bonding curve parameters
+    #[view]
+    public fun get_bonding_curve_params(): (u64, u64, u64) acquires Config {
+        let config = borrow_global<Config>(@podium);
+        (
+            config.weight_a,
+            config.weight_b,
+            config.weight_c
+        )
+    }
+
+    /// Calculate price for a single pass at a given supply level using custom parameters
+    /// * `supply` - Current supply of passes (in actual units)
+    /// * `weight_a` - Custom weight A parameter in basis points
+    /// * `weight_b` - Custom weight B parameter in basis points
+    /// * `weight_c` - Custom weight C parameter
+    /// * Returns the calculated price in OCTA units (scaled for APT)
+    #[view]
+    public fun calculate_single_pass_price_with_params(
+        supply: u64,
+        weight_a: u64,
+        weight_b: u64,
+        weight_c: u64
+    ): u64 {
+        // Early return for first purchase
+        if (supply == 0) {
+            return INITIAL_PRICE
+        };
+
+        // Calculate n = s + c - 1
+        let s_plus_c = supply + weight_c;
+        if (s_plus_c <= 1) {
+            return INITIAL_PRICE
+        };
+        let n = s_plus_c - 1;
+
+        // Calculate summation at this supply level
+        let s = calculate_summation(n);
+
+        // Apply weights directly without scaling
+        let weighted_a = (s * weight_a) / BPS;
+        let weighted_b = (weighted_a * weight_b) / BPS;
+
+        // Scale to OCTA
+        let price = weighted_b * OCTA;
+
+        // Return at least initial price
+        if (price < INITIAL_PRICE) {
+            INITIAL_PRICE
+        } else {
+            price
+        }
+    }
+
+    /// Calculate summation term: (n * (n + 1) * (2n + 1)) / 6
+    /// Using strategic factoring to prevent overflow while maintaining precision
+    fun calculate_summation(n: u64): u64 {
+        if (n == 0) {
+            return 0
+        };
+        
+        // Calculate components
+        let two_n = 2 * n;
+        let two_n_plus_1 = two_n + 1;
+        
+        // Calculate (n + 1) * (2n + 1) = 2n^2 + 3n + 1
+        let n_squared = n * n;
+        let two_n_squared = 2 * n_squared;
+        let three_n = 3 * n;
+        let inner_sum = two_n_squared + three_n + 1;
+        
+        // Handle divisions strategically to minimize precision loss
+        let mut_inner_sum = inner_sum;
+        let mut_n = n;
+        
+        // Try to divide by 2 first if possible
+        if (mut_inner_sum % 2 == 0) {
+            mut_inner_sum = mut_inner_sum / 2;
+        } else if (mut_n % 2 == 0) {
+            mut_n = mut_n / 2;
+        };
+        
+        // Try to divide by 3 if possible
+        if (mut_inner_sum % 3 == 0) {
+            mut_inner_sum = mut_inner_sum / 3;
+        } else if (mut_n % 3 == 0) {
+            mut_n = mut_n / 3;
+        };
+        
+        // Multiply remaining terms
+        let mut_result = mut_n * mut_inner_sum;
+        
+        // Apply any remaining divisions needed
+        if (inner_sum % 2 != 0 && n % 2 != 0) {
+            mut_result = mut_result / 2;
+        };
+        if (inner_sum % 3 != 0 && n % 3 != 0) {
+            mut_result = mut_result / 3;
+        };
+        
+        mut_result
+    }
 }
