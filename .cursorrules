@@ -1,4 +1,45 @@
-# Cursor Rules for Move/Aptos Development
+# Cursor Rules for Move/Movement Development
+
+## CLI Commands
+
+### Development Commands
+```bash
+# Create new project
+movement move new <project_name>
+
+# Build project
+movement move build
+
+# Run tests
+movement move test
+movement move test --filter <test_name>
+movement move test --coverage
+movement move test --trace
+
+# Deploy module
+movement move publish \
+  --profile podium \
+  --included-artifacts sparse \
+  --assume-yes \
+  --named-addresses podium=0x123...,fihub=0x456...
+
+# Initialize contract
+movement move run \
+  --profile podium \
+  --function-id 'podium::PodiumProtocol::initialize'
+
+# Upgrade module
+movement move publish \
+  --profile podium \
+  --included-artifacts sparse \
+  --assume-yes \
+  --named-addresses podium=0x123...,fihub=0x456...
+
+# View resources/functions
+movement move view \
+  --profile podium \
+  --function-id 'module::contract::view_function'
+```
 
 ## General Rules
 - Use explicit visibility modifiers (`public`, `public(friend)`, `entry`)
@@ -58,6 +99,43 @@ const OCTA: u64 = 100000000;  // 10^8 scaling
 3. State changes
 4. External calls
 5. Event emission
+
+## Testing Structure
+```move
+#[test_only]
+module podium::MyModule_test {
+    // Setup helpers
+    fun initialize_test_environment() { ... }
+    
+    #[test]
+    fun test_core_functionality() {
+        // Test logic
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_name: PASS"));
+    }
+    
+    #[test]
+    #[expected_failure(abort_code = 65537)]
+    fun test_invalid_input() { ... }
+}
+```
+
+## Deployment Safety
+```bash
+# Test in testnet first
+movement move publish \
+  --profile testnet \
+  --included-artifacts sparse \
+  --named-addresses podium=0x123...
+
+# Verify deployment
+movement move verify
+
+# Monitor events
+movement move events \
+  --profile mainnet \
+  --event-key <key>
+```
 
 ## Best Practices
 

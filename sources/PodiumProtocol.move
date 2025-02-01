@@ -657,7 +657,12 @@ module podium::PodiumProtocol {
         
         while (i < amount) {
             let current_supply = if (is_sell) {
-                supply - i
+                // For sells, we need to ensure we don't underflow
+                if (supply <= i) {
+                    0
+                } else {
+                    supply - i - 1 // Subtract 1 more to get the price at the lower supply level
+                }
             } else {
                 supply + i
             };
@@ -686,56 +691,25 @@ module podium::PodiumProtocol {
             return INITIAL_PRICE
         };
 
-        // Calculate n1 = (s + c - 1) / k
-        let s_plus_c = supply + DEFAULT_WEIGHT_C;
-        if (s_plus_c <= 1) {
-            debug::print(&string::utf8(b"Supply + C <= 1 - returning initial price"));
-            return INITIAL_PRICE
-        };
-        let n1 = (s_plus_c - 1) / INPUT_SCALE;
+        // Calculate summation at current supply
+        let s = calculate_summation(supply);
 
-        // For sells, we want the buy price at supply-1
-        let n2 = if (is_sell) {
-            let supply_minus_one = if (supply > 1) { supply - 1 } else { 0 };
-            let s_minus_one_plus_c = supply_minus_one + DEFAULT_WEIGHT_C;
-            if (s_minus_one_plus_c <= 1) {
-                n1
-            } else {
-                (s_minus_one_plus_c - 1) / INPUT_SCALE
-            }
-        } else {
-            // For buys, we want the price at current supply
-            n1
-        };
+        // Scale to OCTA first to maintain precision
+        let scaled = s * OCTA;
+        
+        // Apply weights after scaling
+        let weighted_price = ((scaled * DEFAULT_WEIGHT_A) / BPS) * DEFAULT_WEIGHT_B / BPS;
 
-        // Calculate S1 = (n1 * (n1 + 1) * (2n1 + 1)) / 6
-        let s1 = calculate_summation(n1);
+        // Add base price
+        let final_price = weighted_price + INITIAL_PRICE;
 
-        // Calculate S2 = (n2 * (n2 + 1) * (2n2 + 1)) / 6
-        let s2 = calculate_summation(n2);
-
-        // Calculate S2 - S1, handling potential negative case for sells
-        let s_diff = if (s2 > s1) {
-            s2 - s1
-        } else if (is_sell) {
-            s1 - s2
-        } else {
-            0
-        };
-
-        // Apply weights in basis points
-        let step1 = (s_diff * DEFAULT_WEIGHT_A) / BPS;
-        let step2 = (step1 * DEFAULT_WEIGHT_B) / BPS;
-
-        // Scale to OCTA units for APT price
-        let price = step2 * OCTA;
-
-        // Return at least initial price
-        let final_price = if (price < INITIAL_PRICE) {
-            INITIAL_PRICE
-        } else {
-            price
-        };
+        debug::print(&string::utf8(b"=== Final price calculation details ==="));
+        debug::print(&string::utf8(b"Operation type:"));
+        debug::print(&is_sell);
+        debug::print(&string::utf8(b"Supply:"));
+        debug::print(&supply);
+        debug::print(&string::utf8(b"Final price:"));
+        debug::print(&final_price);
 
         final_price
     }
@@ -748,63 +722,37 @@ module podium::PodiumProtocol {
             return 0
         };
 
-      
+        debug::print(&string::utf8(b"[calculate_summation] Input n:"));
+        debug::print(&n);
 
-        // First, handle 2n + 1
-        let two_n = 2 * n;  // This won't overflow as n is u64
-        let two_n_plus_1 = two_n + 1;
-        
-        // Now we need to calculate (n * (n + 1) * (2n + 1)) / 6
-        // To prevent overflow, we can factor this as:
-        // n * ((n + 1) * (2n + 1)) / 6
-        // = n * (2n^2 + 3n + 1) / 6
-        
-        // Calculate (n + 1) * (2n + 1) = 2n^2 + 3n + 1
-        // Do this in steps to prevent overflow
-        let n_squared = n * n;
-        let two_n_squared = 2 * n_squared;
-        let three_n = 3 * n;
-        
-        // 2n^2 + 3n + 1
-        let inner_sum = two_n_squared + three_n + 1;
-        
-        // Finally multiply by n and divide by 6
-        // To minimize precision loss, we:
-        // 1. First check if inner_sum is divisible by 2 or 3
-        // 2. Apply those divisions first before multiplying by n
-        // 3. Then apply remaining division
-        
-        let mut_inner_sum = inner_sum;
-        let mut_n = n;
-        let mut_result = 0;
-        
-        // Try to divide by 2 first if possible
-        if (mut_inner_sum % 2 == 0) {
-            mut_inner_sum = mut_inner_sum / 2;
-        } else if (mut_n % 2 == 0) {
-            mut_n = mut_n / 2;
-        };
-        
-        // Try to divide by 3 if possible
-        if (mut_inner_sum % 3 == 0) {
-            mut_inner_sum = mut_inner_sum / 3;
-        } else if (mut_n % 3 == 0) {
-            mut_n = mut_n / 3;
-        };
-        
-        // Now multiply remaining terms
-        mut_result = mut_n * mut_inner_sum;
-        
-        // Apply any remaining divisions needed
-        if (inner_sum % 2 != 0 && n % 2 != 0) {
-            mut_result = mut_result / 2;
-        };
-        if (inner_sum % 3 != 0 && n % 3 != 0) {
-            mut_result = mut_result / 3;
-        };
+        // Calculate n * (n + 1) * (2n + 1) / 6
+        // To prevent overflow and maintain precision:
+        // 1. First calculate 2n + 1
+        let two_n_plus_1 = 2 * n + 1;
+        debug::print(&string::utf8(b"[calculate_summation] 2n + 1:"));
+        debug::print(&two_n_plus_1);
 
-        
-        mut_result
+        // 2. Calculate n + 1
+        let n_plus_1 = n + 1;
+        debug::print(&string::utf8(b"[calculate_summation] n + 1:"));
+        debug::print(&n_plus_1);
+
+        // 3. First multiply n * (n + 1)
+        let step1 = n * n_plus_1;
+        debug::print(&string::utf8(b"[calculate_summation] n * (n + 1):"));
+        debug::print(&step1);
+
+        // 4. Then multiply by (2n + 1)
+        let step2 = step1 * two_n_plus_1;
+        debug::print(&string::utf8(b"[calculate_summation] n * (n + 1) * (2n + 1):"));
+        debug::print(&step2);
+
+        // 5. Finally divide by 6
+        let result = step2 / 6;
+        debug::print(&string::utf8(b"[calculate_summation] Final result after division by 6:"));
+        debug::print(&result);
+
+        result
     }
 
     /// Buy passes with automatic target asset creation
