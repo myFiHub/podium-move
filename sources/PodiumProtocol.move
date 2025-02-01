@@ -72,12 +72,12 @@ module podium::PodiumProtocol {
     const MAX_SUBJECT_FEE_PERCENT: u64 = 800; // 8% in basis points
 
     // Constants for scaling and bonding curve calculations
-    const OCTA: u64 = 100000000; // 10^8 for APT price scaling
     const INPUT_SCALE: u64 = 1000000; // K factor for overflow prevention
     const INITIAL_PRICE: u64 = 100000000; // 1 APT in OCTA units (10^8)
-    const DEFAULT_WEIGHT_A: u64 = 40000; // 400 in basis points
-    const DEFAULT_WEIGHT_B: u64 = 30000; // 300 in basis points
+    const DEFAULT_WEIGHT_A: u64 = 4500; // 45% in basis points
+    const DEFAULT_WEIGHT_B: u64 = 3500; // 35% in basis points
     const DEFAULT_WEIGHT_C: u64 = 2; // Constant offset for supply adjustment
+    const OCTA: u64 = 100000000; // 10^8 scaling
     const DECIMALS: u8 = 8; // 8 decimals for OCTA
 
     // Time constants
@@ -660,7 +660,12 @@ module podium::PodiumProtocol {
             // For sells: calculate price at current supply level - 1
             // This ensures buying the Nth pass costs the same as selling the Nth pass
             let current_supply = if (is_sell) {
-                supply - i - 1  // When selling, we look at price at supply-1
+                // Prevent underflow for sells
+                if (supply <= i + 1) {
+                    0  // Return initial price for selling last pass
+                } else {
+                    supply - i - 1  // When selling, we look at price at supply-1
+                }
             } else {
                 supply + i      // When buying, we look at price at current supply
             };
@@ -699,21 +704,19 @@ module podium::PodiumProtocol {
         // Calculate summation at this supply level
         let s = calculate_summation(n);
 
-        // Apply weights in basis points
-        let step1 = (s * DEFAULT_WEIGHT_A) / BPS;
-        let step2 = (step1 * DEFAULT_WEIGHT_B) / BPS;
+        // Apply weights directly without scaling
+        let weighted_a = (s * DEFAULT_WEIGHT_A) / BPS;
+        let weighted_b = (weighted_a * DEFAULT_WEIGHT_B) / BPS;
 
-        // Scale to OCTA units for APT price
-        let price = step2 * OCTA;
+        // Scale to OCTA
+        let price = weighted_b * OCTA;
 
         // Return at least initial price
-        let final_price = if (price < INITIAL_PRICE) {
+        if (price < INITIAL_PRICE) {
             INITIAL_PRICE
         } else {
             price
-        };
-
-        final_price
+        }
     }
 
     /// Helper function to calculate summation term: (n * (n + 1) * (2n + 1)) / 6
@@ -1700,9 +1703,6 @@ module podium::PodiumProtocol {
     
     #[view]
     public fun get_price_scale(): u64 { INPUT_SCALE }
-    
-    #[view]
-    public fun get_weight_a(): u64 { DEFAULT_WEIGHT_A }
     
     #[view]
     public fun get_weight_b(): u64 { DEFAULT_WEIGHT_B }

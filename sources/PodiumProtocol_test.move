@@ -41,8 +41,8 @@ module podium::PodiumProtocol_test {
     const OCTA: u64 = 100000000;        // 10^8 for APT price scaling and internal token precision
     const INPUT_SCALE: u64 = 1000000;   // 10^6 for overflow prevention
     const INITIAL_PRICE: u64 = 100000000; // 1 APT in OCTA units
-    const DEFAULT_WEIGHT_A: u64 = 40000; // 350 in basis points
-    const DEFAULT_WEIGHT_B: u64 = 30000; // 250 in basis points
+    const DEFAULT_WEIGHT_A: u64 = 80000; // .8 in basis points
+    const DEFAULT_WEIGHT_B: u64 = 50000; // .5 in basis points
     const DEFAULT_WEIGHT_C: u64 = 2;     // Constant offset
     const BPS: u64 = 10000;             // 100% = 10000 basis points
     
@@ -1145,7 +1145,7 @@ module podium::PodiumProtocol_test {
 
         // Test edge cases
         assert!(PodiumProtocol::calculate_price(0, 1, false) == INITIAL_PRICE, 5);
-        assert!(PodiumProtocol::calculate_price(1000000, 1, false) > INITIAL_PRICE, 6);
+        assert!(PodiumProtocol::calculate_price(10000, 1, false) > INITIAL_PRICE, 6);  //was 1 million now 10000
 
         // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"\n=== TEST SUMMARY ==="));

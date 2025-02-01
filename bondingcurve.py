@@ -1,89 +1,173 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
+from datetime import datetime
 
-# Constants - exactly matching Move implementation
-OCTA = 100000000        # 10^8 for APT price scaling
-INPUT_SCALE = 1000000   # 10^6 for overflow prevention
-DEFAULT_WEIGHT_A = 40000 # 400 in basis points
-DEFAULT_WEIGHT_B = 30000 # 300 in basis points
-DEFAULT_WEIGHT_C = 2    # Constant offset
-BPS = 10000            # 100% = 10000 basis points
-INITIAL_PRICE = OCTA   # 1 APT in OCTA units
+# Constants matching Move implementation
+OCTA = 100_000_000  # 10^8 for APT price scaling
+INPUT_SCALE = 1_000_000  # 10^6 for overflow prevention
+INITIAL_PRICE = 102_345_678  # 1 APT in OCTA units
+
+# Updated weights for smoother progression
+DEFAULT_WEIGHT_A = 350   # 1.25% in basis points - further reduced for smoother curve
+DEFAULT_WEIGHT_B = 800    # 8% in basis points - reduced for gentler growth
+DEFAULT_WEIGHT_C = 1     # Increased offset for smoother early progression
+BPS = 10000  # 100% = 10000 basis points
 
 def calculate_summation(n):
-    """Helper function to calculate summation term: (n * (n + 1) * (2n + 1)) / 6"""
+    """
+    Calculate summation term: (n * (n + 1) * (2n + 1)) / 6
+    Using strategic factoring to prevent overflow while maintaining precision
+    """
     if n == 0:
         return 0
-    n_plus_1 = n + 1
-    two_n_plus_1 = 2 * n + 1
-    return (n * n_plus_1 * two_n_plus_1) // 6
+    
+    # Calculate components
+    two_n = 2 * n
+    two_n_plus_1 = two_n + 1
+    
+    # Calculate (n + 1) * (2n + 1) = 2n^2 + 3n + 1
+    n_squared = n * n
+    two_n_squared = 2 * n_squared
+    three_n = 3 * n
+    inner_sum = two_n_squared + three_n + 1
+    
+    # Handle divisions strategically to minimize precision loss
+    mut_inner_sum = inner_sum
+    mut_n = n
+    
+    # Try to divide by 2 first if possible
+    if mut_inner_sum % 2 == 0:
+        mut_inner_sum = mut_inner_sum // 2
+    elif mut_n % 2 == 0:
+        mut_n = mut_n // 2
+    
+    # Try to divide by 3 if possible
+    if mut_inner_sum % 3 == 0:
+        mut_inner_sum = mut_inner_sum // 3
+    elif mut_n % 3 == 0:
+        mut_n = mut_n // 3
+    
+    # Multiply remaining terms
+    mut_result = mut_n * mut_inner_sum
+    
+    # Apply any remaining divisions needed
+    if inner_sum % 2 != 0 and n % 2 != 0:
+        mut_result = mut_result // 2
+    if inner_sum % 3 != 0 and n % 3 != 0:
+        mut_result = mut_result // 3
+    
+    return mut_result
 
-def calculate_price(supply, amount, is_sell, debug=False):
+def calculate_single_pass_price(supply):
     """
-    Supply and amount should be in OCTA units (10^8)
-    Returns price in OCTA units
+    Calculate price for a single pass at a given supply level
+    Returns the calculated price in OCTA units
     """
-    if debug:
-        print("\n=== Starting price calculation ===")
-        print(f"Supply: {supply}")
-        print(f"Amount: {amount}")
-        print(f"Is sell: {is_sell}")
-
+    # Early return for first purchase
     if supply == 0:
-        if debug:
-            print("First purchase - returning initial price")
         return INITIAL_PRICE
-
-    # Calculate n1 = (s + c - 1) / k
+    
+    # Calculate n = s + c - 1
     s_plus_c = supply + DEFAULT_WEIGHT_C
     if s_plus_c <= 1:
-        if debug:
-            print("Supply + C <= 1 - returning initial price")
         return INITIAL_PRICE
-    n1 = (s_plus_c - 1) // INPUT_SCALE
+    n = s_plus_c - 1
     
-    # Calculate n2 based on buy/sell
-    if is_sell:
-        supply_minus_amount = max(s_plus_c - amount, 1)
-        n2 = (supply_minus_amount - 1) // INPUT_SCALE
-    else:
-        n2 = (s_plus_c + amount - 1) // INPUT_SCALE
-
-    if debug:
-        print(f"n1: {n1}")
-        print(f"n2: {n2}")
-
-    # Calculate summations
-    s1 = calculate_summation(n1)
-    s2 = calculate_summation(n2)
+    # Calculate summation at this supply level
+    s = calculate_summation(n)
     
-    if debug:
-        print(f"s1: {s1}")
-        print(f"s2: {s2}")
-
-    # Calculate difference
-    s_diff = s2 - s1 if s2 > s1 else (s1 - s2 if is_sell else 0)
+    # Apply weights directly without scaling
+    weighted_a = (s * DEFAULT_WEIGHT_A) // BPS
+    weighted_b = (weighted_a * DEFAULT_WEIGHT_B) // BPS
     
-    if debug:
-        print(f"s_diff: {s_diff}")
-
-    # Apply weights
-    step1 = (s_diff * DEFAULT_WEIGHT_A) // BPS
-    step2 = (step1 * DEFAULT_WEIGHT_B) // BPS
+    # Scale to OCTA
+    price = weighted_b * OCTA
     
-    if debug:
-        print(f"step1: {step1}")
-        print(f"step2: {step2}")
-
     # Return at least initial price
-    final_price = max(step2, INITIAL_PRICE)
-    
-    if debug:
-        print(f"final_price: {final_price}")
-        print("=== End price calculation ===\n")
+    return max(INITIAL_PRICE, price)
 
-    return final_price
+def calculate_price(supply, amount, is_sell):
+    """
+    Calculate total price for buying/selling amount of passes at current supply
+    Returns the calculated price in OCTA units
+    """
+    total_price = 0
+    
+    for i in range(amount):
+        # For buys: calculate price at current supply level
+        # For sells: calculate price at current supply level - 1
+        if is_sell:
+            # Prevent underflow for sells
+            if supply <= i + 1:
+                current_supply = 0  # Return initial price for selling last pass
+            else:
+                current_supply = supply - i - 1  # When selling, look at price at supply-1
+        else:
+            current_supply = supply + i  # When buying, look at price at current supply
+        
+        # Calculate price for this single pass
+        pass_price = calculate_single_pass_price(current_supply)
+        total_price += pass_price
+    
+    return total_price
+
+def plot_bonding_curves():
+    """
+    Create 4 plots showing different supply ranges
+    """
+    ranges = [
+        (0, 25, "First 25 Supply Points"),
+        (0, 100, "First 100 Supply Points"),
+        (0, 1000, "Supply Points up to 1,000"),
+        (0, 10000, "Supply Points up to 10,000")
+    ]
+    
+    for start, end, title in ranges:
+        supplies = np.arange(start, end + 1)
+        buy_prices = [calculate_price(s, 1, False) / OCTA for s in supplies]
+        sell_prices = [calculate_price(s, 1, True) / OCTA for s in supplies]
+        
+        plt.figure(figsize=(12, 8))
+        plt.plot(supplies, buy_prices, 'g-', label='Buy Price')
+        plt.plot(supplies, sell_prices, 'r-', label='Sell Price')
+        plt.title(f'Podium Protocol Bonding Curve\n{title}')
+        plt.xlabel('Supply')
+        plt.ylabel('Price (APT)')
+        
+        # Use scientific notation for y-axis on larger ranges
+        if end > 100:
+            plt.yscale('log')
+            plt.grid(True, which="both", ls="-", alpha=0.2)
+        else:
+            plt.grid(True)
+            
+        plt.legend()
+        
+        # Save with range in filename
+        filename = f'bonding_curve_{end}.png'
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        plt.close()
+
+def print_price_progression(max_supply=10):
+    """
+    Print detailed price progression up to max_supply
+    """
+    print("\n=== Price Progression ===")
+    last_price = 0
+    
+    for supply in range(max_supply + 1):
+        price = calculate_price(supply, 1, False)
+        print(f"\nSupply: {supply}")
+        print(f"Buy Price: {price/OCTA:.2f} APT ({price} OCTA)")
+        
+        if supply > 0:
+            price_increase = price - last_price
+            increase_percentage = (price_increase * 10000) // last_price if last_price > 0 else 0
+            print(f"Price increase: {price_increase/OCTA:.2f} APT")
+            print(f"Increase percentage: {increase_percentage/100:.2f}%")
+        
+        last_price = price
 
 def print_price_analysis(supply, amount_in_apt):
     """
@@ -117,88 +201,156 @@ def print_price_analysis(supply, amount_in_apt):
     }
     return fees
 
-# Print the constants
-print(f"\nConstants:")
-print(f"INPUT_SCALE: {INPUT_SCALE}")
-print(f"OCTA: {OCTA}")
-print(f"INITIAL_PRICE: {INITIAL_PRICE}")
-print(f"DEFAULT_WEIGHT_A: {DEFAULT_WEIGHT_A}")
-print(f"DEFAULT_WEIGHT_B: {DEFAULT_WEIGHT_B}")
-print(f"DEFAULT_WEIGHT_C: {DEFAULT_WEIGHT_C}")
-print(f"BPS: {BPS}")
+def analyze_key_price_points():
+    """
+    Analyze prices at key supply points to validate curve shape
+    """
+    key_points = [1, 5, 10, 25, 50, 75, 100, 150, 200, 500]
+    
+    print("\n=== Key Price Points Analysis ===")
+    print("Supply | Buy Price (APT) | % Increase")
+    print("-" * 45)
+    
+    last_price = INITIAL_PRICE
+    for supply in key_points:
+        price = calculate_price(supply, 1, False)
+        price_in_apt = price / OCTA
+        increase = ((price - last_price) / last_price * 100) if last_price > 0 else 0
+        
+        print(f"{supply:6d} | {price_in_apt:13.2f} | {increase:9.1f}%")
+        last_price = price
 
-# Calculate and print prices for first 20 purchases
-print("\nPrice Progression (Base Price Only - No Fees)")
-print("This shows how the base price changes as supply increases")
-print("Supply format: current_supply -> price for next purchase")
-print("----------------------------------------------------")
-supply = 0
-for i in range(20):
-    supply_in_octa = supply * OCTA
-    price = calculate_price(supply_in_octa, OCTA, False, debug=(i < 3))
-    print(f"At supply {supply} APT -> Next purchase price = {price/OCTA:.8f} APT")
-    supply += 1
+def validate_early_accessibility():
+    """
+    Validate if early prices (first 15 passes) stay within target range
+    Target: 1-10 APT for first 15 passes
+    """
+    print("\n=== Early Accessibility Check (First 15 Passes) ===")
+    print("Pass # | Price (APT) | Within Target")
+    print("-" * 45)
+    
+    for i in range(1, 16):
+        price = calculate_price(i, 1, False) / OCTA
+        within_target = 1 <= price <= 10
+        print(f"{i:6d} | {price:10.2f} | {'✓' if within_target else '✗'}")
 
-print("\n\nDetailed Purchase Analysis (Including All Fees)")
-print("This shows the complete cost breakdown for each purchase")
-print("Supply shows the current supply before the purchase")
-print("----------------------------------------------------")
-supply = 0
-for i in range(5):
-    fees = print_price_analysis(supply, 1)
-    print(f"\nPurchase #{i+1}:")
-    print(f"Current Supply: {supply:.8f} APT")
-    print(f"Purchase Amount: 1.00000000 APT")
-    print(f"Base Price: {fees['base_price']:.8f} APT")
-    print(f"+ Protocol Fee (4%): {fees['protocol_fee']:.8f} APT")
-    print(f"+ Subject Fee (8%): {fees['subject_fee']:.8f} APT")
-    print(f"= Total Cost: {fees['total_cost']:.8f} APT")
-    print(f"New Supply After Purchase: {supply + 1:.8f} APT")
-    supply += 1
+def analyze_price_bands():
+    """
+    Analyze price progression across different supply bands
+    """
+    print("\n=== Price Band Analysis ===")
+    bands = [
+        (1, 15, "Entry Band (1-15)"),
+        (16, 50, "Growth Band (16-50)"),
+        (51, 100, "Acceleration Band (51-100)"),
+        (101, 500, "Exclusivity Band (101+)")
+    ]
+    
+    for start, end, label in bands:
+        prices = [calculate_price(i, 1, False) / OCTA for i in range(start, end + 1)]
+        avg_price = sum(prices) / len(prices)
+        min_price = min(prices)
+        max_price = max(prices)
+        avg_increase = (max_price - min_price) / min_price * 100
+        
+        print(f"\n{label}:")
+        print(f"Average Price: {avg_price:.2f} APT")
+        print(f"Price Range: {min_price:.2f} - {max_price:.2f} APT")
+        print(f"Total Price Increase: {avg_increase:.1f}%")
 
-# Test buy/sell comparison at a specific supply point
-print("\n\nBuy/Sell Price Comparison")
-print("This shows the price difference between buying and selling at the same supply point")
-print("----------------------------------------------------")
-test_supply = 5
-buy_price = calculate_price(test_supply * OCTA, OCTA, False, debug=True)
-sell_price = calculate_price(test_supply * OCTA, OCTA, True, debug=True)
-print(f"\nCurrent circulation: {test_supply} tokens")
-print(f"Cost to buy 1 more token: {buy_price/OCTA:.8f} APT")
-print(f"APT received for selling 1 token: {sell_price/OCTA:.8f} APT")
-print(f"Buy/Sell difference: {(buy_price - sell_price)/OCTA:.8f} APT")
-print(f"Buy/Sell spread: {((buy_price - sell_price) * 100 / buy_price):.2f}%")
-print(f"After buying 1 token, circulation would be: {test_supply + 1} tokens")
-print(f"After selling 1 token, circulation would be: {test_supply - 1} tokens")
+def save_results_to_file(output):
+    """
+    Save analysis results to a file with timestamp and weight configuration
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"BondingCurveTestingResults.txt"
+    
+    with open(filename, "a") as f:
+        f.write("\n" + "="*80 + "\n")
+        f.write(f"Test Run: {timestamp}\n")
+        f.write(f"Weight Configuration:\n")
+        f.write(f"WEIGHT_A: {DEFAULT_WEIGHT_A/100:.2f}% ({DEFAULT_WEIGHT_A} bps)\n")
+        f.write(f"WEIGHT_B: {DEFAULT_WEIGHT_B/100:.2f}% ({DEFAULT_WEIGHT_B} bps)\n")
+        f.write(f"WEIGHT_C: {DEFAULT_WEIGHT_C}\n")
+        f.write(f"INITIAL_PRICE: {INITIAL_PRICE/OCTA:.2f} APT\n\n")
+        f.write(output)
+        f.write("\n" + "="*80 + "\n")
 
-# Add price statistics with more context
-print("\n\nBonding Curve Statistics")
-print("This shows key price points across the supply range")
-print("----------------------------------------------------")
-supply_range = np.arange(0, 101, 1)
-prices = []
-for supply in supply_range:
-    price = calculate_price(supply * OCTA, OCTA, False)
-    prices.append(price/OCTA)
+def capture_analysis():
+    """
+    Capture all analysis output for saving to file
+    """
+    import io
+    from contextlib import redirect_stdout
+    
+    output = io.StringIO()
+    with redirect_stdout(output):
+        print("\n=== Key Price Points Analysis ===")
+        print("Supply | Buy Price (APT) | % Increase")
+        print("-" * 45)
+        
+        last_price = INITIAL_PRICE
+        key_points = [1, 5, 10, 15, 25, 50, 75, 100, 150, 200, 500]
+        for supply in key_points:
+            price = calculate_price(supply, 1, False)
+            price_in_apt = price / OCTA
+            increase = ((price - last_price) / last_price * 100) if last_price > 0 else 0
+            print(f"{supply:6d} | {price_in_apt:13.2f} | {increase:9.1f}%")
+            last_price = price
 
-print(f"Initial Price (0 supply): {prices[0]:.8f} APT")
-print(f"Price at 10 APT supply: {prices[10]:.8f} APT")
-print(f"Price at 50 APT supply: {prices[50]:.8f} APT")
-print(f"Price at 100 APT supply: {prices[100]:.8f} APT")
-print(f"Minimum Price: {min(prices):.8f} APT")
-print(f"Maximum Price: {max(prices):.8f} APT")
-print(f"Average Price: {sum(prices)/len(prices):.8f} APT")
-print(f"Price increase from 0 to 100: {((prices[100]/prices[0])-1)*100:.2f}%")
+        print("\n=== Early Accessibility Check (First 15 Passes) ===")
+        print("Pass # | Price (APT) | Within Target")
+        print("-" * 45)
+        for i in range(1, 16):
+            price = calculate_price(i, 1, False) / OCTA
+            within_target = 1 <= price <= 10
+            print(f"{i:6d} | {price:10.2f} | {'✓' if within_target else '✗'}")
 
-# Create the plot with more detailed labels
-plt.figure(figsize=(12, 8))
-plt.plot(supply_range, prices, 'b-', label='Price vs Supply')
-plt.xlabel('Supply (APT)')
-plt.ylabel('Price (APT)')
-plt.title('Bonding Curve: Price vs Supply\nShows how price changes as supply increases')
-plt.grid(True)
-plt.legend()
-plt.savefig('bonding_curve.png')
-plt.close()
+        print("\n=== Price Band Analysis ===")
+        bands = [
+            (1, 15, "Entry Band (1-15)"),
+            (16, 50, "Growth Band (16-50)"),
+            (51, 100, "Acceleration Band (51-100)"),
+            (101, 500, "Exclusivity Band (101+)")
+        ]
+        
+        for start, end, label in bands:
+            prices = [calculate_price(i, 1, False) / OCTA for i in range(start, end + 1)]
+            avg_price = sum(prices) / len(prices)
+            min_price = min(prices)
+            max_price = max(prices)
+            avg_increase = (max_price - min_price) / min_price * 100
+            
+            print(f"\n{label}:")
+            print(f"Average Price: {avg_price:.2f} APT")
+            print(f"Price Range: {min_price:.2f} - {max_price:.2f} APT")
+            print(f"Total Price Increase: {avg_increase:.1f}%")
+    
+    return output.getvalue()
+
+def main():
+    # Print constants
+    print("\nBonding Curve Configuration:")
+    print(f"INITIAL_PRICE: {INITIAL_PRICE/OCTA:.2f} APT")
+    print(f"DEFAULT_WEIGHT_A: {DEFAULT_WEIGHT_A/100:.2f}%")
+    print(f"DEFAULT_WEIGHT_B: {DEFAULT_WEIGHT_B/100:.2f}%")
+    print(f"DEFAULT_WEIGHT_C: {DEFAULT_WEIGHT_C}")
+    
+    # Run analysis
+    analyze_key_price_points()
+    validate_early_accessibility()
+    analyze_price_bands()
+    
+    # Capture and save analysis
+    results = capture_analysis()
+    save_results_to_file(results)
+    
+    # Print results to console
+    print(results)
+    # Create plots
+    plot_bonding_curves()
+
+if __name__ == "__main__":
+    main()
 
 
