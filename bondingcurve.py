@@ -2,17 +2,225 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
 from datetime import datetime
+from scipy.optimize import minimize
+from scipy.stats import norm
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
 # Constants matching Move implementation
 OCTA = 100_000_000  # 10^8 for APT price scaling
 INPUT_SCALE = 1_000_000  # 10^6 for overflow prevention
-INITIAL_PRICE = 102_345_678  # 1 APT in OCTA units
-
-# Updated weights for smoother progression
-DEFAULT_WEIGHT_A = 350   # 1.25% in basis points - further reduced for smoother curve
-DEFAULT_WEIGHT_B = 800    # 8% in basis points - reduced for gentler growth
-DEFAULT_WEIGHT_C = 1     # Increased offset for smoother early progression
+INITIAL_PRICE = 100_000_000  # 1 APT in OCTA units
 BPS = 10000  # 100% = 10000 basis points
+
+# Target prices at key supply points with detailed rationale
+TARGET_PRICES = {
+    1: 1.0,      # Supply 1: 1 APT – Ultra-accessible founder entry
+    5: 2.5,      # Supply 5: 2.5 APT – Very early adopter rate
+    10: 5.0,     # Supply 10: 5 APT – Early adopter premium
+    15: 8.0,     # Supply 15: 8 APT – Core community rate
+    25: 20.0,    # Supply 25: 20 APT – Growth phase begins
+    50: 75.0,    # Supply 50: 75 APT – Premium phase
+    75: 150.0,   # Supply 75: 150 APT – Exclusivity phase
+    100: 200.0   # Supply 100: 200 APT – Final premium phase
+}
+
+# Phase definitions for weighted optimization
+PHASES = {
+    'early': (1, 15),    # Early adopter phase
+    'growth': (16, 25),  # Growth phase
+    'premium': (26, 50), # Premium phase
+    'exclusive': (51, 100) # Exclusivity phase
+}
+
+class BondingCurveOptimizer:
+    def __init__(self):
+        self.best_score = float('inf')
+        self.best_weights = None
+        self.history = []
+        
+    def objective_function(self, weights):
+        """
+        Calculate how well the weights achieve our target goals
+        Lower score is better
+        """
+        weight_a, weight_b, weight_c = weights
+        
+        # Enforce constraints
+        if not (100 <= weight_a <= 5000 and 100 <= weight_b <= 5000 and 1 <= weight_c <= 10):
+            return float('inf')
+        
+        # Set weights for calculation
+        global DEFAULT_WEIGHT_A, DEFAULT_WEIGHT_B, DEFAULT_WEIGHT_C
+        DEFAULT_WEIGHT_A = int(weight_a)
+        DEFAULT_WEIGHT_B = int(weight_b)
+        DEFAULT_WEIGHT_C = int(weight_c)
+        
+        # Calculate errors for target points with phase-based weighting
+        total_error = 0
+        phase_errors = {phase: 0 for phase in PHASES.keys()}
+        
+        for supply, target_price in TARGET_PRICES.items():
+            actual_price = calculate_price(supply, 1, False) / OCTA
+            error = abs(actual_price - target_price)
+            error_ratio = abs(actual_price / target_price - 1)
+            
+            # Weight errors by phase and add extra weight for supply=100
+            if supply <= 15:
+                phase_errors['early'] += error_ratio ** 2 * 2.0  # Higher weight for early phase accuracy
+            elif supply <= 25:
+                phase_errors['growth'] += error_ratio ** 2 * 1.5
+            elif supply <= 50:
+                phase_errors['premium'] += error_ratio ** 2 * 1.2
+            else:
+                # Extra weight for supply=100 target
+                if supply == 100:
+                    phase_errors['exclusive'] += error_ratio ** 2 * 3.0  # Increased weight for supply=100
+                else:
+                    phase_errors['exclusive'] += error_ratio ** 2
+        
+        # Add phase errors to total
+        total_error = sum(phase_errors.values())
+        
+        # Penalties for constraint violations
+        penalties = 0
+        
+        # Strong penalty for early prices being too high
+        for supply in range(1, 16):
+            price = calculate_price(supply, 1, False) / OCTA
+            if price > TARGET_PRICES.get(supply, 8.0):  # Use 8.0 as default cap for early phase
+                penalties += (price - TARGET_PRICES.get(supply, 8.0)) ** 2 * 2.0
+        
+        # Penalty for incorrect price progression (ensure monotonic increase)
+        last_price = 0
+        for supply in sorted(TARGET_PRICES.keys()):
+            price = calculate_price(supply, 1, False) / OCTA
+            if price <= last_price and supply > 1:  # Allow first price to be equal
+                penalties += (last_price - price + 0.1) ** 2 * 1.5
+            last_price = price
+        
+        # Strong penalty for price at supply 100 being outside target range
+        price_100 = calculate_price(100, 1, False) / OCTA
+        if price_100 < 100 or price_100 > 250:  # Enforce strict range for supply=100
+            penalties += ((price_100 - 200) / 200) ** 2 * 5.0  # Increased penalty weight
+        
+        # Calculate smoothness penalty
+        smoothness_penalty = 0
+        for i in range(1, 100):
+            price_i = calculate_price(i, 1, False) / OCTA
+            price_next = calculate_price(i + 1, 1, False) / OCTA
+            if price_next - price_i > price_i:  # More than 100% increase
+                smoothness_penalty += ((price_next - price_i) / price_i - 1) ** 2
+        
+        score = total_error + penalties + smoothness_penalty * 0.5
+        
+        # Store if best so far
+        if score < self.best_score:
+            self.best_score = score
+            self.best_weights = weights
+            self.save_weight_results(weights, score)
+        
+        return score
+    
+    def save_weight_results(self, weights, score):
+        """Save the results of a weight configuration"""
+        weight_a, weight_b, weight_c = weights
+        
+        # Set weights for analysis
+        global DEFAULT_WEIGHT_A, DEFAULT_WEIGHT_B, DEFAULT_WEIGHT_C
+        DEFAULT_WEIGHT_A = int(weight_a)
+        DEFAULT_WEIGHT_B = int(weight_b)
+        DEFAULT_WEIGHT_C = int(weight_c)
+        
+        # Capture analysis
+        results = capture_analysis()
+        
+        # Add optimization details
+        optimization_info = f"\nOptimization Score: {score:.6f}\n"
+        results = optimization_info + results
+        
+        # Save to file
+        save_results_to_file(results)
+        
+        # Store in history
+        self.history.append({
+            'weights': weights,
+            'score': score
+        })
+    
+    def bayesian_optimization(self, n_iterations=50):
+        """
+        Perform Bayesian optimization to find optimal weights
+        """
+        # Define bounds for weights
+        bounds = [(100, 5000), (100, 5000), (1, 10)]
+        
+        # Initialize with random points
+        n_random = 10
+        X = np.random.uniform(
+            low=[b[0] for b in bounds],
+            high=[b[1] for b in bounds],
+            size=(n_random, 3)
+        )
+        y = np.array([self.objective_function(x) for x in X])
+        
+        # Gaussian Process with custom kernel
+        kernel = C(1.0) * RBF([100.0, 100.0, 1.0])
+        gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
+        
+        for i in range(n_iterations):
+            # Fit GP
+            gp.fit(X, y)
+            
+            # Define acquisition function (Expected Improvement)
+            def expected_improvement(x):
+                x = x.reshape(1, -1)
+                mu, sigma = gp.predict(x, return_std=True)
+                
+                # Find best observed value
+                y_best = np.min(y)
+                
+                # Calculate improvement
+                imp = y_best - mu
+                Z = imp / sigma
+                ei = imp * norm.cdf(Z) + sigma * norm.pdf(Z)
+                
+                return -ei
+            
+            # Find next point to evaluate
+            x_next = minimize(
+                expected_improvement,
+                X[np.argmin(y)],
+                bounds=bounds,
+                method='L-BFGS-B'
+            ).x
+            
+            # Evaluate point
+            y_next = self.objective_function(x_next)
+            
+            # Add to observed data
+            X = np.vstack((X, x_next))
+            y = np.append(y, y_next)
+            
+            print(f"\nIteration {i+1}/{n_iterations}")
+            print(f"Best score so far: {self.best_score:.6f}")
+            print(f"Best weights: A={self.best_weights[0]:.0f}, B={self.best_weights[1]:.0f}, C={self.best_weights[2]:.1f}")
+        
+        return self.best_weights, self.best_score
+
+def optimize_weights():
+    """Run the optimization process"""
+    optimizer = BondingCurveOptimizer()
+    best_weights, best_score = optimizer.bayesian_optimization(n_iterations=50)
+    
+    print("\nOptimization Complete!")
+    print(f"Best score: {best_score:.6f}")
+    print(f"Best weights found:")
+    print(f"WEIGHT_A: {best_weights[0]:.0f} ({best_weights[0]/100:.2f}%)")
+    print(f"WEIGHT_B: {best_weights[1]:.0f} ({best_weights[1]/100:.2f}%)")
+    print(f"WEIGHT_C: {best_weights[2]:.1f}")
+    
+    return best_weights
 
 def calculate_summation(n):
     """
@@ -329,24 +537,27 @@ def capture_analysis():
     return output.getvalue()
 
 def main():
-    # Print constants
-    print("\nBonding Curve Configuration:")
+    # Run optimization
+    best_weights = optimize_weights()
+    
+    # Set best weights for final analysis
+    global DEFAULT_WEIGHT_A, DEFAULT_WEIGHT_B, DEFAULT_WEIGHT_C
+    DEFAULT_WEIGHT_A = int(best_weights[0])
+    DEFAULT_WEIGHT_B = int(best_weights[1])
+    DEFAULT_WEIGHT_C = best_weights[2]
+    
+    # Print final analysis
+    print("\nFinal Analysis with Best Weights:")
     print(f"INITIAL_PRICE: {INITIAL_PRICE/OCTA:.2f} APT")
     print(f"DEFAULT_WEIGHT_A: {DEFAULT_WEIGHT_A/100:.2f}%")
     print(f"DEFAULT_WEIGHT_B: {DEFAULT_WEIGHT_B/100:.2f}%")
     print(f"DEFAULT_WEIGHT_C: {DEFAULT_WEIGHT_C}")
     
-    # Run analysis
-    analyze_key_price_points()
-    validate_early_accessibility()
-    analyze_price_bands()
-    
-    # Capture and save analysis
+    # Run and save final analysis
     results = capture_analysis()
     save_results_to_file(results)
-    
-    # Print results to console
     print(results)
+    
     # Create plots
     plot_bonding_curves()
 
