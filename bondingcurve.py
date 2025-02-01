@@ -16,12 +16,12 @@ BPS = 10000  # 100% = 10000 basis points
 # Target prices at key supply points with detailed rationale
 TARGET_PRICES = {
     1: 1.0,      # Supply 1: 1 APT – Ultra-accessible founder entry
-    5: 2.5,      # Supply 5: 2.5 APT – Very early adopter rate
-    10: 5.0,     # Supply 10: 5 APT – Early adopter premium
-    15: 8.0,     # Supply 15: 8 APT – Core community rate
-    25: 20.0,    # Supply 25: 20 APT – Growth phase begins
-    50: 75.0,    # Supply 50: 75 APT – Premium phase
-    75: 150.0,   # Supply 75: 150 APT – Exclusivity phase
+    5: 3,      # Supply 5: 3 APT – Very early adopter rate
+    10: 6,     # Supply 10: 6 APT – Early adopter premium
+    15: 10,     # Supply 15: 10 APT – Core community rate
+    25: 25.0,    # Supply 25: 25 APT – Growth phase begins
+    50: 70.0,    # Supply 50: 70 APT – Premium phase
+    75: 125.0,   # Supply 75: 125 APT – Exclusivity phase
     100: 200.0   # Supply 100: 200 APT – Final premium phase
 }
 
@@ -46,8 +46,8 @@ class BondingCurveOptimizer:
         """
         weight_a, weight_b, weight_c = weights
         
-        # Enforce constraints
-        if not (100 <= weight_a <= 5000 and 100 <= weight_b <= 5000 and 1 <= weight_c <= 10):
+        # Enforce constraints with expanded ranges
+        if not (100 <= weight_a <= 20000 and 100 <= weight_b <= 20000 and 1 <= weight_c <= 100):
             return float('inf')
         
         # Set weights for calculation
@@ -65,7 +65,7 @@ class BondingCurveOptimizer:
             error = abs(actual_price - target_price)
             error_ratio = abs(actual_price / target_price - 1)
             
-            # Weight errors by phase and add extra weight for supply=100
+            # Weight errors by phase
             if supply <= 15:
                 phase_errors['early'] += error_ratio ** 2 * 2.0  # Higher weight for early phase accuracy
             elif supply <= 25:
@@ -148,15 +148,15 @@ class BondingCurveOptimizer:
             'score': score
         })
     
-    def bayesian_optimization(self, n_iterations=50):
+    def bayesian_optimization(self, n_iterations=500):
         """
         Perform Bayesian optimization to find optimal weights
         """
-        # Define bounds for weights
-        bounds = [(100, 5000), (100, 5000), (1, 10)]
+        # Define bounds with expanded ranges
+        bounds = [(100, 20000), (100, 20000), (1, 100)]
         
-        # Initialize with random points
-        n_random = 10
+        # Initialize with more random points
+        n_random = 50
         X = np.random.uniform(
             low=[b[0] for b in bounds],
             high=[b[1] for b in bounds],
@@ -164,9 +164,9 @@ class BondingCurveOptimizer:
         )
         y = np.array([self.objective_function(x) for x in X])
         
-        # Gaussian Process with custom kernel
-        kernel = C(1.0) * RBF([100.0, 100.0, 1.0])
-        gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=10)
+        # Gaussian Process with adjusted kernel for larger ranges
+        kernel = C(1.0) * RBF([1000.0, 1000.0, 10.0])  # Adjusted length scales for larger ranges
+        gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=25)
         
         for i in range(n_iterations):
             # Fit GP
@@ -211,7 +211,7 @@ class BondingCurveOptimizer:
 def optimize_weights():
     """Run the optimization process"""
     optimizer = BondingCurveOptimizer()
-    best_weights, best_score = optimizer.bayesian_optimization(n_iterations=50)
+    best_weights, best_score = optimizer.bayesian_optimization(n_iterations=500)  # Changed from 50 to 500
     
     print("\nOptimization Complete!")
     print(f"Best score: {best_score:.6f}")

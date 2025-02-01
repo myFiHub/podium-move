@@ -74,9 +74,9 @@ module podium::PodiumProtocol {
     // Constants for scaling and bonding curve calculations
     const INPUT_SCALE: u64 = 1000000; // K factor for overflow prevention
     const INITIAL_PRICE: u64 = 100000000; // 1 APT in OCTA units (10^8)
-    const DEFAULT_WEIGHT_A: u64 = 4500; // 45% in basis points
-    const DEFAULT_WEIGHT_B: u64 = 3500; // 35% in basis points
-    const DEFAULT_WEIGHT_C: u64 = 2; // Constant offset for supply adjustment
+    const DEFAULT_WEIGHT_A: u64 = 173; // 1.73% in basis points
+    const DEFAULT_WEIGHT_B: u64 = 257; // 2.57% in basis points
+    const DEFAULT_WEIGHT_C: u64 = 23; // 
     const OCTA: u64 = 100000000; // 10^8 scaling
     const DECIMALS: u8 = 8; // 8 decimals for OCTA
 

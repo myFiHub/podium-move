@@ -1,165 +1,29 @@
 
 ================================================================================
-Test Run: 20250131_235223
+Test Run: 20250201_002329
 Weight Configuration:
-WEIGHT_A: 3.50% (350 bps)
-WEIGHT_B: 8.00% (800 bps)
-WEIGHT_C: 1
-INITIAL_PRICE: 1.02 APT
-
-
-=== Key Price Points Analysis ===
-Supply | Buy Price (APT) | % Increase
----------------------------------------------
-     1 |          1.02 |       0.0%
-     5 |          1.02 |       0.0%
-    10 |          1.02 |       0.0%
-    15 |          3.00 |     193.1%
-    25 |         15.00 |     400.0%
-    50 |        120.00 |     700.0%
-    75 |        401.00 |     234.2%
-   100 |        947.00 |     136.2%
-   150 |       3181.00 |     235.9%
-   200 |       7522.00 |     136.5%
-   500 |     117016.00 |    1455.7%
-
-=== Early Accessibility Check (First 15 Passes) ===
-Pass # | Price (APT) | Within Target
----------------------------------------------
-     1 |       1.02 | ✓
-     2 |       1.02 | ✓
-     3 |       1.02 | ✓
-     4 |       1.02 | ✓
-     5 |       1.02 | ✓
-     6 |       1.02 | ✓
-     7 |       1.02 | ✓
-     8 |       1.02 | ✓
-     9 |       1.02 | ✓
-    10 |       1.02 | ✓
-    11 |       1.02 | ✓
-    12 |       1.02 | ✓
-    13 |       2.00 | ✓
-    14 |       2.00 | ✓
-    15 |       3.00 | ✓
-
-=== Price Band Analysis ===
-
-Entry Band (1-15):
-Average Price: 1.29 APT
-Price Range: 1.02 - 3.00 APT
-Total Price Increase: 193.1%
-
-Growth Band (16-50):
-Average Price: 44.17 APT
-Price Range: 4.00 - 120.00 APT
-Total Price Increase: 2900.0%
-
-Acceleration Band (51-100):
-Average Price: 453.46 APT
-Price Range: 127.00 - 947.00 APT
-Total Price Increase: 645.7%
-
-Exclusivity Band (101+):
-Average Price: 36689.51 APT
-Price Range: 975.00 - 117016.00 APT
-Total Price Increase: 11901.6%
-
-================================================================================
-
-================================================================================
-Test Run: 20250201_000804
-Weight Configuration:
-WEIGHT_A: 43.68% (4368 bps)
-WEIGHT_B: 7.88% (788 bps)
-WEIGHT_C: 7
+WEIGHT_A: 2.57% (257 bps)
+WEIGHT_B: 16.73% (1673 bps)
+WEIGHT_C: 6
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 82382.803886
-
-=== Key Price Points Analysis ===
-Supply | Buy Price (APT) | % Increase
----------------------------------------------
-     1 |          4.00 |     300.0%
-     5 |         17.00 |     325.0%
-    10 |         51.00 |     200.0%
-    15 |        113.00 |     121.6%
-    25 |        358.00 |     216.8%
-    50 |       2069.00 |     477.9%
-    75 |       6210.00 |     200.1%
-   100 |      13858.00 |     123.2%
-   150 |      43977.00 |     217.3%
-   200 |     101028.00 |     129.7%
-   500 |    1490820.00 |    1375.7%
-
-=== Early Accessibility Check (First 15 Passes) ===
-Pass # | Price (APT) | Within Target
----------------------------------------------
-     1 |       4.00 | ✓
-     2 |       7.00 | ✓
-     3 |       9.00 | ✓
-     4 |      13.00 | ✗
-     5 |      17.00 | ✗
-     6 |      22.00 | ✗
-     7 |      28.00 | ✗
-     8 |      34.00 | ✗
-     9 |      42.00 | ✗
-    10 |      51.00 | ✗
-    11 |      61.00 | ✗
-    12 |      72.00 | ✗
-    13 |      84.00 | ✗
-    14 |      98.00 | ✗
-    15 |     113.00 | ✗
-
-=== Price Band Analysis ===
-
-Entry Band (1-15):
-Average Price: 43.67 APT
-Price Range: 4.00 - 113.00 APT
-Total Price Increase: 2725.0%
-
-Growth Band (16-50):
-Average Price: 845.09 APT
-Price Range: 130.00 - 2069.00 APT
-Total Price Increase: 1491.5%
-
-Acceleration Band (51-100):
-Average Price: 6912.94 APT
-Price Range: 2180.00 - 13858.00 APT
-Total Price Increase: 535.7%
-
-Exclusivity Band (101+):
-Average Price: 472862.53 APT
-Price Range: 14252.00 - 1490820.00 APT
-Total Price Increase: 10360.4%
-
-================================================================================
-
-================================================================================
-Test Run: 20250201_000804
-Weight Configuration:
-WEIGHT_A: 7.86% (786 bps)
-WEIGHT_B: 32.39% (3239 bps)
-WEIGHT_C: 1
-INITIAL_PRICE: 1.00 APT
-
-
-Optimization Score: 5107.259964
+Optimization Score: 491.019351
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
 ---------------------------------------------
      1 |          1.00 |       0.0%
      5 |          1.00 |       0.0%
-    10 |          9.00 |     800.0%
-    15 |         31.00 |     244.4%
-    25 |        140.00 |     351.6%
-    50 |       1092.00 |     680.0%
-    75 |       3651.00 |     234.3%
-   100 |       8613.00 |     135.9%
-   150 |      28927.00 |     235.9%
-   200 |      68399.00 |     136.5%
-   500 |    1063956.00 |    1455.5%
+    10 |          5.00 |     400.0%
+    15 |         12.00 |     140.0%
+    25 |         40.00 |     233.3%
+    50 |        244.00 |     510.0%
+    75 |        747.00 |     206.1%
+   100 |       1682.00 |     125.2%
+   150 |       5388.00 |     220.3%
+   200 |      12437.00 |     130.8%
+   500 |     185127.00 |    1388.5%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -170,119 +34,50 @@ Pass # | Price (APT) | Within Target
      4 |       1.00 | ✓
      5 |       1.00 | ✓
      6 |       2.00 | ✓
-     7 |       3.00 | ✓
-     8 |       5.00 | ✓
-     9 |       7.00 | ✓
-    10 |       9.00 | ✓
-    11 |      12.00 | ✗
-    12 |      16.00 | ✗
-    13 |      20.00 | ✗
-    14 |      25.00 | ✗
-    15 |      31.00 | ✗
+     7 |       2.00 | ✓
+     8 |       3.00 | ✓
+     9 |       4.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       7.00 | ✓
+    13 |       9.00 | ✓
+    14 |      10.00 | ✓
+    15 |      12.00 | ✗
 
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 9.00 APT
-Price Range: 1.00 - 31.00 APT
-Total Price Increase: 3000.0%
+Average Price: 4.33 APT
+Price Range: 1.00 - 12.00 APT
+Total Price Increase: 1100.0%
 
 Growth Band (16-50):
-Average Price: 405.29 APT
-Price Range: 37.00 - 1092.00 APT
-Total Price Increase: 2851.4%
+Average Price: 98.06 APT
+Price Range: 14.00 - 244.00 APT
+Total Price Increase: 1642.9%
 
 Acceleration Band (51-100):
-Average Price: 4127.36 APT
-Price Range: 1158.00 - 8613.00 APT
-Total Price Increase: 643.8%
+Average Price: 833.56 APT
+Price Range: 258.00 - 1682.00 APT
+Total Price Increase: 551.9%
 
 Exclusivity Band (101+):
-Average Price: 333597.43 APT
-Price Range: 8873.00 - 1063956.00 APT
-Total Price Increase: 11890.9%
+Average Price: 58606.63 APT
+Price Range: 1731.00 - 185127.00 APT
+Total Price Increase: 10594.8%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000804
+Test Run: 20250201_002329
 Weight Configuration:
-WEIGHT_A: 43.84% (4384 bps)
-WEIGHT_B: 1.45% (145 bps)
-WEIGHT_C: 3
+WEIGHT_A: 10.79% (1079 bps)
+WEIGHT_B: 2.04% (204 bps)
+WEIGHT_C: 5
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 186.928567
-
-=== Key Price Points Analysis ===
-Supply | Buy Price (APT) | % Increase
----------------------------------------------
-     1 |          1.00 |       0.0%
-     5 |          1.00 |       0.0%
-    10 |          4.00 |     300.0%
-    15 |         11.00 |     175.0%
-    25 |         44.00 |     300.0%
-    50 |        306.00 |     595.5%
-    75 |        986.00 |     222.2%
-   100 |       2281.00 |     131.3%
-   150 |       7514.00 |     229.4%
-   200 |      17595.00 |     134.2%
-   500 |     268859.00 |    1428.0%
-
-=== Early Accessibility Check (First 15 Passes) ===
-Pass # | Price (APT) | Within Target
----------------------------------------------
-     1 |       1.00 | ✓
-     2 |       1.00 | ✓
-     3 |       1.00 | ✓
-     4 |       1.00 | ✓
-     5 |       1.00 | ✓
-     6 |       1.00 | ✓
-     7 |       1.00 | ✓
-     8 |       2.00 | ✓
-     9 |       3.00 | ✓
-    10 |       4.00 | ✓
-    11 |       5.00 | ✓
-    12 |       6.00 | ✓
-    13 |       7.00 | ✓
-    14 |       9.00 | ✓
-    15 |      11.00 | ✗
-
-=== Price Band Analysis ===
-
-Entry Band (1-15):
-Average Price: 3.60 APT
-Price Range: 1.00 - 11.00 APT
-Total Price Increase: 1000.0%
-
-Growth Band (16-50):
-Average Price: 117.34 APT
-Price Range: 13.00 - 306.00 APT
-Total Price Increase: 2253.8%
-
-Acceleration Band (51-100):
-Average Price: 1108.28 APT
-Price Range: 324.00 - 2281.00 APT
-Total Price Increase: 604.0%
-
-Exclusivity Band (101+):
-Average Price: 84625.40 APT
-Price Range: 2349.00 - 268859.00 APT
-Total Price Increase: 11345.7%
-
-================================================================================
-
-================================================================================
-Test Run: 20250201_000804
-Weight Configuration:
-WEIGHT_A: 43.84% (4384 bps)
-WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 3
-INITIAL_PRICE: 1.00 APT
-
-
-Optimization Score: 68.152044
+Optimization Score: 87.907559
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
@@ -290,83 +85,14 @@ Supply | Buy Price (APT) | % Increase
      1 |          1.00 |       0.0%
      5 |          1.00 |       0.0%
     10 |          2.00 |     100.0%
-    15 |          7.00 |     250.0%
-    25 |         30.00 |     328.6%
-    50 |        211.00 |     603.3%
-    75 |        680.00 |     222.3%
-   100 |       1573.00 |     131.3%
-   150 |       5182.00 |     229.4%
-   200 |      12134.00 |     134.2%
-   500 |     185420.00 |    1428.1%
-
-=== Early Accessibility Check (First 15 Passes) ===
-Pass # | Price (APT) | Within Target
----------------------------------------------
-     1 |       1.00 | ✓
-     2 |       1.00 | ✓
-     3 |       1.00 | ✓
-     4 |       1.00 | ✓
-     5 |       1.00 | ✓
-     6 |       1.00 | ✓
-     7 |       1.00 | ✓
-     8 |       1.00 | ✓
-     9 |       2.00 | ✓
-    10 |       2.00 | ✓
-    11 |       3.00 | ✓
-    12 |       4.00 | ✓
-    13 |       5.00 | ✓
-    14 |       6.00 | ✓
-    15 |       7.00 | ✓
-
-=== Price Band Analysis ===
-
-Entry Band (1-15):
-Average Price: 2.47 APT
-Price Range: 1.00 - 7.00 APT
-Total Price Increase: 600.0%
-
-Growth Band (16-50):
-Average Price: 80.77 APT
-Price Range: 9.00 - 211.00 APT
-Total Price Increase: 2244.4%
-
-Acceleration Band (51-100):
-Average Price: 764.16 APT
-Price Range: 223.00 - 1573.00 APT
-Total Price Increase: 605.4%
-
-Exclusivity Band (101+):
-Average Price: 58362.22 APT
-Price Range: 1620.00 - 185420.00 APT
-Total Price Increase: 11345.7%
-
-================================================================================
-
-================================================================================
-Test Run: 20250201_000805
-Weight Configuration:
-WEIGHT_A: 43.44% (4344 bps)
-WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 2
-INITIAL_PRICE: 1.00 APT
-
-
-Optimization Score: 61.322223
-
-=== Key Price Points Analysis ===
-Supply | Buy Price (APT) | % Increase
----------------------------------------------
-     1 |          1.00 |       0.0%
-     5 |          1.00 |       0.0%
-    10 |          2.00 |     100.0%
-    15 |          6.00 |     200.0%
-    25 |         26.00 |     333.3%
-    50 |        197.00 |     657.7%
-    75 |        648.00 |     228.9%
-   100 |       1514.00 |     133.6%
-   150 |       5035.00 |     232.6%
-   200 |      11846.00 |     135.3%
-   500 |     182633.00 |    1441.7%
+    15 |          5.00 |     150.0%
+    25 |         18.00 |     260.0%
+    50 |        118.00 |     555.6%
+    75 |        368.00 |     211.9%
+   100 |        837.00 |     127.4%
+   150 |       2705.00 |     223.2%
+   200 |       6274.00 |     131.9%
+   500 |      94213.00 |    1401.6%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -383,75 +109,6 @@ Pass # | Price (APT) | Within Target
     10 |       2.00 | ✓
     11 |       2.00 | ✓
     12 |       3.00 | ✓
-    13 |       4.00 | ✓
-    14 |       5.00 | ✓
-    15 |       6.00 | ✓
-
-=== Price Band Analysis ===
-
-Entry Band (1-15):
-Average Price: 2.07 APT
-Price Range: 1.00 - 6.00 APT
-Total Price Increase: 500.0%
-
-Growth Band (16-50):
-Average Price: 74.31 APT
-Price Range: 7.00 - 197.00 APT
-Total Price Increase: 2714.3%
-
-Acceleration Band (51-100):
-Average Price: 730.20 APT
-Price Range: 209.00 - 1514.00 APT
-Total Price Increase: 624.4%
-
-Exclusivity Band (101+):
-Average Price: 57374.26 APT
-Price Range: 1559.00 - 182633.00 APT
-Total Price Increase: 11614.8%
-
-================================================================================
-
-================================================================================
-Test Run: 20250201_000805
-Weight Configuration:
-WEIGHT_A: 41.68% (4168 bps)
-WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 1
-INITIAL_PRICE: 1.00 APT
-
-
-Optimization Score: 51.493241
-
-=== Key Price Points Analysis ===
-Supply | Buy Price (APT) | % Increase
----------------------------------------------
-     1 |          1.00 |       0.0%
-     5 |          1.00 |       0.0%
-    10 |          1.00 |       0.0%
-    15 |          5.00 |     400.0%
-    25 |         23.00 |     360.0%
-    50 |        178.00 |     673.9%
-    75 |        597.00 |     235.4%
-   100 |       1410.00 |     136.2%
-   150 |       4735.00 |     235.8%
-   200 |      11198.00 |     136.5%
-   500 |     174188.00 |    1455.5%
-
-=== Early Accessibility Check (First 15 Passes) ===
-Pass # | Price (APT) | Within Target
----------------------------------------------
-     1 |       1.00 | ✓
-     2 |       1.00 | ✓
-     3 |       1.00 | ✓
-     4 |       1.00 | ✓
-     5 |       1.00 | ✓
-     6 |       1.00 | ✓
-     7 |       1.00 | ✓
-     8 |       1.00 | ✓
-     9 |       1.00 | ✓
-    10 |       1.00 | ✓
-    11 |       2.00 | ✓
-    12 |       2.00 | ✓
     13 |       3.00 | ✓
     14 |       4.00 | ✓
     15 |       5.00 | ✓
@@ -459,37 +116,37 @@ Pass # | Price (APT) | Within Target
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 1.73 APT
+Average Price: 1.87 APT
 Price Range: 1.00 - 5.00 APT
 Total Price Increase: 400.0%
 
 Growth Band (16-50):
-Average Price: 65.97 APT
-Price Range: 6.00 - 178.00 APT
-Total Price Increase: 2866.7%
+Average Price: 46.57 APT
+Price Range: 6.00 - 118.00 APT
+Total Price Increase: 1866.7%
 
 Acceleration Band (51-100):
-Average Price: 675.34 APT
-Price Range: 189.00 - 1410.00 APT
-Total Price Increase: 646.0%
+Average Price: 411.82 APT
+Price Range: 125.00 - 837.00 APT
+Total Price Increase: 569.6%
 
 Exclusivity Band (101+):
-Average Price: 54615.23 APT
-Price Range: 1452.00 - 174188.00 APT
-Total Price Increase: 11896.4%
+Average Price: 29768.33 APT
+Price Range: 861.00 - 94213.00 APT
+Total Price Increase: 10842.3%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000806
+Test Run: 20250201_002329
 Weight Configuration:
-WEIGHT_A: 39.72% (3972 bps)
+WEIGHT_A: 19.21% (1921 bps)
 WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 1
+WEIGHT_C: 5
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 45.789647
+Optimization Score: 62.127496
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
@@ -498,13 +155,13 @@ Supply | Buy Price (APT) | % Increase
      5 |          1.00 |       0.0%
     10 |          1.00 |       0.0%
     15 |          4.00 |     300.0%
-    25 |         21.00 |     425.0%
-    50 |        170.00 |     709.5%
-    75 |        569.00 |     234.7%
-   100 |       1343.00 |     136.0%
-   150 |       4513.00 |     236.0%
-   200 |      10671.00 |     136.5%
-   500 |     165996.00 |    1455.6%
+    25 |         16.00 |     300.0%
+    50 |        103.00 |     543.8%
+    75 |        321.00 |     211.7%
+   100 |        730.00 |     127.4%
+   150 |       2361.00 |     223.4%
+   200 |       5476.00 |     131.9%
+   500 |      82222.00 |    1401.5%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -533,32 +190,1274 @@ Price Range: 1.00 - 4.00 APT
 Total Price Increase: 300.0%
 
 Growth Band (16-50):
-Average Price: 62.80 APT
-Price Range: 5.00 - 170.00 APT
-Total Price Increase: 3300.0%
+Average Price: 40.66 APT
+Price Range: 5.00 - 103.00 APT
+Total Price Increase: 1960.0%
 
 Acceleration Band (51-100):
-Average Price: 643.52 APT
-Price Range: 180.00 - 1343.00 APT
-Total Price Increase: 646.1%
+Average Price: 359.26 APT
+Price Range: 109.00 - 730.00 APT
+Total Price Increase: 569.7%
 
 Exclusivity Band (101+):
-Average Price: 52046.92 APT
-Price Range: 1384.00 - 165996.00 APT
-Total Price Increase: 11893.9%
+Average Price: 25979.39 APT
+Price Range: 751.00 - 82222.00 APT
+Total Price Increase: 10848.3%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000806
+Test Run: 20250201_002330
 Weight Configuration:
-WEIGHT_A: 38.18% (3818 bps)
+WEIGHT_A: 17.26% (1726 bps)
+WEIGHT_B: 1.00% (100 bps)
+WEIGHT_C: 3
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 40.202262
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          3.00 |     200.0%
+    25 |         11.00 |     266.7%
+    50 |         83.00 |     654.5%
+    75 |        267.00 |     221.7%
+   100 |        619.00 |     131.8%
+   150 |       2040.00 |     229.6%
+   200 |       4777.00 |     134.2%
+   500 |      73000.00 |    1428.2%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       2.00 | ✓
+    14 |       2.00 | ✓
+    15 |       3.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.27 APT
+Price Range: 1.00 - 3.00 APT
+Total Price Increase: 200.0%
+
+Growth Band (16-50):
+Average Price: 31.43 APT
+Price Range: 3.00 - 83.00 APT
+Total Price Increase: 2666.7%
+
+Acceleration Band (51-100):
+Average Price: 300.58 APT
+Price Range: 88.00 - 619.00 APT
+Total Price Increase: 603.4%
+
+Exclusivity Band (101+):
+Average Price: 22977.17 APT
+Price Range: 637.00 - 73000.00 APT
+Total Price Increase: 11360.0%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002330
+Weight Configuration:
+WEIGHT_A: 16.23% (1623 bps)
+WEIGHT_B: 1.00% (100 bps)
+WEIGHT_C: 3
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 34.274715
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          2.00 |     100.0%
+    25 |         11.00 |     450.0%
+    50 |         78.00 |     609.1%
+    75 |        251.00 |     221.8%
+   100 |        582.00 |     131.9%
+   150 |       1918.00 |     229.6%
+   200 |       4492.00 |     134.2%
+   500 |      68644.00 |    1428.1%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       2.00 | ✓
+    14 |       2.00 | ✓
+    15 |       2.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.20 APT
+Price Range: 1.00 - 2.00 APT
+Total Price Increase: 100.0%
+
+Growth Band (16-50):
+Average Price: 29.54 APT
+Price Range: 3.00 - 78.00 APT
+Total Price Increase: 2500.0%
+
+Acceleration Band (51-100):
+Average Price: 282.56 APT
+Price Range: 82.00 - 582.00 APT
+Total Price Increase: 609.8%
+
+Exclusivity Band (101+):
+Average Price: 21605.94 APT
+Price Range: 599.00 - 68644.00 APT
+Total Price Increase: 11359.8%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002331
+Weight Configuration:
+WEIGHT_A: 7.47% (747 bps)
+WEIGHT_B: 1.00% (100 bps)
+WEIGHT_C: 4
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 6.310353
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          1.00 |       0.0%
+    25 |          5.00 |     400.0%
+    50 |         38.00 |     660.0%
+    75 |        120.00 |     215.8%
+   100 |        276.00 |     130.0%
+   150 |        900.00 |     226.1%
+   200 |       2098.00 |     133.1%
+   500 |      31783.00 |    1414.9%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
+
+Growth Band (16-50):
+Average Price: 14.51 APT
+Price Range: 1.00 - 38.00 APT
+Total Price Increase: 3700.0%
+
+Acceleration Band (51-100):
+Average Price: 134.50 APT
+Price Range: 40.00 - 276.00 APT
+Total Price Increase: 590.0%
+
+Exclusivity Band (101+):
+Average Price: 10022.83 APT
+Price Range: 284.00 - 31783.00 APT
+Total Price Increase: 11091.2%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002332
+Weight Configuration:
+WEIGHT_A: 7.45% (745 bps)
+WEIGHT_B: 1.00% (100 bps)
+WEIGHT_C: 4
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 6.280153
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          1.00 |       0.0%
+    25 |          5.00 |     400.0%
+    50 |         38.00 |     660.0%
+    75 |        120.00 |     215.8%
+   100 |        275.00 |     129.2%
+   150 |        898.00 |     226.5%
+   200 |       2092.00 |     133.0%
+   500 |      31698.00 |    1415.2%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
+
+Growth Band (16-50):
+Average Price: 14.40 APT
+Price Range: 1.00 - 38.00 APT
+Total Price Increase: 3700.0%
+
+Acceleration Band (51-100):
+Average Price: 134.22 APT
+Price Range: 40.00 - 275.00 APT
+Total Price Increase: 587.5%
+
+Exclusivity Band (101+):
+Average Price: 9995.96 APT
+Price Range: 283.00 - 31698.00 APT
+Total Price Increase: 11100.7%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002334
+Weight Configuration:
+WEIGHT_A: 3.89% (389 bps)
+WEIGHT_B: 1.00% (100 bps)
+WEIGHT_C: 10
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 5.564470
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          1.00 |       0.0%
+    25 |          5.00 |     400.0%
+    50 |         27.00 |     440.0%
+    75 |         78.00 |     188.9%
+   100 |        170.00 |     117.9%
+   150 |        526.00 |     209.4%
+   200 |       1192.00 |     126.6%
+   500 |      17149.00 |    1338.7%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
+
+Growth Band (16-50):
+Average Price: 11.09 APT
+Price Range: 2.00 - 27.00 APT
+Total Price Increase: 1250.0%
+
+Acceleration Band (51-100):
+Average Price: 85.98 APT
+Price Range: 28.00 - 170.00 APT
+Total Price Increase: 507.1%
+
+Exclusivity Band (101+):
+Average Price: 5470.26 APT
+Price Range: 174.00 - 17149.00 APT
+Total Price Increase: 9755.7%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002335
+Weight Configuration:
+WEIGHT_A: 5.45% (545 bps)
+WEIGHT_B: 1.00% (100 bps)
+WEIGHT_C: 10
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.740837
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          2.00 |     100.0%
+    25 |          7.00 |     250.0%
+    50 |         38.00 |     442.9%
+    75 |        109.00 |     186.8%
+   100 |        238.00 |     118.3%
+   150 |        737.00 |     209.7%
+   200 |       1670.00 |     126.6%
+   500 |      24027.00 |    1338.7%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       2.00 | ✓
+    14 |       2.00 | ✓
+    15 |       2.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.20 APT
+Price Range: 1.00 - 2.00 APT
+Total Price Increase: 100.0%
+
+Growth Band (16-50):
+Average Price: 15.86 APT
+Price Range: 3.00 - 38.00 APT
+Total Price Increase: 1166.7%
+
+Acceleration Band (51-100):
+Average Price: 120.74 APT
+Price Range: 40.00 - 238.00 APT
+Total Price Increase: 495.0%
+
+Exclusivity Band (101+):
+Average Price: 7664.18 APT
+Price Range: 245.00 - 24027.00 APT
+Total Price Increase: 9706.9%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002414
+Weight Configuration:
+WEIGHT_A: 5.42% (542 bps)
+WEIGHT_B: 1.00% (100 bps)
+WEIGHT_C: 10
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.735212
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          2.00 |     100.0%
+    25 |          7.00 |     250.0%
+    50 |         38.00 |     442.9%
+    75 |        109.00 |     186.8%
+   100 |        237.00 |     117.4%
+   150 |        733.00 |     209.3%
+   200 |       1661.00 |     126.6%
+   500 |      23895.00 |    1338.6%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       2.00 | ✓
+    14 |       2.00 | ✓
+    15 |       2.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.20 APT
+Price Range: 1.00 - 2.00 APT
+Total Price Increase: 100.0%
+
+Growth Band (16-50):
+Average Price: 15.71 APT
+Price Range: 2.00 - 38.00 APT
+Total Price Increase: 1800.0%
+
+Acceleration Band (51-100):
+Average Price: 120.08 APT
+Price Range: 40.00 - 237.00 APT
+Total Price Increase: 492.5%
+
+Exclusivity Band (101+):
+Average Price: 7622.02 APT
+Price Range: 243.00 - 23895.00 APT
+Total Price Increase: 9733.3%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 92.16% (9216 bps)
+WEIGHT_B: 87.99% (8799 bps)
+WEIGHT_C: 74
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 700979118470.713623
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |     111764.00 | 11176300.0%
+     5 |     130750.00 |      17.0%
+    10 |     157361.00 |      20.4%
+    15 |     187357.00 |      19.1%
+    25 |     258315.00 |      37.9%
+    50 |     509152.00 |      97.1%
+    75 |     885174.00 |      73.9%
+   100 |    1411722.00 |      59.5%
+   150 |    3017761.00 |     113.8%
+   200 |    5529999.00 |      83.2%
+   500 |   50986413.00 |     822.0%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |  111764.00 | ✗
+     2 |  116325.00 | ✗
+     3 |  121009.00 | ✗
+     4 |  125816.00 | ✗
+     5 |  130750.00 | ✗
+     6 |  135811.00 | ✗
+     7 |  141001.00 | ✗
+     8 |  146322.00 | ✗
+     9 |  151774.00 | ✗
+    10 |  157361.00 | ✗
+    11 |  163082.00 | ✗
+    12 |  168941.00 | ✗
+    13 |  174939.00 | ✗
+    14 |  181077.00 | ✗
+    15 |  187357.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 147555.27 APT
+Price Range: 111764.00 - 187357.00 APT
+Total Price Increase: 67.6%
+
+Growth Band (16-50):
+Average Price: 335315.94 APT
+Price Range: 193780.00 - 509152.00 APT
+Total Price Increase: 162.7%
+
+Acceleration Band (51-100):
+Average Price: 919307.18 APT
+Price Range: 521621.00 - 1411722.00 APT
+Total Price Increase: 170.6%
+
+Exclusivity Band (101+):
+Average Price: 18184364.29 APT
+Price Range: 1436273.00 - 50986413.00 APT
+Total Price Increase: 3449.9%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 36.12% (3612 bps)
+WEIGHT_B: 55.40% (5540 bps)
+WEIGHT_C: 95
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 167163568579.521545
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |      58094.00 | 5809300.0%
+     5 |      65704.00 |      13.1%
+    10 |      76115.00 |      15.8%
+    15 |      87572.00 |      15.1%
+    25 |     113823.00 |      30.0%
+    50 |     201249.00 |      76.8%
+    75 |     324819.00 |      61.4%
+   100 |     490785.00 |      51.1%
+   150 |     974924.00 |      98.6%
+   200 |    1703690.00 |      74.8%
+   500 |   14014948.00 |     722.6%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |   58094.00 | ✗
+     2 |   59938.00 | ✗
+     3 |   61820.00 | ✗
+     4 |   63742.00 | ✗
+     5 |   65704.00 | ✗
+     6 |   67705.00 | ✗
+     7 |   69746.00 | ✗
+     8 |   71828.00 | ✗
+     9 |   73951.00 | ✗
+    10 |   76115.00 | ✗
+    11 |   78321.00 | ✗
+    12 |   80569.00 | ✗
+    13 |   82861.00 | ✗
+    14 |   85195.00 | ✗
+    15 |   87572.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 72210.73 APT
+Price Range: 58094.00 - 87572.00 APT
+Total Price Increase: 50.7%
+
+Growth Band (16-50):
+Average Price: 140849.91 APT
+Price Range: 89993.00 - 201249.00 APT
+Total Price Increase: 123.6%
+
+Acceleration Band (51-100):
+Average Price: 334785.44 APT
+Price Range: 205456.00 - 490785.00 APT
+Total Price Increase: 138.9%
+
+Exclusivity Band (101+):
+Average Price: 5164682.61 APT
+Price Range: 498395.00 - 14014948.00 APT
+Total Price Increase: 2712.0%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 102.52% (10252 bps)
+WEIGHT_B: 145.49% (14549 bps)
+WEIGHT_C: 24
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 9723909156.316875
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |       7307.00 |  730600.0%
+     5 |      11505.00 |      57.5%
+    10 |      18686.00 |      62.4%
+    15 |      28367.00 |      51.8%
+    25 |      56714.00 |      99.9%
+    50 |     197406.00 |     248.1%
+    75 |     475135.00 |     140.7%
+   100 |     936513.00 |      97.1%
+   150 |    2596660.00 |     177.3%
+   200 |    5550738.00 |     113.8%
+   500 |   71329658.00 |    1185.0%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |    7307.00 | ✗
+     2 |    8240.00 | ✗
+     3 |    9248.00 | ✗
+     4 |   10335.00 | ✗
+     5 |   11505.00 | ✗
+     6 |   12759.00 | ✗
+     7 |   14102.00 | ✗
+     8 |   15535.00 | ✗
+     9 |   17063.00 | ✗
+    10 |   18686.00 | ✗
+    11 |   20410.00 | ✗
+    12 |   22238.00 | ✗
+    13 |   24171.00 | ✗
+    14 |   26212.00 | ✗
+    15 |   28367.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 16411.87 APT
+Price Range: 7307.00 - 28367.00 APT
+Total Price Increase: 288.2%
+
+Growth Band (16-50):
+Average Price: 98261.54 APT
+Price Range: 30635.00 - 197406.00 APT
+Total Price Increase: 544.4%
+
+Acceleration Band (51-100):
+Average Price: 513158.58 APT
+Price Range: 205574.00 - 936513.00 APT
+Total Price Increase: 355.6%
+
+Exclusivity Band (101+):
+Average Price: 23353936.19 APT
+Price Range: 959446.00 - 71329658.00 APT
+Total Price Increase: 7334.5%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 50.53% (5053 bps)
+WEIGHT_B: 117.48% (11748 bps)
+WEIGHT_C: 30
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4062582215.272616
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |       5612.00 |  561100.0%
+     5 |       8123.00 |      44.7%
+    10 |      12192.00 |      50.1%
+    15 |      17434.00 |      43.0%
+    25 |      32028.00 |      83.7%
+    50 |      99419.00 |     210.4%
+    75 |     225803.00 |     127.1%
+   100 |     429728.00 |      90.3%
+   150 |    1144410.00 |     166.3%
+   200 |    2391871.00 |     109.0%
+   500 |   29375784.00 |    1128.2%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |    5612.00 | ✗
+     2 |    6182.00 | ✗
+     3 |    6790.00 | ✗
+     4 |    7436.00 | ✗
+     5 |    8123.00 | ✗
+     6 |    8850.00 | ✗
+     7 |    9619.00 | ✗
+     8 |   10432.00 | ✗
+     9 |   11289.00 | ✗
+    10 |   12192.00 | ✗
+    11 |   13142.00 | ✗
+    12 |   14139.00 | ✗
+    13 |   15187.00 | ✗
+    14 |   16285.00 | ✗
+    15 |   17434.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 10847.47 APT
+Price Range: 5612.00 - 17434.00 APT
+Total Price Increase: 210.7%
+
+Growth Band (16-50):
+Average Price: 52089.60 APT
+Price Range: 18635.00 - 99419.00 APT
+Total Price Increase: 433.5%
+
+Acceleration Band (51-100):
+Average Price: 242039.70 APT
+Price Range: 103219.00 - 429728.00 APT
+Total Price Increase: 316.3%
+
+Exclusivity Band (101+):
+Average Price: 9722973.73 APT
+Price Range: 439760.00 - 29375784.00 APT
+Total Price Increase: 6580.0%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 50.31% (5031 bps)
+WEIGHT_B: 180.90% (18090 bps)
+WEIGHT_C: 4
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 47717331.946943
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |         27.00 |    2600.0%
+     5 |        184.00 |     581.5%
+    10 |        745.00 |     304.9%
+    15 |       1919.00 |     157.6%
+    25 |       7018.00 |     265.7%
+    50 |      46449.00 |     561.9%
+    75 |     146744.00 |     215.9%
+   100 |     336341.00 |     129.2%
+   150 |    1097214.00 |     226.2%
+   200 |    2556596.00 |     133.0%
+   500 |   38723056.00 |    1414.6%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |      27.00 | ✗
+     2 |      48.00 | ✗
+     3 |      81.00 | ✗
+     4 |     126.00 | ✗
+     5 |     184.00 | ✗
+     6 |     258.00 | ✗
+     7 |     349.00 | ✗
+     8 |     459.00 | ✗
+     9 |     591.00 | ✗
+    10 |     745.00 | ✗
+    11 |     922.00 | ✗
+    12 |    1127.00 | ✗
+    13 |    1360.00 | ✗
+    14 |    1624.00 | ✗
+    15 |    1919.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 654.67 APT
+Price Range: 27.00 - 1919.00 APT
+Total Price Increase: 7007.4%
+
+Growth Band (16-50):
+Average Price: 18136.06 APT
+Price Range: 2246.00 - 46449.00 APT
+Total Price Increase: 1968.1%
+
+Acceleration Band (51-100):
+Average Price: 164538.36 APT
+Price Range: 49103.00 - 336341.00 APT
+Total Price Increase: 585.0%
+
+Exclusivity Band (101+):
+Average Price: 12211921.08 APT
+Price Range: 346186.00 - 38723056.00 APT
+Total Price Increase: 11085.6%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 15.62% (1562 bps)
+WEIGHT_B: 171.40% (17140 bps)
+WEIGHT_C: 12
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 26833136.261000
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |        173.00 |   17200.0%
+     5 |        399.00 |     130.6%
+    10 |        886.00 |     122.1%
+    15 |       1659.00 |      87.2%
+    25 |       4338.00 |     161.5%
+    50 |      20756.00 |     378.5%
+    75 |      57756.00 |     178.3%
+   100 |     123704.00 |     114.2%
+   150 |     375909.00 |     203.9%
+   200 |     844304.00 |     124.6%
+   500 |   11942824.00 |    1314.5%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |     173.00 | ✗
+     2 |     217.00 | ✗
+     3 |     270.00 | ✗
+     4 |     330.00 | ✗
+     5 |     399.00 | ✗
+     6 |     476.00 | ✗
+     7 |     563.00 | ✗
+     8 |     659.00 | ✗
+     9 |     767.00 | ✗
+    10 |     886.00 | ✗
+    11 |    1014.00 | ✗
+    12 |    1156.00 | ✗
+    13 |    1311.00 | ✗
+    14 |    1479.00 | ✗
+    15 |    1659.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 757.27 APT
+Price Range: 173.00 - 1659.00 APT
+Total Price Increase: 859.0%
+
+Growth Band (16-50):
+Average Price: 9077.03 APT
+Price Range: 1854.00 - 20756.00 APT
+Total Price Increase: 1019.5%
+
+Acceleration Band (51-100):
+Average Price: 63613.56 APT
+Price Range: 21784.00 - 123704.00 APT
+Total Price Increase: 467.9%
+
+Exclusivity Band (101+):
+Average Price: 3824134.36 APT
+Price Range: 127062.00 - 11942824.00 APT
+Total Price Increase: 9299.2%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 4.36% (436 bps)
+WEIGHT_B: 58.76% (5876 bps)
+WEIGHT_C: 34
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 13153489.605870
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |        350.00 |   34900.0%
+     5 |        487.00 |      39.1%
+    10 |        702.00 |      44.1%
+    15 |        973.00 |      38.6%
+    25 |       1709.00 |      75.6%
+    50 |       4971.00 |     190.9%
+    75 |      10907.00 |     119.4%
+   100 |      20318.00 |      86.3%
+   150 |      52765.00 |     159.7%
+   200 |     108718.00 |     106.0%
+   500 |    1296730.00 |    1092.7%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |     350.00 | ✗
+     2 |     381.00 | ✗
+     3 |     414.00 | ✗
+     4 |     450.00 | ✗
+     5 |     487.00 | ✗
+     6 |     525.00 | ✗
+     7 |     567.00 | ✗
+     8 |     609.00 | ✗
+     9 |     655.00 | ✗
+    10 |     702.00 | ✗
+    11 |     752.00 | ✗
+    12 |     803.00 | ✗
+    13 |     858.00 | ✗
+    14 |     914.00 | ✗
+    15 |     973.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 629.33 APT
+Price Range: 350.00 - 973.00 APT
+Total Price Increase: 178.0%
+
+Growth Band (16-50):
+Average Price: 2684.26 APT
+Price Range: 1035.00 - 4971.00 APT
+Total Price Increase: 380.3%
+
+Acceleration Band (51-100):
+Average Price: 11639.82 APT
+Price Range: 5152.00 - 20318.00 APT
+Total Price Increase: 294.4%
+
+Exclusivity Band (101+):
+Average Price: 432279.24 APT
+Price Range: 20778.00 - 1296730.00 APT
+Total Price Increase: 6140.9%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 3.94% (394 bps)
+WEIGHT_B: 58.34% (5834 bps)
+WEIGHT_C: 28
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4301576.184820
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |        176.00 |   17500.0%
+     5 |        262.00 |      48.9%
+    10 |        403.00 |      53.8%
+    15 |        588.00 |      45.9%
+    25 |       1108.00 |      88.4%
+    50 |       3566.00 |     221.8%
+    75 |       8250.00 |     131.4%
+   100 |      15880.00 |      92.5%
+   150 |      42847.00 |     169.8%
+   200 |      90215.00 |     110.6%
+   500 |    1124626.00 |    1146.6%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |     176.00 | ✗
+     2 |     196.00 | ✗
+     3 |     217.00 | ✗
+     4 |     239.00 | ✗
+     5 |     262.00 | ✗
+     6 |     287.00 | ✗
+     7 |     314.00 | ✗
+     8 |     342.00 | ✗
+     9 |     372.00 | ✗
+    10 |     403.00 | ✗
+    11 |     436.00 | ✗
+    12 |     471.00 | ✗
+    13 |     508.00 | ✗
+    14 |     547.00 | ✗
+    15 |     588.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 357.20 APT
+Price Range: 176.00 - 588.00 APT
+Total Price Increase: 234.1%
+
+Growth Band (16-50):
+Average Price: 1837.63 APT
+Price Range: 630.00 - 3566.00 APT
+Total Price Increase: 466.0%
+
+Acceleration Band (51-100):
+Average Price: 8864.48 APT
+Price Range: 3705.00 - 15880.00 APT
+Total Price Increase: 328.6%
+
+Exclusivity Band (101+):
+Average Price: 370895.94 APT
+Price Range: 16257.00 - 1124626.00 APT
+Total Price Increase: 6817.8%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002831
+Weight Configuration:
+WEIGHT_A: 3.37% (337 bps)
+WEIGHT_B: 57.78% (5778 bps)
+WEIGHT_C: 27
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 2602144.352366
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |        134.00 |   13300.0%
+     5 |        202.00 |      50.7%
+    10 |        315.00 |      55.9%
+    15 |        463.00 |      47.0%
+    25 |        886.00 |      91.4%
+    50 |       2905.00 |     227.9%
+    75 |       6786.00 |     133.6%
+   100 |      13138.00 |      93.6%
+   150 |      35687.00 |     171.6%
+   200 |      75420.00 |     111.3%
+   500 |     947285.00 |    1156.0%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |     134.00 | ✗
+     2 |     149.00 | ✗
+     3 |     166.00 | ✗
+     4 |     183.00 | ✗
+     5 |     202.00 | ✗
+     6 |     222.00 | ✗
+     7 |     243.00 | ✗
+     8 |     266.00 | ✗
+     9 |     290.00 | ✗
+    10 |     315.00 | ✗
+    11 |     342.00 | ✗
+    12 |     369.00 | ✗
+    13 |     399.00 | ✗
+    14 |     431.00 | ✗
+    15 |     463.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 278.27 APT
+Price Range: 134.00 - 463.00 APT
+Total Price Increase: 245.5%
+
+Growth Band (16-50):
+Average Price: 1484.51 APT
+Price Range: 498.00 - 2905.00 APT
+Total Price Increase: 483.3%
+
+Acceleration Band (51-100):
+Average Price: 7300.56 APT
+Price Range: 3020.00 - 13138.00 APT
+Total Price Increase: 335.0%
+
+Exclusivity Band (101+):
+Average Price: 311845.04 APT
+Price Range: 13452.00 - 947285.00 APT
+Total Price Increase: 6942.0%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002832
+Weight Configuration:
+WEIGHT_A: 1.00% (100 bps)
+WEIGHT_B: 107.51% (10751 bps)
+WEIGHT_C: 26
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 639452.278439
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |         66.00 |    6500.0%
+     5 |        101.00 |      53.0%
+    10 |        160.00 |      58.4%
+    15 |        237.00 |      48.1%
+    25 |        461.00 |      94.5%
+    50 |       1541.00 |     234.3%
+    75 |       3637.00 |     136.0%
+   100 |       7082.00 |      94.7%
+   150 |      19371.00 |     173.5%
+   200 |      41092.00 |     112.1%
+   500 |     520049.00 |    1165.6%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |      66.00 | ✗
+     2 |      74.00 | ✗
+     3 |      82.00 | ✗
+     4 |      91.00 | ✗
+     5 |     101.00 | ✗
+     6 |     111.00 | ✗
+     7 |     122.00 | ✗
+     8 |     134.00 | ✗
+     9 |     146.00 | ✗
+    10 |     160.00 | ✗
+    11 |     174.00 | ✗
+    12 |     188.00 | ✗
+    13 |     204.00 | ✗
+    14 |     220.00 | ✗
+    15 |     237.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 140.67 APT
+Price Range: 66.00 - 237.00 APT
+Total Price Increase: 259.1%
+
+Growth Band (16-50):
+Average Price: 780.69 APT
+Price Range: 255.00 - 1541.00 APT
+Total Price Increase: 504.3%
+
+Acceleration Band (51-100):
+Average Price: 3917.24 APT
+Price Range: 1604.00 - 7082.00 APT
+Total Price Increase: 341.5%
+
+Exclusivity Band (101+):
+Average Price: 170889.04 APT
+Price Range: 7253.00 - 520049.00 APT
+Total Price Increase: 7070.1%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002832
+Weight Configuration:
+WEIGHT_A: 1.00% (100 bps)
+WEIGHT_B: 127.82% (12782 bps)
+WEIGHT_C: 1
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 3740.680690
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          3.00 |     200.0%
+    15 |         15.00 |     400.0%
+    25 |         70.00 |     366.7%
+    50 |        548.00 |     682.9%
+    75 |       1832.00 |     234.3%
+   100 |       4324.00 |     136.0%
+   150 |      14522.00 |     235.8%
+   200 |      34341.00 |     136.5%
+   500 |     534181.00 |    1455.5%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       2.00 | ✓
+     9 |       2.00 | ✓
+    10 |       3.00 | ✓
+    11 |       6.00 | ✓
+    12 |       7.00 | ✓
+    13 |      10.00 | ✓
+    14 |      12.00 | ✗
+    15 |      15.00 | ✗
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.27 APT
+Price Range: 1.00 - 15.00 APT
+Total Price Increase: 1400.0%
+
+Growth Band (16-50):
+Average Price: 202.80 APT
+Price Range: 17.00 - 548.00 APT
+Total Price Increase: 3123.5%
+
+Acceleration Band (51-100):
+Average Price: 2071.54 APT
+Price Range: 581.00 - 4324.00 APT
+Total Price Increase: 644.2%
+
+Exclusivity Band (101+):
+Average Price: 167488.85 APT
+Price Range: 4454.00 - 534181.00 APT
+Total Price Increase: 11893.3%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002834
+Weight Configuration:
+WEIGHT_A: 1.05% (105 bps)
 WEIGHT_B: 1.00% (100 bps)
 WEIGHT_C: 1
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 41.440498
+Optimization Score: 12.626353
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
@@ -566,14 +1465,14 @@ Supply | Buy Price (APT) | % Increase
      1 |          1.00 |       0.0%
      5 |          1.00 |       0.0%
     10 |          1.00 |       0.0%
-    15 |          4.00 |     300.0%
-    25 |         21.00 |     425.0%
-    50 |        163.00 |     676.2%
-    75 |        547.00 |     235.6%
-   100 |       1291.00 |     136.0%
-   150 |       4338.00 |     236.0%
-   200 |      10257.00 |     136.4%
-   500 |     159560.00 |    1455.6%
+    15 |          1.00 |       0.0%
+    25 |          1.00 |       0.0%
+    50 |          4.00 |     300.0%
+    75 |         15.00 |     275.0%
+   100 |         35.00 |     133.3%
+   150 |        119.00 |     240.0%
+   200 |        282.00 |     137.0%
+   500 |       4388.00 |    1456.0%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -589,45 +1488,45 @@ Pass # | Price (APT) | Within Target
      9 |       1.00 | ✓
     10 |       1.00 | ✓
     11 |       1.00 | ✓
-    12 |       2.00 | ✓
-    13 |       3.00 | ✓
-    14 |       3.00 | ✓
-    15 |       4.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
 
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 1.53 APT
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
+
+Growth Band (16-50):
+Average Price: 1.60 APT
 Price Range: 1.00 - 4.00 APT
 Total Price Increase: 300.0%
 
-Growth Band (16-50):
-Average Price: 60.31 APT
-Price Range: 5.00 - 163.00 APT
-Total Price Increase: 3160.0%
-
 Acceleration Band (51-100):
-Average Price: 618.54 APT
-Price Range: 173.00 - 1291.00 APT
-Total Price Increase: 646.2%
+Average Price: 16.50 APT
+Price Range: 4.00 - 35.00 APT
+Total Price Increase: 775.0%
 
 Exclusivity Band (101+):
-Average Price: 50028.99 APT
-Price Range: 1330.00 - 159560.00 APT
-Total Price Increase: 11897.0%
+Average Price: 1375.39 APT
+Price Range: 36.00 - 4388.00 APT
+Total Price Increase: 12088.9%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000806
+Test Run: 20250201_002834
 Weight Configuration:
-WEIGHT_A: 38.13% (3813 bps)
-WEIGHT_B: 1.00% (100 bps)
+WEIGHT_A: 1.27% (127 bps)
+WEIGHT_B: 1.01% (101 bps)
 WEIGHT_C: 1
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 41.350203
+Optimization Score: 12.037408
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
@@ -635,14 +1534,14 @@ Supply | Buy Price (APT) | % Increase
      1 |          1.00 |       0.0%
      5 |          1.00 |       0.0%
     10 |          1.00 |       0.0%
-    15 |          4.00 |     300.0%
-    25 |         21.00 |     425.0%
-    50 |        163.00 |     676.2%
-    75 |        546.00 |     235.0%
-   100 |       1290.00 |     136.3%
-   150 |       4332.00 |     235.8%
-   200 |      10244.00 |     136.5%
-   500 |     159351.00 |    1455.6%
+    15 |          1.00 |       0.0%
+    25 |          1.00 |       0.0%
+    50 |          5.00 |     400.0%
+    75 |         18.00 |     260.0%
+   100 |         43.00 |     138.9%
+   150 |        145.00 |     237.2%
+   200 |        344.00 |     137.2%
+   500 |       5360.00 |    1458.1%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -658,45 +1557,45 @@ Pass # | Price (APT) | Within Target
      9 |       1.00 | ✓
     10 |       1.00 | ✓
     11 |       1.00 | ✓
-    12 |       2.00 | ✓
-    13 |       3.00 | ✓
-    14 |       3.00 | ✓
-    15 |       4.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
 
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 1.53 APT
-Price Range: 1.00 - 4.00 APT
-Total Price Increase: 300.0%
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
 
 Growth Band (16-50):
-Average Price: 60.26 APT
-Price Range: 5.00 - 163.00 APT
-Total Price Increase: 3160.0%
+Average Price: 1.94 APT
+Price Range: 1.00 - 5.00 APT
+Total Price Increase: 400.0%
 
 Acceleration Band (51-100):
-Average Price: 617.72 APT
-Price Range: 173.00 - 1290.00 APT
-Total Price Increase: 645.7%
+Average Price: 20.22 APT
+Price Range: 5.00 - 43.00 APT
+Total Price Increase: 760.0%
 
 Exclusivity Band (101+):
-Average Price: 49963.45 APT
-Price Range: 1329.00 - 159351.00 APT
-Total Price Increase: 11890.3%
+Average Price: 1680.29 APT
+Price Range: 44.00 - 5360.00 APT
+Total Price Increase: 12081.8%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000807
+Test Run: 20250201_002839
 Weight Configuration:
-WEIGHT_A: 38.12% (3812 bps)
-WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 1
+WEIGHT_A: 1.27% (127 bps)
+WEIGHT_B: 1.01% (101 bps)
+WEIGHT_C: 2
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 41.284237
+Optimization Score: 11.961176
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
@@ -704,14 +1603,14 @@ Supply | Buy Price (APT) | % Increase
      1 |          1.00 |       0.0%
      5 |          1.00 |       0.0%
     10 |          1.00 |       0.0%
-    15 |          4.00 |     300.0%
-    25 |         21.00 |     425.0%
-    50 |        163.00 |     676.2%
-    75 |        546.00 |     235.0%
-   100 |       1289.00 |     136.1%
-   150 |       4331.00 |     236.0%
-   200 |      10241.00 |     136.5%
-   500 |     159310.00 |    1455.6%
+    15 |          1.00 |       0.0%
+    25 |          1.00 |       0.0%
+    50 |          5.00 |     400.0%
+    75 |         19.00 |     280.0%
+   100 |         44.00 |     131.6%
+   150 |        148.00 |     236.4%
+   200 |        349.00 |     135.8%
+   500 |       5392.00 |    1445.0%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -727,45 +1626,45 @@ Pass # | Price (APT) | Within Target
      9 |       1.00 | ✓
     10 |       1.00 | ✓
     11 |       1.00 | ✓
-    12 |       2.00 | ✓
-    13 |       3.00 | ✓
-    14 |       3.00 | ✓
-    15 |       4.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
 
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 1.53 APT
-Price Range: 1.00 - 4.00 APT
-Total Price Increase: 300.0%
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
 
 Growth Band (16-50):
-Average Price: 60.23 APT
-Price Range: 5.00 - 163.00 APT
-Total Price Increase: 3160.0%
+Average Price: 2.06 APT
+Price Range: 1.00 - 5.00 APT
+Total Price Increase: 400.0%
 
 Acceleration Band (51-100):
-Average Price: 617.56 APT
-Price Range: 173.00 - 1289.00 APT
-Total Price Increase: 645.1%
+Average Price: 21.00 APT
+Price Range: 6.00 - 44.00 APT
+Total Price Increase: 633.3%
 
 Exclusivity Band (101+):
-Average Price: 49950.36 APT
-Price Range: 1328.00 - 159310.00 APT
-Total Price Increase: 11896.2%
+Average Price: 1693.66 APT
+Price Range: 46.00 - 5392.00 APT
+Total Price Increase: 11621.7%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000809
+Test Run: 20250201_002839
 Weight Configuration:
-WEIGHT_A: 38.07% (3807 bps)
+WEIGHT_A: 1.91% (191 bps)
 WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 1
+WEIGHT_C: 2
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 41.218337
+Optimization Score: 10.474942
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
@@ -773,14 +1672,14 @@ Supply | Buy Price (APT) | % Increase
      1 |          1.00 |       0.0%
      5 |          1.00 |       0.0%
     10 |          1.00 |       0.0%
-    15 |          4.00 |     300.0%
-    25 |         21.00 |     425.0%
-    50 |        163.00 |     676.2%
-    75 |        546.00 |     235.0%
-   100 |       1288.00 |     135.9%
-   150 |       4325.00 |     235.8%
-   200 |      10228.00 |     136.5%
-   500 |     159101.00 |    1455.5%
+    15 |          1.00 |       0.0%
+    25 |          1.00 |       0.0%
+    50 |          8.00 |     700.0%
+    75 |         28.00 |     250.0%
+   100 |         66.00 |     135.7%
+   150 |        221.00 |     234.8%
+   200 |        520.00 |     135.3%
+   500 |       8030.00 |    1444.2%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -796,45 +1695,45 @@ Pass # | Price (APT) | Within Target
      9 |       1.00 | ✓
     10 |       1.00 | ✓
     11 |       1.00 | ✓
-    12 |       2.00 | ✓
-    13 |       3.00 | ✓
-    14 |       3.00 | ✓
-    15 |       4.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
 
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 1.53 APT
-Price Range: 1.00 - 4.00 APT
-Total Price Increase: 300.0%
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
 
 Growth Band (16-50):
-Average Price: 60.14 APT
-Price Range: 5.00 - 163.00 APT
-Total Price Increase: 3160.0%
+Average Price: 2.97 APT
+Price Range: 1.00 - 8.00 APT
+Total Price Increase: 700.0%
 
 Acceleration Band (51-100):
-Average Price: 616.78 APT
-Price Range: 173.00 - 1288.00 APT
-Total Price Increase: 644.5%
+Average Price: 31.66 APT
+Price Range: 9.00 - 66.00 APT
+Total Price Increase: 633.3%
 
 Exclusivity Band (101+):
-Average Price: 49884.81 APT
-Price Range: 1326.00 - 159101.00 APT
-Total Price Increase: 11898.6%
+Average Price: 2522.19 APT
+Price Range: 68.00 - 8030.00 APT
+Total Price Increase: 11708.8%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000809
+Test Run: 20250201_002839
 Weight Configuration:
-WEIGHT_A: 38.04% (3804 bps)
-WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 1
+WEIGHT_A: 1.91% (191 bps)
+WEIGHT_B: 1.30% (130 bps)
+WEIGHT_C: 2
 INITIAL_PRICE: 1.00 APT
 
 
-Optimization Score: 41.128307
+Optimization Score: 9.287484
 
 === Key Price Points Analysis ===
 Supply | Buy Price (APT) | % Increase
@@ -842,14 +1741,14 @@ Supply | Buy Price (APT) | % Increase
      1 |          1.00 |       0.0%
      5 |          1.00 |       0.0%
     10 |          1.00 |       0.0%
-    15 |          4.00 |     300.0%
-    25 |         21.00 |     425.0%
-    50 |        163.00 |     676.2%
-    75 |        545.00 |     234.4%
-   100 |       1287.00 |     136.1%
-   150 |       4322.00 |     235.8%
-   200 |      10220.00 |     136.5%
-   500 |     158975.00 |    1455.5%
+    15 |          1.00 |       0.0%
+    25 |          1.00 |       0.0%
+    50 |         11.00 |    1000.0%
+    75 |         37.00 |     236.4%
+   100 |         86.00 |     132.4%
+   150 |        287.00 |     233.7%
+   200 |        677.00 |     135.9%
+   500 |      10439.00 |    1441.9%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
@@ -865,41 +1764,1421 @@ Pass # | Price (APT) | Within Target
      9 |       1.00 | ✓
     10 |       1.00 | ✓
     11 |       1.00 | ✓
-    12 |       2.00 | ✓
-    13 |       3.00 | ✓
-    14 |       3.00 | ✓
-    15 |       4.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
 
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 1.53 APT
-Price Range: 1.00 - 4.00 APT
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
+
+Growth Band (16-50):
+Average Price: 3.94 APT
+Price Range: 1.00 - 11.00 APT
+Total Price Increase: 1000.0%
+
+Acceleration Band (51-100):
+Average Price: 41.30 APT
+Price Range: 11.00 - 86.00 APT
+Total Price Increase: 681.8%
+
+Exclusivity Band (101+):
+Average Price: 3279.01 APT
+Price Range: 89.00 - 10439.00 APT
+Total Price Increase: 11629.2%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002840
+Weight Configuration:
+WEIGHT_A: 1.94% (194 bps)
+WEIGHT_B: 1.30% (130 bps)
+WEIGHT_C: 2
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 9.242084
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          1.00 |       0.0%
+    15 |          1.00 |       0.0%
+    25 |          1.00 |       0.0%
+    50 |         11.00 |    1000.0%
+    75 |         37.00 |     236.4%
+   100 |         87.00 |     135.1%
+   150 |        292.00 |     235.6%
+   200 |        687.00 |     135.3%
+   500 |      10603.00 |    1443.4%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       1.00 | ✓
+    10 |       1.00 | ✓
+    11 |       1.00 | ✓
+    12 |       1.00 | ✓
+    13 |       1.00 | ✓
+    14 |       1.00 | ✓
+    15 |       1.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.00 APT
+Price Range: 1.00 - 1.00 APT
+Total Price Increase: 0.0%
+
+Growth Band (16-50):
+Average Price: 3.97 APT
+Price Range: 1.00 - 11.00 APT
+Total Price Increase: 1000.0%
+
+Acceleration Band (51-100):
+Average Price: 41.90 APT
+Price Range: 12.00 - 87.00 APT
+Total Price Increase: 625.0%
+
+Exclusivity Band (101+):
+Average Price: 3330.55 APT
+Price Range: 90.00 - 10603.00 APT
+Total Price Increase: 11681.1%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002841
+Weight Configuration:
+WEIGHT_A: 1.76% (176 bps)
+WEIGHT_B: 1.20% (120 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 5.494460
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          4.00 |      33.3%
+    15 |          6.00 |      50.0%
+    25 |         12.00 |     100.0%
+    50 |         36.00 |     200.0%
+    75 |         82.00 |     127.8%
+   100 |        156.00 |      90.2%
+   150 |        414.00 |     165.4%
+   200 |        862.00 |     108.2%
+   500 |      10510.00 |    1119.3%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       2.00 | ✓
+     4 |       2.00 | ✓
+     5 |       3.00 | ✓
+     6 |       3.00 | ✓
+     7 |       3.00 | ✓
+     8 |       4.00 | ✓
+     9 |       4.00 | ✓
+    10 |       4.00 | ✓
+    11 |       5.00 | ✓
+    12 |       5.00 | ✓
+    13 |       5.00 | ✓
+    14 |       6.00 | ✓
+    15 |       6.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 3.73 APT
+Price Range: 2.00 - 6.00 APT
+Total Price Increase: 200.0%
+
+Growth Band (16-50):
+Average Price: 18.91 APT
+Price Range: 7.00 - 36.00 APT
+Total Price Increase: 414.3%
+
+Acceleration Band (51-100):
+Average Price: 88.02 APT
+Price Range: 38.00 - 156.00 APT
+Total Price Increase: 310.5%
+
+Exclusivity Band (101+):
+Average Price: 3484.63 APT
+Price Range: 160.00 - 10510.00 APT
+Total Price Increase: 6468.8%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002843
+Weight Configuration:
+WEIGHT_A: 1.77% (177 bps)
+WEIGHT_B: 1.20% (120 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 5.482495
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          4.00 |      33.3%
+    15 |          6.00 |      50.0%
+    25 |         12.00 |     100.0%
+    50 |         36.00 |     200.0%
+    75 |         83.00 |     130.6%
+   100 |        157.00 |      89.2%
+   150 |        416.00 |     165.0%
+   200 |        867.00 |     108.4%
+   500 |      10570.00 |    1119.1%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       2.00 | ✓
+     4 |       2.00 | ✓
+     5 |       3.00 | ✓
+     6 |       3.00 | ✓
+     7 |       3.00 | ✓
+     8 |       4.00 | ✓
+     9 |       4.00 | ✓
+    10 |       4.00 | ✓
+    11 |       5.00 | ✓
+    12 |       5.00 | ✓
+    13 |       5.00 | ✓
+    14 |       6.00 | ✓
+    15 |       6.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 3.73 APT
+Price Range: 2.00 - 6.00 APT
+Total Price Increase: 200.0%
+
+Growth Band (16-50):
+Average Price: 18.94 APT
+Price Range: 7.00 - 36.00 APT
+Total Price Increase: 414.3%
+
+Acceleration Band (51-100):
+Average Price: 88.46 APT
+Price Range: 38.00 - 157.00 APT
+Total Price Increase: 313.2%
+
+Exclusivity Band (101+):
+Average Price: 3504.43 APT
+Price Range: 160.00 - 10570.00 APT
+Total Price Increase: 6506.2%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002845
+Weight Configuration:
+WEIGHT_A: 1.77% (177 bps)
+WEIGHT_B: 1.33% (133 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.921960
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          7.00 |      40.0%
+    25 |         13.00 |      85.7%
+    50 |         40.00 |     207.7%
+    75 |         92.00 |     130.0%
+   100 |        174.00 |      89.1%
+   150 |        461.00 |     164.9%
+   200 |        960.00 |     108.2%
+   500 |      11715.00 |    1120.3%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       2.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       3.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       4.00 | ✓
+    10 |       5.00 | ✓
+    11 |       5.00 | ✓
+    12 |       6.00 | ✓
+    13 |       6.00 | ✓
+    14 |       6.00 | ✓
+    15 |       7.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.13 APT
+Price Range: 2.00 - 7.00 APT
+Total Price Increase: 250.0%
+
+Growth Band (16-50):
+Average Price: 21.17 APT
+Price Range: 7.00 - 40.00 APT
+Total Price Increase: 471.4%
+
+Acceleration Band (51-100):
+Average Price: 98.18 APT
+Price Range: 42.00 - 174.00 APT
+Total Price Increase: 314.3%
+
+Exclusivity Band (101+):
+Average Price: 3884.10 APT
+Price Range: 178.00 - 11715.00 APT
+Total Price Increase: 6481.5%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002848
+Weight Configuration:
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.33% (133 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.903686
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          7.00 |      40.0%
+    25 |         13.00 |      85.7%
+    50 |         41.00 |     215.4%
+    75 |         92.00 |     124.4%
+   100 |        175.00 |      90.2%
+   150 |        464.00 |     165.1%
+   200 |        966.00 |     108.2%
+   500 |      11781.00 |    1119.6%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       2.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       3.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       4.00 | ✓
+    10 |       5.00 | ✓
+    11 |       5.00 | ✓
+    12 |       6.00 | ✓
+    13 |       6.00 | ✓
+    14 |       6.00 | ✓
+    15 |       7.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.13 APT
+Price Range: 2.00 - 7.00 APT
+Total Price Increase: 250.0%
+
+Growth Band (16-50):
+Average Price: 21.26 APT
+Price Range: 7.00 - 41.00 APT
+Total Price Increase: 485.7%
+
+Acceleration Band (51-100):
+Average Price: 98.72 APT
+Price Range: 42.00 - 175.00 APT
+Total Price Increase: 316.7%
+
+Exclusivity Band (101+):
+Average Price: 3906.05 APT
+Price Range: 179.00 - 11781.00 APT
+Total Price Increase: 6481.6%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002849
+Weight Configuration:
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.36% (136 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.867735
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          7.00 |      40.0%
+    25 |         13.00 |      85.7%
+    50 |         42.00 |     223.1%
+    75 |         94.00 |     123.8%
+   100 |        179.00 |      90.4%
+   150 |        474.00 |     164.8%
+   200 |        988.00 |     108.4%
+   500 |      12047.00 |    1119.3%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       3.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       4.00 | ✓
+    10 |       5.00 | ✓
+    11 |       5.00 | ✓
+    12 |       6.00 | ✓
+    13 |       6.00 | ✓
+    14 |       7.00 | ✓
+    15 |       7.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.27 APT
+Price Range: 2.00 - 7.00 APT
+Total Price Increase: 250.0%
+
+Growth Band (16-50):
+Average Price: 21.74 APT
+Price Range: 8.00 - 42.00 APT
+Total Price Increase: 425.0%
+
+Acceleration Band (51-100):
+Average Price: 100.90 APT
+Price Range: 43.00 - 179.00 APT
+Total Price Increase: 316.3%
+
+Exclusivity Band (101+):
+Average Price: 3994.19 APT
+Price Range: 183.00 - 12047.00 APT
+Total Price Increase: 6483.1%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002850
+Weight Configuration:
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.43% (143 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.745571
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          7.00 |      40.0%
+    25 |         14.00 |     100.0%
+    50 |         44.00 |     214.3%
+    75 |         99.00 |     125.0%
+   100 |        188.00 |      89.9%
+   150 |        498.00 |     164.9%
+   200 |       1039.00 |     108.6%
+   500 |      12667.00 |    1119.2%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       6.00 | ✓
+    14 |       7.00 | ✓
+    15 |       7.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.47 APT
+Price Range: 2.00 - 7.00 APT
+Total Price Increase: 250.0%
+
+Growth Band (16-50):
+Average Price: 22.83 APT
+Price Range: 8.00 - 44.00 APT
+Total Price Increase: 450.0%
+
+Acceleration Band (51-100):
+Average Price: 106.14 APT
+Price Range: 45.00 - 188.00 APT
+Total Price Increase: 317.8%
+
+Exclusivity Band (101+):
+Average Price: 4199.79 APT
+Price Range: 192.00 - 12667.00 APT
+Total Price Increase: 6497.4%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002858
+Weight Configuration:
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.44% (144 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.640582
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          8.00 |      60.0%
+    25 |         14.00 |      75.0%
+    50 |         44.00 |     214.3%
+    75 |        100.00 |     127.3%
+   100 |        189.00 |      89.0%
+   150 |        502.00 |     165.6%
+   200 |       1046.00 |     108.4%
+   500 |      12756.00 |    1119.5%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       7.00 | ✓
+    14 |       7.00 | ✓
+    15 |       8.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.60 APT
+Price Range: 2.00 - 8.00 APT
 Total Price Increase: 300.0%
 
 Growth Band (16-50):
-Average Price: 60.14 APT
-Price Range: 5.00 - 163.00 APT
-Total Price Increase: 3160.0%
+Average Price: 23.00 APT
+Price Range: 8.00 - 44.00 APT
+Total Price Increase: 450.0%
 
 Acceleration Band (51-100):
-Average Price: 616.36 APT
-Price Range: 173.00 - 1287.00 APT
-Total Price Increase: 643.9%
+Average Price: 106.96 APT
+Price Range: 46.00 - 189.00 APT
+Total Price Increase: 310.9%
 
 Exclusivity Band (101+):
-Average Price: 49845.51 APT
-Price Range: 1325.00 - 158975.00 APT
-Total Price Increase: 11898.1%
+Average Price: 4229.14 APT
+Price Range: 194.00 - 12756.00 APT
+Total Price Increase: 6475.3%
 
 ================================================================================
 
 ================================================================================
-Test Run: 20250201_000810
+Test Run: 20250201_002902
 Weight Configuration:
-WEIGHT_A: 38.04% (3804 bps)
-WEIGHT_B: 1.00% (100 bps)
-WEIGHT_C: 1.0
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.45% (145 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.634446
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          8.00 |      60.0%
+    25 |         14.00 |      75.0%
+    50 |         44.00 |     214.3%
+    75 |        101.00 |     129.5%
+   100 |        191.00 |      89.1%
+   150 |        505.00 |     164.4%
+   200 |       1053.00 |     108.5%
+   500 |      12844.00 |    1119.8%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       7.00 | ✓
+    14 |       7.00 | ✓
+    15 |       8.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.60 APT
+Price Range: 2.00 - 8.00 APT
+Total Price Increase: 300.0%
+
+Growth Band (16-50):
+Average Price: 23.29 APT
+Price Range: 8.00 - 44.00 APT
+Total Price Increase: 450.0%
+
+Acceleration Band (51-100):
+Average Price: 107.68 APT
+Price Range: 46.00 - 191.00 APT
+Total Price Increase: 315.2%
+
+Exclusivity Band (101+):
+Average Price: 4258.53 APT
+Price Range: 195.00 - 12844.00 APT
+Total Price Increase: 6486.7%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002902
+Weight Configuration:
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.46% (146 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.620681
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          8.00 |      60.0%
+    25 |         14.00 |      75.0%
+    50 |         45.00 |     221.4%
+    75 |        101.00 |     124.4%
+   100 |        192.00 |      90.1%
+   150 |        509.00 |     165.1%
+   200 |       1060.00 |     108.3%
+   500 |      12933.00 |    1120.1%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       7.00 | ✓
+    14 |       7.00 | ✓
+    15 |       8.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.60 APT
+Price Range: 2.00 - 8.00 APT
+Total Price Increase: 300.0%
+
+Growth Band (16-50):
+Average Price: 23.40 APT
+Price Range: 8.00 - 45.00 APT
+Total Price Increase: 462.5%
+
+Acceleration Band (51-100):
+Average Price: 108.46 APT
+Price Range: 46.00 - 192.00 APT
+Total Price Increase: 317.4%
+
+Exclusivity Band (101+):
+Average Price: 4287.91 APT
+Price Range: 196.00 - 12933.00 APT
+Total Price Increase: 6498.5%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002905
+Weight Configuration:
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.47% (147 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.616548
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          8.00 |      60.0%
+    25 |         14.00 |      75.0%
+    50 |         45.00 |     221.4%
+    75 |        102.00 |     126.7%
+   100 |        193.00 |      89.2%
+   150 |        512.00 |     165.3%
+   200 |       1068.00 |     108.6%
+   500 |      13021.00 |    1119.2%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       2.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       4.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       7.00 | ✓
+    14 |       7.00 | ✓
+    15 |       8.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.60 APT
+Price Range: 2.00 - 8.00 APT
+Total Price Increase: 300.0%
+
+Growth Band (16-50):
+Average Price: 23.54 APT
+Price Range: 8.00 - 45.00 APT
+Total Price Increase: 462.5%
+
+Acceleration Band (51-100):
+Average Price: 109.12 APT
+Price Range: 47.00 - 193.00 APT
+Total Price Increase: 310.6%
+
+Exclusivity Band (101+):
+Average Price: 4317.25 APT
+Price Range: 198.00 - 13021.00 APT
+Total Price Increase: 6476.3%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002908
+Weight Configuration:
+WEIGHT_A: 1.78% (178 bps)
+WEIGHT_B: 1.48% (148 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.561468
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          8.00 |      60.0%
+    25 |         15.00 |      87.5%
+    50 |         45.00 |     200.0%
+    75 |        103.00 |     128.9%
+   100 |        195.00 |      89.3%
+   150 |        516.00 |     164.6%
+   200 |       1075.00 |     108.3%
+   500 |      13110.00 |    1119.5%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       3.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       5.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       7.00 | ✓
+    14 |       7.00 | ✓
+    15 |       8.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.73 APT
+Price Range: 2.00 - 8.00 APT
+Total Price Increase: 300.0%
+
+Growth Band (16-50):
+Average Price: 23.66 APT
+Price Range: 8.00 - 45.00 APT
+Total Price Increase: 462.5%
+
+Acceleration Band (51-100):
+Average Price: 109.90 APT
+Price Range: 47.00 - 195.00 APT
+Total Price Increase: 314.9%
+
+Exclusivity Band (101+):
+Average Price: 4346.65 APT
+Price Range: 199.00 - 13110.00 APT
+Total Price Increase: 6487.9%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002911
+Weight Configuration:
+WEIGHT_A: 1.79% (179 bps)
+WEIGHT_B: 1.48% (148 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.548793
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          8.00 |      60.0%
+    25 |         15.00 |      87.5%
+    50 |         46.00 |     206.7%
+    75 |        103.00 |     123.9%
+   100 |        196.00 |      90.3%
+   150 |        519.00 |     164.8%
+   200 |       1081.00 |     108.3%
+   500 |      13184.00 |    1119.6%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       3.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       5.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       7.00 | ✓
+    14 |       7.00 | ✓
+    15 |       8.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.73 APT
+Price Range: 2.00 - 8.00 APT
+Total Price Increase: 300.0%
+
+Growth Band (16-50):
+Average Price: 23.80 APT
+Price Range: 8.00 - 46.00 APT
+Total Price Increase: 475.0%
+
+Acceleration Band (51-100):
+Average Price: 110.52 APT
+Price Range: 47.00 - 196.00 APT
+Total Price Increase: 317.0%
+
+Exclusivity Band (101+):
+Average Price: 4371.07 APT
+Price Range: 200.00 - 13184.00 APT
+Total Price Increase: 6492.0%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002913
+Weight Configuration:
+WEIGHT_A: 1.79% (179 bps)
+WEIGHT_B: 1.49% (149 bps)
+WEIGHT_C: 31
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.545516
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          2.00 |     100.0%
+     5 |          3.00 |      50.0%
+    10 |          5.00 |      66.7%
+    15 |          8.00 |      60.0%
+    25 |         15.00 |      87.5%
+    50 |         46.00 |     206.7%
+    75 |        104.00 |     126.1%
+   100 |        197.00 |      89.4%
+   150 |        522.00 |     165.0%
+   200 |       1088.00 |     108.4%
+   500 |      13273.00 |    1119.9%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       2.00 | ✓
+     2 |       3.00 | ✓
+     3 |       3.00 | ✓
+     4 |       3.00 | ✓
+     5 |       3.00 | ✓
+     6 |       4.00 | ✓
+     7 |       4.00 | ✓
+     8 |       5.00 | ✓
+     9 |       5.00 | ✓
+    10 |       5.00 | ✓
+    11 |       6.00 | ✓
+    12 |       6.00 | ✓
+    13 |       7.00 | ✓
+    14 |       7.00 | ✓
+    15 |       8.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.73 APT
+Price Range: 2.00 - 8.00 APT
+Total Price Increase: 300.0%
+
+Growth Band (16-50):
+Average Price: 23.94 APT
+Price Range: 8.00 - 46.00 APT
+Total Price Increase: 475.0%
+
+Acceleration Band (51-100):
+Average Price: 111.20 APT
+Price Range: 48.00 - 197.00 APT
+Total Price Increase: 310.4%
+
+Exclusivity Band (101+):
+Average Price: 4400.61 APT
+Price Range: 202.00 - 13273.00 APT
+Total Price Increase: 6470.8%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002930
+Weight Configuration:
+WEIGHT_A: 1.79% (179 bps)
+WEIGHT_B: 1.33% (133 bps)
+WEIGHT_C: 21
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.492198
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          2.00 |     100.0%
+    15 |          3.00 |      50.0%
+    25 |          7.00 |     133.3%
+    50 |         27.00 |     285.7%
+    75 |         69.00 |     155.6%
+   100 |        138.00 |     100.0%
+   150 |        393.00 |     184.8%
+   200 |        850.00 |     116.3%
+   500 |      11190.00 |    1216.5%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       2.00 | ✓
+    10 |       2.00 | ✓
+    11 |       2.00 | ✓
+    12 |       2.00 | ✓
+    13 |       2.00 | ✓
+    14 |       3.00 | ✓
+    15 |       3.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.60 APT
+Price Range: 1.00 - 3.00 APT
+Total Price Increase: 200.0%
+
+Growth Band (16-50):
+Average Price: 12.94 APT
+Price Range: 3.00 - 27.00 APT
+Total Price Increase: 800.0%
+
+Acceleration Band (51-100):
+Average Price: 74.40 APT
+Price Range: 28.00 - 138.00 APT
+Total Price Increase: 392.9%
+
+Exclusivity Band (101+):
+Average Price: 3643.21 APT
+Price Range: 142.00 - 11190.00 APT
+Total Price Increase: 7780.3%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002931
+Weight Configuration:
+WEIGHT_A: 1.80% (180 bps)
+WEIGHT_B: 1.33% (133 bps)
+WEIGHT_C: 21
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 4.482973
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          1.00 |       0.0%
+    10 |          2.00 |     100.0%
+    15 |          3.00 |      50.0%
+    25 |          7.00 |     133.3%
+    50 |         27.00 |     285.7%
+    75 |         69.00 |     155.6%
+   100 |        139.00 |     101.4%
+   150 |        395.00 |     184.2%
+   200 |        855.00 |     116.5%
+   500 |      11252.00 |    1216.0%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       1.00 | ✓
+     6 |       1.00 | ✓
+     7 |       1.00 | ✓
+     8 |       1.00 | ✓
+     9 |       2.00 | ✓
+    10 |       2.00 | ✓
+    11 |       2.00 | ✓
+    12 |       2.00 | ✓
+    13 |       2.00 | ✓
+    14 |       3.00 | ✓
+    15 |       3.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 1.60 APT
+Price Range: 1.00 - 3.00 APT
+Total Price Increase: 200.0%
+
+Growth Band (16-50):
+Average Price: 13.00 APT
+Price Range: 3.00 - 27.00 APT
+Total Price Increase: 800.0%
+
+Acceleration Band (51-100):
+Average Price: 74.88 APT
+Price Range: 29.00 - 139.00 APT
+Total Price Increase: 379.3%
+
+Exclusivity Band (101+):
+Average Price: 3663.60 APT
+Price Range: 143.00 - 11252.00 APT
+Total Price Increase: 7768.5%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002932
+Weight Configuration:
+WEIGHT_A: 1.70% (170 bps)
+WEIGHT_B: 2.73% (273 bps)
+WEIGHT_C: 20
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 2.271630
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          2.00 |     100.0%
+    10 |          3.00 |      50.0%
+    15 |          6.00 |     100.0%
+    25 |         13.00 |     116.7%
+    50 |         51.00 |     292.3%
+    75 |        130.00 |     154.9%
+   100 |        263.00 |     102.3%
+   150 |        753.00 |     186.3%
+   200 |       1636.00 |     117.3%
+   500 |      21689.00 |    1225.7%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       2.00 | ✓
+     6 |       2.00 | ✓
+     7 |       2.00 | ✓
+     8 |       3.00 | ✓
+     9 |       3.00 | ✓
+    10 |       3.00 | ✓
+    11 |       4.00 | ✓
+    12 |       4.00 | ✓
+    13 |       5.00 | ✓
+    14 |       5.00 | ✓
+    15 |       6.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 2.87 APT
+Price Range: 1.00 - 6.00 APT
+Total Price Increase: 500.0%
+
+Growth Band (16-50):
+Average Price: 24.29 APT
+Price Range: 6.00 - 51.00 APT
+Total Price Increase: 750.0%
+
+Acceleration Band (51-100):
+Average Price: 141.28 APT
+Price Range: 54.00 - 263.00 APT
+Total Price Increase: 387.0%
+
+Exclusivity Band (101+):
+Average Price: 7048.84 APT
+Price Range: 270.00 - 21689.00 APT
+Total Price Increase: 7933.0%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_002933
+Weight Configuration:
+WEIGHT_A: 1.70% (170 bps)
+WEIGHT_B: 2.76% (276 bps)
+WEIGHT_C: 20
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 2.062895
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          2.00 |     100.0%
+    10 |          4.00 |     100.0%
+    15 |          6.00 |      50.0%
+    25 |         13.00 |     116.7%
+    50 |         52.00 |     300.0%
+    75 |        131.00 |     151.9%
+   100 |        266.00 |     103.1%
+   150 |        761.00 |     186.1%
+   200 |       1653.00 |     117.2%
+   500 |      21927.00 |    1226.5%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       2.00 | ✓
+     5 |       2.00 | ✓
+     6 |       2.00 | ✓
+     7 |       2.00 | ✓
+     8 |       3.00 | ✓
+     9 |       3.00 | ✓
+    10 |       4.00 | ✓
+    11 |       4.00 | ✓
+    12 |       4.00 | ✓
+    13 |       5.00 | ✓
+    14 |       5.00 | ✓
+    15 |       6.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 3.00 APT
+Price Range: 1.00 - 6.00 APT
+Total Price Increase: 500.0%
+
+Growth Band (16-50):
+Average Price: 24.54 APT
+Price Range: 6.00 - 52.00 APT
+Total Price Increase: 766.7%
+
+Acceleration Band (51-100):
+Average Price: 142.80 APT
+Price Range: 54.00 - 266.00 APT
+Total Price Increase: 392.6%
+
+Exclusivity Band (101+):
+Average Price: 7126.28 APT
+Price Range: 273.00 - 21927.00 APT
+Total Price Increase: 7931.9%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_003250
+Weight Configuration:
+WEIGHT_A: 1.70% (170 bps)
+WEIGHT_B: 2.56% (256 bps)
+WEIGHT_C: 20
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 1.912604
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          2.00 |     100.0%
+    10 |          3.00 |      50.0%
+    15 |          5.00 |      66.7%
+    25 |         12.00 |     140.0%
+    50 |         48.00 |     300.0%
+    75 |        122.00 |     154.2%
+   100 |        247.00 |     102.5%
+   150 |        706.00 |     185.8%
+   200 |       1534.00 |     117.3%
+   500 |      20338.00 |    1225.8%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       1.00 | ✓
+     3 |       1.00 | ✓
+     4 |       1.00 | ✓
+     5 |       2.00 | ✓
+     6 |       2.00 | ✓
+     7 |       2.00 | ✓
+     8 |       2.00 | ✓
+     9 |       3.00 | ✓
+    10 |       3.00 | ✓
+    11 |       4.00 | ✓
+    12 |       4.00 | ✓
+    13 |       4.00 | ✓
+    14 |       5.00 | ✓
+    15 |       5.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 2.67 APT
+Price Range: 1.00 - 5.00 APT
+Total Price Increase: 400.0%
+
+Growth Band (16-50):
+Average Price: 22.77 APT
+Price Range: 6.00 - 48.00 APT
+Total Price Increase: 700.0%
+
+Acceleration Band (51-100):
+Average Price: 132.48 APT
+Price Range: 50.00 - 247.00 APT
+Total Price Increase: 394.0%
+
+Exclusivity Band (101+):
+Average Price: 6609.86 APT
+Price Range: 253.00 - 20338.00 APT
+Total Price Increase: 7938.7%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_003334
+Weight Configuration:
+WEIGHT_A: 1.72% (172 bps)
+WEIGHT_B: 2.56% (256 bps)
+WEIGHT_C: 23
+INITIAL_PRICE: 1.00 APT
+
+
+Optimization Score: 1.490602
+
+=== Key Price Points Analysis ===
+Supply | Buy Price (APT) | % Increase
+---------------------------------------------
+     1 |          1.00 |       0.0%
+     5 |          3.00 |     200.0%
+    10 |          5.00 |      66.7%
+    15 |          7.00 |      40.0%
+    25 |         15.00 |     114.3%
+    50 |         55.00 |     266.7%
+    75 |        136.00 |     147.3%
+   100 |        269.00 |      97.8%
+   150 |        753.00 |     179.9%
+   200 |       1616.00 |     114.6%
+   500 |      20936.00 |    1195.5%
+
+=== Early Accessibility Check (First 15 Passes) ===
+Pass # | Price (APT) | Within Target
+---------------------------------------------
+     1 |       1.00 | ✓
+     2 |       2.00 | ✓
+     3 |       2.00 | ✓
+     4 |       2.00 | ✓
+     5 |       3.00 | ✓
+     6 |       3.00 | ✓
+     7 |       3.00 | ✓
+     8 |       4.00 | ✓
+     9 |       4.00 | ✓
+    10 |       5.00 | ✓
+    11 |       5.00 | ✓
+    12 |       6.00 | ✓
+    13 |       6.00 | ✓
+    14 |       7.00 | ✓
+    15 |       7.00 | ✓
+
+=== Price Band Analysis ===
+
+Entry Band (1-15):
+Average Price: 4.00 APT
+Price Range: 1.00 - 7.00 APT
+Total Price Increase: 600.0%
+
+Growth Band (16-50):
+Average Price: 27.09 APT
+Price Range: 8.00 - 55.00 APT
+Total Price Increase: 587.5%
+
+Acceleration Band (51-100):
+Average Price: 146.62 APT
+Price Range: 58.00 - 269.00 APT
+Total Price Increase: 363.8%
+
+Exclusivity Band (101+):
+Average Price: 6841.78 APT
+Price Range: 276.00 - 20936.00 APT
+Total Price Increase: 7485.5%
+
+================================================================================
+
+================================================================================
+Test Run: 20250201_004251
+Weight Configuration:
+WEIGHT_A: 1.72% (172 bps)
+WEIGHT_B: 2.56% (256 bps)
+WEIGHT_C: 23.38866999652738
 INITIAL_PRICE: 1.00 APT
 
 
@@ -907,56 +3186,56 @@ INITIAL_PRICE: 1.00 APT
 Supply | Buy Price (APT) | % Increase
 ---------------------------------------------
      1 |          1.00 |       0.0%
-     5 |          1.00 |       0.0%
-    10 |          1.00 |       0.0%
-    15 |          4.00 |     300.0%
-    25 |         21.00 |     425.0%
-    50 |        163.00 |     676.2%
-    75 |        545.00 |     234.4%
-   100 |       1287.00 |     136.1%
-   150 |       4322.00 |     235.8%
-   200 |      10220.00 |     136.5%
-   500 |     158975.00 |    1455.5%
+     5 |          3.00 |     200.0%
+    10 |          5.00 |      66.7%
+    15 |          7.00 |      40.0%
+    25 |         16.00 |     128.6%
+    50 |         56.00 |     250.0%
+    75 |        137.00 |     144.6%
+   100 |        272.00 |      98.5%
+   150 |        758.00 |     178.7%
+   200 |       1625.00 |     114.4%
+   500 |      20983.00 |    1191.3%
 
 === Early Accessibility Check (First 15 Passes) ===
 Pass # | Price (APT) | Within Target
 ---------------------------------------------
      1 |       1.00 | ✓
-     2 |       1.00 | ✓
-     3 |       1.00 | ✓
-     4 |       1.00 | ✓
-     5 |       1.00 | ✓
-     6 |       1.00 | ✓
-     7 |       1.00 | ✓
-     8 |       1.00 | ✓
-     9 |       1.00 | ✓
-    10 |       1.00 | ✓
-    11 |       1.00 | ✓
-    12 |       2.00 | ✓
-    13 |       3.00 | ✓
-    14 |       3.00 | ✓
-    15 |       4.00 | ✓
+     2 |       2.00 | ✓
+     3 |       2.00 | ✓
+     4 |       2.00 | ✓
+     5 |       3.00 | ✓
+     6 |       3.00 | ✓
+     7 |       3.00 | ✓
+     8 |       4.00 | ✓
+     9 |       4.00 | ✓
+    10 |       5.00 | ✓
+    11 |       5.00 | ✓
+    12 |       6.00 | ✓
+    13 |       6.00 | ✓
+    14 |       7.00 | ✓
+    15 |       7.00 | ✓
 
 === Price Band Analysis ===
 
 Entry Band (1-15):
-Average Price: 1.53 APT
-Price Range: 1.00 - 4.00 APT
-Total Price Increase: 300.0%
+Average Price: 4.00 APT
+Price Range: 1.00 - 7.00 APT
+Total Price Increase: 600.0%
 
 Growth Band (16-50):
-Average Price: 60.14 APT
-Price Range: 5.00 - 163.00 APT
-Total Price Increase: 3160.0%
+Average Price: 27.66 APT
+Price Range: 8.00 - 56.00 APT
+Total Price Increase: 600.0%
 
 Acceleration Band (51-100):
-Average Price: 616.36 APT
-Price Range: 173.00 - 1287.00 APT
-Total Price Increase: 643.9%
+Average Price: 148.30 APT
+Price Range: 59.00 - 272.00 APT
+Total Price Increase: 361.0%
 
 Exclusivity Band (101+):
-Average Price: 49845.51 APT
-Price Range: 1325.00 - 158975.00 APT
-Total Price Increase: 11898.1%
+Average Price: 6861.95 APT
+Price Range: 279.00 - 20983.00 APT
+Total Price Increase: 7420.8%
 
 ================================================================================
