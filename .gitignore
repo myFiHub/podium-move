@@ -25,3 +25,5 @@ Thumbs.db
 
 # Move artifacts
 *.mv.json 
+podium_protocol_ecosystem.png
+podiumdiagram.py
