@@ -10,6 +10,17 @@ module podium::CheerOrBoo {
     const INSUFFICIENT_BALANCE: u64 = 102;
     const ADMIN_ADDRESS: address = @podium;
 
+    // Error constants
+    const EINVALID_TARGET_ALLOCATION: u64 = 100;
+    const EINVALID_AMOUNT: u64 = 101;
+    const EINSUFFICIENT_BALANCE: u64 = 102;
+    const EEMPTY_PARTICIPANTS: u64 = 103;
+    const EMAX_PARTICIPANTS_EXCEEDED: u64 = 104;
+    const EINVALID_FEE_CONFIG: u64 = 105;
+    
+    // Add max participants limit
+    const MAX_PARTICIPANTS: u64 = 10000;
+
     #[event]
     struct CheerEvent has drop, store, copy {
         target: address,
@@ -37,8 +48,15 @@ module podium::CheerOrBoo {
         target_allocation: u64,
         unique_identifier: vector<u8>
     ) {
-        assert!(target_allocation <= 100, 100); // Must be <= 100%
-        assert!(amount > 0, 101); // Amount must be positive
+        // Validate inputs with proper error codes
+        assert!(target_allocation <= 100, EINVALID_TARGET_ALLOCATION);
+        assert!(amount > 0, EINVALID_AMOUNT);
+        assert!(vector::length(&participants) <= MAX_PARTICIPANTS, EMAX_PARTICIPANTS_EXCEEDED);
+        assert!(FEE_PERCENTAGE < 100, EINVALID_FEE_CONFIG);
+        assert!(
+            target_allocation == 100 || !vector::is_empty(&participants),
+            EEMPTY_PARTICIPANTS
+        );
 
         let fee = (amount * FEE_PERCENTAGE) / 100;
         let net_amount = amount - fee;
@@ -70,6 +88,7 @@ module podium::CheerOrBoo {
     }
 
     fun distribute_remaining(sender: &signer, participants: vector<address>, amount_per_participant: u64) {
+        assert!(!vector::is_empty(&participants), EEMPTY_PARTICIPANTS);
         let length = vector::length(&participants);
         let mut_index = 0;
         while (mut_index < length) {
@@ -134,5 +153,10 @@ module podium::CheerOrBoo {
             unique_identifier,
         };
         0x1::event::emit(event);
+    }
+
+    #[view]
+    public fun get_max_participants(): u64 {
+        MAX_PARTICIPANTS
     }
 }

@@ -150,4 +150,137 @@ module podium::CheerOrBoo_test {
         coin::destroy_burn_cap<AptosCoin>(burn_cap);
         coin::destroy_mint_cap<AptosCoin>(mint_cap);
     }
+
+    #[test(aptos_framework = @0x1)]
+    fun test_rounding_behavior() {
+        let aptos_framework = account::create_signer_for_test(@0x1);
+        let sender = account::create_account_for_test(@0x123);
+        let p1 = account::create_account_for_test(@0x101);
+        let p2 = account::create_account_for_test(@0x102);
+        let p3 = account::create_account_for_test(@0x103);
+        
+        // Initialize AptosCoin
+        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(&aptos_framework);
+        coin::register<AptosCoin>(&sender);
+        coin::register<AptosCoin>(&p1);
+        coin::register<AptosCoin>(&p2);
+        coin::register<AptosCoin>(&p3);
+        
+        // Fund sender with 100 OCTA
+        let coins = coin::mint<AptosCoin>(100, &mint_cap);
+        coin::deposit(@0x123, coins);
+
+        let participants = vector::empty<address>();
+        vector::push_back(&mut participants, @0x101);
+        vector::push_back(&mut participants, @0x102);
+        vector::push_back(&mut participants, @0x103);
+
+        CheerOrBoo::cheer_or_boo(
+            &sender,
+            @0x999,
+            participants,
+            true,
+            100,  // Total amount
+            0,    // 0% to target
+            b"rounding_test"
+        );
+
+        // Verify distribution (100 - 5% fee = 95)
+        // 95 / 3 = 31 with 2 remainder
+        assert!(coin::balance<AptosCoin>(@0x101) == 31, 0);
+        assert!(coin::balance<AptosCoin>(@0x102) == 31, 1);
+        assert!(coin::balance<AptosCoin>(@0x103) == 31, 2);
+        
+        // Remainder 2 should stay in sender's account
+        assert!(coin::balance<AptosCoin>(@0x123) == 100 - 5 - 31*3, 3);
+
+        coin::destroy_burn_cap<AptosCoin>(burn_cap);
+        coin::destroy_mint_cap<AptosCoin>(mint_cap);
+    }
+
+    #[test(aptos_framework = @0x1)]
+    #[expected_failure(abort_code = 104)]
+    fun test_max_participants_limit() {
+        let aptos_framework = account::create_signer_for_test(@0x1);
+        let sender = account::create_account_for_test(@0x123);
+        
+        let participants = vector::empty<address>();
+        let i = 0;
+        while (i < CheerOrBoo::get_max_participants() + 1) {
+            vector::push_back(&mut participants, @0x1);
+            i = i + 1;
+        };
+
+        CheerOrBoo::cheer_or_boo(
+            &sender,
+            @0x999,
+            participants,
+            true,
+            1000,
+            0,
+            b"max_participants_test"
+        );
+    }
+
+    #[test(aptos_framework = @0x1)]
+    #[expected_failure(abort_code = 103)]
+    fun test_empty_participants() {
+        let aptos_framework = account::create_signer_for_test(@0x1);
+        let sender = account::create_account_for_test(@0x123);
+        
+        // Initialize AptosCoin and fund sender
+        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(&aptos_framework);
+        coin::register<AptosCoin>(&sender);
+        coin::deposit(@0x123, coin::mint<AptosCoin>(1000, &mint_cap));
+        
+        // Ensure fee address exists
+        let fee_account = account::create_account_for_test(@fihub);
+
+        CheerOrBoo::cheer_or_boo(
+            &sender,
+            @0x999,
+            vector::empty<address>(), // Empty participants
+            true,
+            1000,
+            0,
+            b"empty_participants_test"
+        );
+
+        coin::destroy_burn_cap<AptosCoin>(burn_cap);
+        coin::destroy_mint_cap<AptosCoin>(mint_cap);
+    }
+
+    #[test(aptos_framework = @0x1)]
+    fun test_full_target_allocation() {
+        let aptos_framework = account::create_signer_for_test(@0x1);
+        let sender = account::create_account_for_test(@0x123);
+        let target = account::create_account_for_test(@0x999);
+        
+        // Initialize AptosCoin properly
+        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(&aptos_framework);
+        
+        coin::register<AptosCoin>(&sender);
+        coin::register<AptosCoin>(&target);
+        
+        // Fund sender
+        let coins = coin::mint<AptosCoin>(1000, &mint_cap);
+        coin::deposit(@0x123, coins);
+
+        CheerOrBoo::cheer_or_boo(
+            &sender,
+            @0x999,
+            vector::empty<address>(), // No participants
+            true,
+            1000,
+            100, // 100% to target
+            b"full_target_test"
+        );
+
+        // 1000 - 5% fee = 950
+        assert!(coin::balance<AptosCoin>(@0x999) == 950, 0);
+
+        // Clean up
+        coin::destroy_burn_cap<AptosCoin>(burn_cap);
+        coin::destroy_mint_cap<AptosCoin>(mint_cap);
+    }
 } 
