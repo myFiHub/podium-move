@@ -375,3 +375,70 @@ The protocol implements a bonding curve mechanism for pass trading with the foll
 - Total supply tracked per target/outpost
 - Last trade price recorded
 - Events emitted for buys and sells
+
+## Testing
+
+### CheerOrBoo Tests
+
+The test suite verifies the core functionality and edge cases of the CheerOrBoo system:
+
+#### Core Functionality Tests
+1. `test_cheer`
+   - Verifies basic cheering mechanism
+   - Tests 50/50 split between target and participants
+   - Confirms correct fee deduction (5%)
+   - Validates even distribution among participants
+
+2. `test_boo`
+   - Tests negative feedback mechanism
+   - Verifies 30/70 target/participant split
+   - Ensures proper fee handling
+   - Checks single participant distribution
+
+#### Distribution Scale Tests
+1. `test_small_participants_distribution`
+   - Tests distribution for small groups (10, 25, 50 participants)
+   - Verifies consistent distribution across multiple iterations
+   - Ensures proper cleanup between tests
+
+2. `test_medium_participants_distribution`
+   - Validates medium-scale distribution (100, 250, 500 participants)
+   - Tests system stability with larger groups
+   - Verifies consistent per-participant amounts
+
+3. `test_large_participants_distribution`
+   - Stress tests with 1000 participants
+   - Validates system performance at scale
+   - Ensures fair distribution even with large numbers
+
+#### Edge Cases and Limits
+1. `test_max_participants_limit`
+   - Verifies enforcement of maximum participant limit
+   - Tests system's boundary conditions
+   - Ensures graceful failure when limit exceeded
+
+2. `test_empty_participants`
+   - Validates handling of empty participant lists
+   - Tests system's input validation
+   - Ensures proper error handling
+
+3. `test_insufficient_balance`
+   - Verifies balance checking
+   - Tests insufficient funds scenarios
+   - Ensures proper error handling
+
+4. `test_rounding_behavior`
+   - Tests distribution with indivisible amounts
+   - Verifies remainder handling
+   - Ensures no funds are lost in rounding
+
+5. `test_full_target_allocation`
+   - Tests 100% allocation to target
+   - Verifies fee handling without participants
+   - Validates extreme allocation scenarios
+
+#### Distribution Verification
+- Each test verifies correct fee deduction (5%)
+- Validates even distribution among participants
+- Checks remainder handling
+- Ensures no funds are lost in the process
