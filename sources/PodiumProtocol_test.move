@@ -274,79 +274,62 @@ module podium::PodiumProtocol_test {
         amount / OCTA
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, user1 = @user1, user2 = @user2, target = @target)]
-    public fun test_pass_trading(
+    #[test(aptos_framework = @0x1, admin = @podium, user1 = @user1, user2 = @user2)]
+    fun test_pass_trading(
         aptos_framework: &signer,
         admin: &signer,
         user1: &signer,
         user2: &signer,
-        target: &signer,
-    ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, user1, user2, target);
+    ) acquires Config {
+        setup_test(aptos_framework, admin, user1, user2, user1);
         
         let user1_addr = signer::address_of(user1);
         let user2_addr = signer::address_of(user2);
         
-        // Record initial balances
-        let initial_apt_balance = coin::balance<AptosCoin>(user1_addr);
-        let initial_target_balance = coin::balance<AptosCoin>(TARGET);
+        // Use target address consistently
+        let target_addr = user1_addr;
         
-        // Create pass token
+        // Create pass token first
         PodiumProtocol::create_pass_token(
-            target,
-            TARGET,
+            user1,
+            target_addr,
             string::utf8(b"Test Pass"),
             string::utf8(b"Test Pass Description"),
             string::utf8(b"https://test.uri"),
         );
         
-        // Buy passes - use a reasonable amount for testing
-        let buy_amount = 2; // Use 2 passes so we can transfer 1 to user2
+        // Record initial balances
+        let initial_apt_balance = coin::balance<AptosCoin>(user1_addr);
+        
+        let buy_amount = 2;
         validate_whole_pass_amount(buy_amount);
         
         // Calculate fees before buy
         let (buy_price, protocol_fee, subject_fee, referral_fee) = 
-            PodiumProtocol::calculate_buy_price_with_fees(TARGET, buy_amount, option::none());
-        let total_buy_cost = buy_price + protocol_fee + subject_fee + referral_fee;
+            PodiumProtocol::calculate_buy_price_with_fees(target_addr, buy_amount, option::none());
         
-        debug::print(&string::utf8(b"[test_pass_trading] Buy details:"));
-        debug::print(&string::utf8(b"Buy amount (OCTA units):"));
-        debug::print(&buy_amount);
-        debug::print(&string::utf8(b"Total cost:"));
-        debug::print(&total_buy_cost);
+        // Buy passes
+        PodiumProtocol::buy_pass(user1, target_addr, buy_amount, option::none());
         
-        // Execute buy
-        PodiumProtocol::buy_pass(user1, TARGET, buy_amount, option::none());
-        
-        // Verify pass balance
-        let pass_balance = PodiumProtocol::get_balance(user1_addr, TARGET);
-        debug::print(&string::utf8(b"Pass balance after buy:"));
-        debug::print(&pass_balance);
+        // Verify pass balance after buy
+        let pass_balance = PodiumProtocol::get_balance(user1_addr, target_addr);
         assert!(pass_balance == buy_amount, 0);
         
-        // Transfer half the passes to user2
-        let transfer_amount = buy_amount / 2;
-        validate_whole_pass_amount(transfer_amount);
+        // Transfer 1 pass to user2
+        PodiumProtocol::transfer_pass(user1, user2_addr, target_addr, 1);
         
-        let asset_symbol = get_asset_symbol(TARGET);
-        PodiumProtocol::transfer_pass(user1, user2_addr, asset_symbol, transfer_amount);
+        // Verify final balances
+        let user1_final = PodiumProtocol::get_balance(user1_addr, target_addr);
+        let user2_final = PodiumProtocol::get_balance(user2_addr, target_addr);
         
-        // Verify updated pass balances
-        let final_user1_balance = PodiumProtocol::get_balance(user1_addr, TARGET);
-        let final_user2_balance = PodiumProtocol::get_balance(user2_addr, TARGET);
         debug::print(&string::utf8(b"Final balances after transfer:"));
         debug::print(&string::utf8(b"User1:"));
-        debug::print(&final_user1_balance);
+        debug::print(&user1_final);
         debug::print(&string::utf8(b"User2:"));
-        debug::print(&final_user2_balance);
+        debug::print(&user2_final);
         
-        assert!(final_user1_balance == transfer_amount, 1);
-        assert!(final_user2_balance == transfer_amount, 2);
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_pass_trading: PASS"));
+        assert!(user1_final == 1, 1);
+        assert!(user2_final == 1, 2);
     }
 
     #[test(admin = @podium, unauthorized_user = @user1)]
@@ -1333,4 +1316,34 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_update_bonding_curve_params: PASS"));
     }
+
+
+    #[test]
+    fun test_asset_symbol_generation() {
+        let addr = @0x123;
+        let addr2 = @0x456;
+        let symbol = PodiumProtocol::get_asset_symbol(addr);
+        let symbol2 = PodiumProtocol::get_asset_symbol(addr2);
+        
+        // Should start with P and have 6 hex chars (3 bytes)
+        assert!(string::length(&symbol) == 7, 0); // P + 6 chars
+        assert!(
+            *vector::borrow(string::bytes(&symbol), 0) == *vector::borrow(&b"P", 0),
+            1
+        );
+        
+        // Verify different addresses get different symbols
+        assert!(symbol != symbol2, 2);
+        
+        // Test string-based symbol
+        let target_id = string::utf8(b"test_target");
+        let str_symbol = PodiumProtocol::get_asset_symbol_from_string(target_id);
+        assert!(string::length(&str_symbol) == 7, 3);
+        assert!(
+            *vector::borrow(string::bytes(&str_symbol), 0) == *vector::borrow(&b"P", 0),
+            4
+        );
+    }
+
+   
 } 

@@ -22,6 +22,7 @@ module podium::PodiumProtocol {
     use aptos_framework::aptos_account;
     use std::bcs;
 
+
     // Error constants - Core Protocol
     const ENOT_ADMIN: u64 = 1;
     const EINVALID_FEE_VALUE: u64 = 2;
@@ -906,13 +907,11 @@ module podium::PodiumProtocol {
     /// Withdraw coins from vault
     fun withdraw_from_vault(amount: u64): coin::Coin<AptosCoin> acquires RedemptionVault {
         let vault = borrow_global_mut<RedemptionVault>(@podium);
-        let current_balance = coin::value(&vault.coins);
-        debug::print(&string::utf8(b"[vault] Attempting withdrawal from vault:"));
-        debug::print(&amount);
-        debug::print(&string::utf8(b"[vault] Current vault balance:"));
-        debug::print(&current_balance);
         
+        // Fix: Use coin::value directly
+        let current_balance = coin::value(&vault.coins);
         assert!(current_balance >= amount, error::invalid_state(EINSUFFICIENT_BALANCE));
+        
         coin::extract(&mut vault.coins, amount)
     }
 
@@ -930,7 +929,8 @@ module podium::PodiumProtocol {
     }
 
     /// Get total supply
-    fun get_total_supply(target_addr: address): u64 acquires Config {
+    #[view]
+    public fun get_total_supply(target_addr: address): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
         if (!table::contains(&config.pass_stats, target_addr)) {
             return 0
@@ -959,23 +959,24 @@ module podium::PodiumProtocol {
     /// Get asset symbol for a target/outpost
     public fun get_asset_symbol(target: address): String {
         debug::print(&string::utf8(b"[get_asset_symbol] Creating symbol"));
-        // Create a prefix for the symbol
         let symbol = string::utf8(b"P");
         
-        // Convert address to bytes and take first few bytes
+        // Convert address to bytes using BCS
         let addr_bytes = bcs::to_bytes(&target);
-        let len = vector::length<u8>(&addr_bytes);
-        let take_bytes = if (len > 3) 3 else len;
+        let len = vector::length(&addr_bytes);
         
-        // Convert bytes to hex string and append
+        // Always take last 3 bytes for consistent length
+        let start_index = if (len > 3) { len - 3 } else { 0 };
+        let end_index = len;
+        
         let hex_chars = b"0123456789ABCDEF";
-        let i = 0;
-        while (i < take_bytes) {
+        let i = start_index;
+        while (i < end_index) {
             let byte = *vector::borrow(&addr_bytes, i);
-            let hi = byte >> 4;
-            let lo = byte & 0xF;
-            let hi_char = vector::singleton(*vector::borrow(&hex_chars, (hi as u64)));
-            let lo_char = vector::singleton(*vector::borrow(&hex_chars, (lo as u64)));
+            let hi = ((byte >> 4) as u64);
+            let lo = ((byte & 0xF) as u64);
+            let hi_char = vector::singleton(*vector::borrow(&hex_chars, hi));
+            let lo_char = vector::singleton(*vector::borrow(&hex_chars, lo));
             string::append(&mut symbol, string::utf8(hi_char));
             string::append(&mut symbol, string::utf8(lo_char));
             i = i + 1;
@@ -988,11 +989,29 @@ module podium::PodiumProtocol {
 
     /// Get asset symbol from string
     public fun get_asset_symbol_from_string(target_id: String): String {
-        debug::print(&string::utf8(b"[get_asset_symbol] Creating symbol"));
-        let symbol = string::utf8(b"T1");
-        debug::print(&string::utf8(b"Generated symbol:"));
-        debug::print(&symbol);
+        // Generate symbol from target_id hash
+        let hash = bcs::to_bytes(&target_id);
+        let symbol = string::utf8(b"P"); // P for Pass
+        
+        // Take first 3 bytes of hash
+        let i = 0;
+        while (i < 3 && i < vector::length(&hash)) {
+            let byte = *vector::borrow(&hash, i);
+            let hex = string::utf8(byte_to_hex(byte));
+            string::append(&mut symbol, hex);
+            i = i + 1;
+        };
         symbol
+    }
+
+    fun byte_to_hex(byte: u8): vector<u8> {
+        let hex_chars = b"0123456789ABCDEF";
+        let hi = ((byte >> 4) as u64);
+        let lo = ((byte & 0xF) as u64);
+        vector[
+            *vector::borrow(&hex_chars, hi),
+            *vector::borrow(&hex_chars, lo)
+        ]
     }
 
     /// Get metadata object address
