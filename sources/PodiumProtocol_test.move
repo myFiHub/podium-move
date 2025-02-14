@@ -280,7 +280,7 @@ module podium::PodiumProtocol_test {
         admin: &signer,
         user1: &signer,
         user2: &signer,
-    ) acquires Config {
+    ) {
         setup_test(aptos_framework, admin, user1, user2, user1);
         
         let user1_addr = signer::address_of(user1);
@@ -315,8 +315,11 @@ module podium::PodiumProtocol_test {
         let pass_balance = PodiumProtocol::get_balance(user1_addr, target_addr);
         assert!(pass_balance == buy_amount, 0);
         
+        // Generate asset symbol for transfer
+        let asset_symbol = PodiumProtocol::get_asset_symbol(target_addr);
+        
         // Transfer 1 pass to user2
-        PodiumProtocol::transfer_pass(user1, user2_addr, target_addr, 1);
+        PodiumProtocol::transfer_pass(user1, user2_addr, asset_symbol, 1);
         
         // Verify final balances
         let user1_final = PodiumProtocol::get_balance(user1_addr, target_addr);
