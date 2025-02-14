@@ -32,6 +32,7 @@ module podium::PodiumProtocol {
     const EINVALID_FEE: u64 = 6;
     const EPROTOCOL_NOT_INITIALIZED: u64 = 7;
     const EINVALID_WEIGHT: u64 = 8;  // New error for invalid weight parameters
+    const EINVALID_ROYALTY: u64 = 28;
 
     // Error constants - Outpost Related
     const EOUTPOST_EXISTS: u64 = 8;
@@ -66,6 +67,8 @@ module podium::PodiumProtocol {
     const COLLECTION_URI_BYTES: vector<u8> = b"https://podium.fi/outposts";
     const MAX_FEE_PERCENTAGE: u64 = 10000; // 100% = 10000 basis points
     const OUTPOST_FEE_SHARE: u64 = 500;
+    const DEFAULT_OUTPOST_ROYALTY_NUMERATOR: u64 = 500;  // 5%
+    const ROYALTY_DENOMINATOR: u64 = 10000;  // 100% = 10000 basis points
 
     // Constants - Fee related (in basis points)
     const BPS: u64 = 10000; // 100% = 10000 basis points
@@ -97,9 +100,23 @@ module podium::PodiumProtocol {
     // Calculate the minimum unit (1 whole pass)
     const MIN_WHOLE_PASS: u64 = 100000000; // One whole pass unit (10^8)
 
+    // Constants for metadata validation
+    const MAX_NAME_LENGTH: u64 = 128;
+    const MAX_DESCRIPTION_LENGTH: u64 = 1000;
+    const MAX_URI_LENGTH: u64 = 512;
+
+    // Constants for royalty validation
+    const MIN_ROYALTY_NUMERATOR: u64 = 0;    // 0%
+    const MAX_ROYALTY_NUMERATOR: u64 = 3000; // 30% in basis points
+
     // ============ Core Data Structures ============
 
-    /// Outpost data structure
+    /// Capability to modify outpost royalties
+    struct OutpostRoyaltyCapability has key {
+        mutator_ref: royalty::MutatorRef,
+    }
+
+    /// Outpost data structure - remove mutator_ref from here
     struct OutpostData has key, store {
         collection: Object<collection::Collection>,
         name: String,
@@ -123,6 +140,8 @@ module podium::PodiumProtocol {
 
     /// Central configuration
     struct Config has key {
+        collection: Object<collection::Collection>,
+        collection_addr: address,  // Keep both for compatibility
         // Fee configuration
         protocol_fee_percent: u64,
         subject_fee_percent: u64,
@@ -139,7 +158,6 @@ module podium::PodiumProtocol {
         weight_c: u64,
         
         // Collections and stats
-        collection_addr: address,
         outposts: Table<address, Object<OutpostData>>,
         pass_stats: Table<address, PassStats>,
         
@@ -219,6 +237,13 @@ module podium::PodiumProtocol {
         weight_a: u64,
         weight_b: u64,
         weight_c: u64
+    }
+
+    /// Get bonding curve parameters
+    #[view]
+    public fun get_bonding_curve_params(): (u64, u64, u64) acquires Config {
+        let config = borrow_global<Config>(@podium);
+        (config.weight_a, config.weight_b, config.weight_c)
     }
 
     // ============ Events ============
@@ -306,7 +331,6 @@ module podium::PodiumProtocol {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
         
         if (!exists<Config>(@podium)) {
-            // Create collection
             let constructor_ref = collection::create_unlimited_collection(
                 admin,
                 string::utf8(COLLECTION_DESCRIPTION_BYTES),
@@ -315,10 +339,12 @@ module podium::PodiumProtocol {
                 string::utf8(COLLECTION_URI_BYTES),
             );
 
-            let collection_addr = object::address_from_constructor_ref(&constructor_ref);
+            let collection = object::object_from_constructor_ref<collection::Collection>(&constructor_ref);
+            let collection_addr = object::object_address(&collection);
 
-            // Initialize main config
             move_to(admin, Config {
+                collection,
+                collection_addr,
                 protocol_fee_percent: MAX_PROTOCOL_FEE_PERCENT,
                 subject_fee_percent: MAX_SUBJECT_FEE_PERCENT,
                 referral_fee_percent: MAX_REFERRAL_FEE_PERCENT,
@@ -329,7 +355,6 @@ module podium::PodiumProtocol {
                 weight_a: DEFAULT_WEIGHT_A,
                 weight_b: DEFAULT_WEIGHT_B,
                 weight_c: DEFAULT_WEIGHT_C,
-                collection_addr,
                 outposts: table::new(),
                 pass_stats: table::new(),
                 subscription_configs: table::new(),
@@ -346,7 +371,6 @@ module podium::PodiumProtocol {
                 bonding_curve_events: account::new_event_handle<BondingCurveUpdateEvent>(admin),
             });
 
-            // Initialize asset capabilities
             move_to(admin, AssetCapabilities {
                 mint_refs: table::new(),
                 burn_refs: table::new(),
@@ -354,12 +378,10 @@ module podium::PodiumProtocol {
                 metadata_objects: table::new(),
             });
 
-            // Initialize redemption vault
             move_to(admin, RedemptionVault {
                 coins: coin::zero<AptosCoin>()
             });
 
-            // Initialize upgrade capability
             move_to(admin, UpgradeCapability {
                 version: 1
             });
@@ -369,111 +391,30 @@ module podium::PodiumProtocol {
     // ============ Outpost Management Functions ============
 
     /// Creates a new outpost
-    public fun create_outpost_internal(
+    public fun create_outpost(
         creator: &signer,
         name: String,
         description: String,
         uri: String,
     ): Object<OutpostData> acquires Config {
-        // Verify protocol is initialized
-        assert!(exists<Config>(@podium), error::not_found(EPROTOCOL_NOT_INITIALIZED));
+        // Validate metadata
+        validate_outpost_metadata(&name, &description, &uri);
 
-        // Verify creator has a valid account
-        assert!(account::exists_at(signer::address_of(creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
+        // Always use default royalty settings
+        let royalty = option::some(royalty::create(
+            DEFAULT_OUTPOST_ROYALTY_NUMERATOR,
+            ROYALTY_DENOMINATOR,
+            @podium
+        ));
 
-        debug::print(&string::utf8(b"=== Starting create_outpost_internal ==="));
-        
-        // Handle payment and print
-        debug::print(&string::utf8(b"Processing payment of:"));
-        let purchase_price = get_outpost_purchase_price();
-        debug::print(&purchase_price);
-        coin::transfer<AptosCoin>(creator, @podium, purchase_price);
-        debug::print(&string::utf8(b"Payment processed"));
-        
-        // Print creator info
-        debug::print(&string::utf8(b"Creator address:"));
-        debug::print(&signer::address_of(creator));
-
-        // Get collection data
-        let config = borrow_global_mut<Config>(@podium);
-        let collection_addr = config.collection_addr;
-        
-        debug::print(&string::utf8(b"Collection address:"));
-        debug::print(&collection_addr);
-
-        // Print collection details before token creation
-        let collection_name = get_collection_name();
-        debug::print(&string::utf8(b"Collection name:"));
-        debug::print(&collection_name);
-        
-        // Print seed calculation for deterministic address
-        let seed = token::create_token_seed(&collection_name, &name);
-        debug::print(&string::utf8(b"Token seed:"));
-        debug::print(&seed);
-        
-        // Print expected object address
-        let expected_obj_addr = object::create_object_address(&signer::address_of(creator), seed);
-        debug::print(&string::utf8(b"Expected object address:"));
-        debug::print(&expected_obj_addr);
-
-        // Get collection object
-        let collection = object::address_to_object<collection::Collection>(collection_addr);
-        
-        // Create token using our custom function that handles collection properly
-        let constructor_ref = create_named_token_with_collection(
+        // Return the created outpost
+        create_outpost_internal(
             creator,
-            collection,
-            description,
-            name,
-            option::none<Royalty>(), // Explicitly specify type
-            uri,
-        );
-
-        // Initialize outpost data
-        let outpost_signer = object::generate_signer(&constructor_ref);
-        move_to(&outpost_signer, OutpostData {
-            collection,
             name,
             description,
             uri,
-            price: purchase_price,
-            fee_share: OUTPOST_FEE_SHARE,
-            emergency_pause: false,
-        });
-
-        // Now get the object reference after data is initialized
-        let token = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
-        let token_addr = object::object_address(&token);
-        debug::print(&string::utf8(b"Token created at address:"));
-        debug::print(&token_addr);
-
-        // Store outpost in collection
-        table::add(&mut config.outposts, token_addr, token);
-
-        // Emit creation event
-        event::emit_event(
-            &mut config.outpost_created_events,
-            OutpostCreatedEvent {
-                creator: signer::address_of(creator),
-                outpost_address: token_addr,
-                name,
-                price: purchase_price,
-                fee_share: OUTPOST_FEE_SHARE,
-            }
-        );
-
-        debug::print(&string::utf8(b"=== Finished create_outpost_internal ==="));
-        token
-    }
-
-    /// Entry function to create a new outpost
-    public entry fun create_outpost(
-        creator: &signer,
-        name: String,
-        description: String,
-        uri: String,
-    ) acquires Config {
-        let _outpost = create_outpost_internal(creator, name, description, uri);
+            royalty,
+        )
     }
 
     /// Creates a new token with a deterministic address
@@ -522,12 +463,12 @@ module podium::PodiumProtocol {
 
     /// Update outpost price (owner only)
     public entry fun update_outpost_price(
-        owner: &signer,
+        _owner: &signer,
         outpost: Object<OutpostData>,
         new_price: u64,
     ) acquires OutpostData {
         // Validate owner
-        assert!(object::is_owner(outpost, signer::address_of(owner)), error::permission_denied(ENOT_OWNER));
+        assert!(object::is_owner(outpost, signer::address_of(_owner)), error::permission_denied(ENOT_OWNER));
         assert!(new_price > 0, error::invalid_argument(EINVALID_PRICE));
         
         let outpost_data = borrow_global_mut<OutpostData>(object::object_address(&outpost));
@@ -547,6 +488,22 @@ module podium::PodiumProtocol {
         
         let outpost_data = borrow_global_mut<OutpostData>(object::object_address(&outpost));
         outpost_data.emergency_pause = !outpost_data.emergency_pause;
+    }
+
+    /// Transfer outpost ownership to a new address
+    public entry fun transfer_outpost_ownership(
+        owner: &signer,
+        outpost: Object<OutpostData>,
+        new_owner: address
+    ) {
+        // Verify current ownership
+        assert!(object::is_owner(outpost, signer::address_of(owner)), error::permission_denied(ENOT_OWNER));
+        
+        // Verify new owner has account
+        assert!(account::exists_at(new_owner), error::not_found(EACCOUNT_NOT_REGISTERED));
+        
+        // Transfer ownership
+        object::transfer(owner, outpost, new_owner);
     }
 
     // ============ Pass Token Management Functions ============
@@ -580,14 +537,12 @@ module podium::PodiumProtocol {
 
     /// Transfer passes between accounts
     public fun transfer_pass(
-        from: &signer,
+        _from: &signer,
         to: address,
         target_addr: address,  // Either outpost address or user address
         amount: u64
     ) acquires AssetCapabilities {
-        let from_addr = signer::address_of(from);
-        
-        validate_pass_amount(amount);
+        let _from_addr = signer::address_of(_from);
         
         // Get metadata using target address
         let asset_symbol = get_asset_symbol(target_addr);
@@ -597,14 +552,16 @@ module podium::PodiumProtocol {
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
         
         // Transfer using primary store
-        primary_fungible_store::transfer(from, *metadata, to, amount);
+        primary_fungible_store::transfer(_from, *metadata, to, amount);
     }
 
     // ============ Pass Trading & Bonding Curve Functions ============
 
-    /// Calculate price for a single pass at a given supply level
-    /// * `supply` - Current supply of passes (in actual units)
-    /// * Returns the calculated price in OCTA units (scaled for APT)
+    /// Calculate price for a single pass at given supply
+    /// 
+    /// Parameters:
+    /// - supply: Current supply of passes (actual units)
+    /// Returns calculated price in OCTA units (scaled for APT)
     #[view]
     public fun calculate_single_pass_price(supply: u64): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
@@ -625,11 +582,8 @@ module podium::PodiumProtocol {
     public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
         debug::print(&string::utf8(b"=== Starting price calculation ==="));
         debug::print(&string::utf8(b"Input parameters:"));
-        debug::print(&string::utf8(b"Supply (actual units):"));
         debug::print(&supply);
-        debug::print(&string::utf8(b"Amount (actual units):"));
         debug::print(&amount);
-        debug::print(&string::utf8(b"Is sell:"));
         debug::print(&is_sell);
 
         let total_price = 0;
@@ -669,10 +623,10 @@ module podium::PodiumProtocol {
         referrer: Option<address>
     ): (u64, u64, u64, u64) acquires Config {
         // Get current supply
-        let current_supply = get_total_supply(target_addr);
+        let _current_supply = get_total_supply(target_addr);
         
         // Calculate raw price first to avoid dangling reference
-        let price = calculate_price(current_supply, amount, false);
+        let price = calculate_price(_current_supply, amount, false);
         
         // Get config for fee calculations after price calculation
         let config = borrow_global<Config>(@podium);
@@ -699,15 +653,15 @@ module podium::PodiumProtocol {
         amount: u64
     ): (u64, u64, u64) acquires Config {
         // Get current supply
-        let current_supply = get_total_supply(target_addr);
+        let _current_supply = get_total_supply(target_addr);
         
         // Basic validations matching Solidity
-        if (current_supply == 0 || amount == 0 || current_supply < amount) {
+        if (amount == 0 || _current_supply < amount) {
             return (0, 0, 0)
         };
 
         // Calculate raw price first to avoid dangling reference
-        let price = calculate_price(current_supply - amount, amount, true);
+        let price = calculate_price(_current_supply - amount, amount, true);
         
         // Get config for fee calculations after price calculation
         let config = borrow_global<Config>(@podium);
@@ -719,7 +673,7 @@ module podium::PodiumProtocol {
         // Add debug prints
         debug::print(&string::utf8(b"[calculate_sell_price_with_fees] Calculation:"));
         debug::print(&string::utf8(b"Current supply:"));
-        debug::print(&current_supply);
+        debug::print(&_current_supply);
         debug::print(&string::utf8(b"Amount to sell:"));
         debug::print(&amount);
         debug::print(&string::utf8(b"Raw price:"));
@@ -744,7 +698,7 @@ module podium::PodiumProtocol {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Get current supply in interface units
-        let current_supply = get_total_supply(target_addr);
+        let _current_supply = get_total_supply(target_addr);
         
         // Initialize pass stats if needed
         init_pass_stats(target_addr);
@@ -1135,10 +1089,10 @@ module podium::PodiumProtocol {
     }
 
     /// Create subscription tier
-    public fun create_subscription_tier(
-        creator: &signer,
+    public entry fun create_subscription_tier(
+        _owner: &signer,
         outpost: Object<OutpostData>,
-        tier_name: String,
+        name: String,
         price: u64,
         duration: u64,
     ) acquires Config {
@@ -1146,9 +1100,9 @@ module podium::PodiumProtocol {
         debug::print(&string::utf8(b"[create_subscription_tier] Outpost address:"));
         debug::print(&outpost_addr);
         debug::print(&string::utf8(b"[create_subscription_tier] Creator address:"));
-        debug::print(&signer::address_of(creator));
+        debug::print(&signer::address_of(_owner));
         
-        assert!(verify_ownership(outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
+        assert!(verify_ownership(outpost, signer::address_of(_owner)), error::permission_denied(ENOT_OWNER));
         debug::print(&string::utf8(b"[create_subscription_tier] Ownership verified"));
         
         let config = borrow_global_mut<Config>(@podium);
@@ -1165,13 +1119,13 @@ module podium::PodiumProtocol {
         let len = vector::length(&sub_config.tiers);
         while (i < len) {
             let tier = vector::borrow(&sub_config.tiers, i);
-            assert!(tier.name != tier_name, error::already_exists(ETIER_EXISTS));
+            assert!(tier.name != name, error::already_exists(ETIER_EXISTS));
             i = i + 1;
         };
 
         // Add new tier
         vector::push_back(&mut sub_config.tiers, SubscriptionTier {
-            name: tier_name,
+            name,
             price,
             duration,
         });
@@ -1460,10 +1414,10 @@ module podium::PodiumProtocol {
 
     /// Creates a new target asset
     public fun create_target_asset(
-        creator: &signer,
+        _creator: &signer,
         target_id: String,
         name: String,
-        description: String,
+        _description: String,  // Prefix unused with _
         icon_uri: String,
         project_uri: String,
     ): Object<Metadata> acquires AssetCapabilities {
@@ -1471,7 +1425,7 @@ module podium::PodiumProtocol {
         
         // Create metadata object using creator's signer
         let constructor_ref = object::create_named_object(
-            creator,
+            _creator,
             *string::bytes(&asset_symbol)
         );
 
@@ -1508,7 +1462,7 @@ module podium::PodiumProtocol {
         creator: &signer,
         target_addr: address,
         name: String,
-        description: String,
+        _description: String,  // Prefix unused with _
         uri: String,
     ) acquires AssetCapabilities {
         let asset_symbol = get_asset_symbol(target_addr);
@@ -1703,17 +1657,6 @@ module podium::PodiumProtocol {
         );
     }
 
-    /// Get bonding curve parameters
-    #[view]
-    public fun get_bonding_curve_params(): (u64, u64, u64) acquires Config {
-        let config = borrow_global<Config>(@podium);
-        (
-            config.weight_a,
-            config.weight_b,
-            config.weight_c
-        )
-    }
-
     /// Calculate price for a single pass at a given supply level using custom parameters
     /// * `supply` - Current supply of passes (in actual units)
     /// * `weight_a` - Custom weight A parameter in basis points
@@ -1805,4 +1748,121 @@ module podium::PodiumProtocol {
         
         mut_result
     }
+
+    /// Validate outpost metadata
+    fun validate_outpost_metadata(
+        name: &String,
+        description: &String,
+        uri: &String
+    ) {
+        assert!(string::length(name) <= MAX_NAME_LENGTH, error::invalid_argument(EINVALID_METADATA));
+        assert!(string::length(description) <= MAX_DESCRIPTION_LENGTH, error::invalid_argument(EINVALID_METADATA));
+        assert!(string::length(uri) <= MAX_URI_LENGTH, error::invalid_argument(EINVALID_METADATA));
+        
+        // Validate URI format (basic check)
+        let uri_bytes = string::bytes(uri);
+        assert!(vector::length(uri_bytes) > 0, error::invalid_argument(EINVALID_METADATA));
+    }
+
+    // Add new error constant
+    const EINVALID_METADATA: u64 = 27;
+
+    /// Update outpost royalty (admin only)
+    public entry fun update_outpost_royalty(
+        admin: &signer,
+        outpost: Object<OutpostData>,
+        numerator: u64,
+    ) acquires OutpostRoyaltyCapability {
+        // Verify admin
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        // Validate royalty amount
+        assert!(
+            numerator >= MIN_ROYALTY_NUMERATOR && numerator <= MAX_ROYALTY_NUMERATOR,
+            error::invalid_argument(EINVALID_ROYALTY)
+        );
+
+        // Get outpost address
+        let outpost_addr = object::object_address(&outpost);
+        
+        // Get royalty capability through global storage
+        let cap = borrow_global<OutpostRoyaltyCapability>(outpost_addr);
+        
+        // Create new royalty
+        let new_royalty = royalty::create(numerator, ROYALTY_DENOMINATOR, @podium);
+        
+        // Update royalty using capability
+        royalty::update(&cap.mutator_ref, new_royalty);
+    }
+
+    /// Creates a new outpost (internal implementation)
+    fun create_outpost_internal(
+        creator: &signer,
+        name: String,
+        description: String,
+        uri: String,
+        royalty: Option<Royalty>,
+    ): Object<OutpostData> acquires Config {
+        // Verify protocol is initialized
+        assert!(exists<Config>(@podium), error::not_found(EPROTOCOL_NOT_INITIALIZED));
+        
+        // Verify creator has a valid account
+        assert!(account::exists_at(signer::address_of(creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
+
+        // Handle payment first
+        let purchase_price = get_outpost_purchase_price();
+        coin::transfer<AptosCoin>(creator, @podium, purchase_price);
+
+        // Get config for collection info
+        let config = borrow_global_mut<Config>(@podium);
+        
+        // Create object with deterministic address
+        let seed = token::create_token_seed(&collection::name(config.collection), &name);
+        let constructor_ref = object::create_named_object(creator, seed);
+        
+        // Initialize outpost data BEFORE getting object reference
+        let outpost_signer = object::generate_signer(&constructor_ref);
+        move_to(&outpost_signer, OutpostData {
+            collection: config.collection,
+            name,
+            description,
+            uri,
+            price: purchase_price,  // Store actual paid price
+            fee_share: OUTPOST_FEE_SHARE,
+            emergency_pause: false,
+        });
+
+        // Initialize royalty if provided
+        if (option::is_some(&royalty)) {
+            royalty::init(&constructor_ref, option::extract(&mut royalty));
+        };
+
+        // Get object reference AFTER data initialization
+        let outpost = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
+        let outpost_addr = object::object_address(&outpost);
+
+        // Add to outposts table
+        table::add(&mut config.outposts, outpost_addr, outpost);
+
+        // Emit creation event
+        event::emit_event(
+            &mut config.outpost_created_events,
+            OutpostCreatedEvent {
+                creator: signer::address_of(creator),
+                outpost_address: outpost_addr,
+                name,
+                price: purchase_price,
+                fee_share: OUTPOST_FEE_SHARE,
+            }
+        );
+
+        outpost
+    }
+
+    /// Get collection
+    #[view]
+    public fun get_collection(): Object<collection::Collection> acquires Config {
+        borrow_global<Config>(@podium).collection
+    }
+
 }

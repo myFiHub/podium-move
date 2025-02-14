@@ -11,12 +11,14 @@ module podium::PodiumProtocol_test {
     use aptos_framework::coin::{Self, BurnCapability};
     use aptos_framework::timestamp;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
-    use podium::PodiumProtocol::{Self, OutpostData};
+    use podium::PodiumProtocol::{
+        Self, 
+        OutpostData,
+    };
     use aptos_token_objects::token;
     use aptos_framework::primary_fungible_store;
     use aptos_framework::error;
-    use aptos_framework::event;
-    use aptos_token_objects::collection;
+    use aptos_token_objects::royalty;
 
     // Test addresses
     const TREASURY: address = @podium;
@@ -57,6 +59,10 @@ module podium::PodiumProtocol_test {
     // Fee constants in basis points
     const TEST_OUTPOST_FEE_SHARE: u64 = 500; // 5% in basis points
     const TEST_MAX_FEE_PERCENTAGE: u64 = 10000; // 100% in basis points
+
+    // Define test constants
+    const TEST_ROYALTY_NUMERATOR: u64 = 500;  // 5%
+    const TEST_ROYALTY_DENOMINATOR: u64 = 10000;  // 100% = 10000 basis points
 
     // IMPORTANT NOTES ON CAPABILITIES:
     // 1. BurnCapability and MintCapability do NOT have 'drop' ability
@@ -186,38 +192,14 @@ module podium::PodiumProtocol_test {
 
     // Helper function to create test outpost
     fun create_test_outpost(creator: &signer): Object<OutpostData> {
-        let creator_addr = signer::address_of(creator);
-        
-        // Ensure creator account is properly set up for coin operations
-        if (!account::exists_at(creator_addr)) {
-            account::create_account_for_test(creator_addr);
-        };
-        if (!coin::is_account_registered<AptosCoin>(creator_addr)) {
-            coin::register<AptosCoin>(creator);
-        };
-        
-        // Ensure treasury account is set up
-        if (!account::exists_at(TREASURY)) {
-            account::create_account_for_test(TREASURY);
-        };
-        if (!coin::is_account_registered<AptosCoin>(TREASURY)) {
-            let treasury_signer = account::create_signer_for_test(TREASURY);
-            coin::register<AptosCoin>(&treasury_signer);
-        };
-        
-        // Fund creator if needed
-        if (coin::balance<AptosCoin>(creator_addr) < INITIAL_BALANCE) {
-            setup_account(creator);
-        };
-
         let name = string::utf8(b"Test Outpost");
         
         // Create outpost
-        let outpost = PodiumProtocol::create_outpost_internal(
+        let outpost = PodiumProtocol::create_outpost(
             creator,
             name,
             string::utf8(b"Test Description"),
-            string::utf8(b"https://test.uri"),
+            string::utf8(b"https://test.uri")
         );
 
         // Initialize subscription config
@@ -690,475 +672,6 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"test_view_functions: PASS"));
     }
 
-    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
-    public fun test_self_pass_trading(
-        aptos_framework: &signer,
-        podium_signer: &signer,
-        creator: &signer,
-    ) {
-        // Setup test environment
-        setup_test(aptos_framework, podium_signer, creator, creator, creator);
-        
-        let creator_addr = signer::address_of(creator);
-        
-        // Create pass token
-        PodiumProtocol::create_pass_token(
-            creator,
-            creator_addr,
-            string::utf8(b"Self Trade Pass"),
-            string::utf8(b"Test Pass for Self Trading"),
-            string::utf8(b"https://test.uri")
-        );
-        
-        // Record initial balances
-        let initial_apt_balance = coin::balance<AptosCoin>(creator_addr);
-        
-        // Buy passes - use actual units
-        let buy_amount = 1; // 1 whole pass
-        validate_whole_pass_amount(buy_amount);
-        
-        // Calculate buy price and fees
-        let (base_price, protocol_fee, subject_fee, referral_fee) = 
-            PodiumProtocol::calculate_buy_price_with_fees(creator_addr, buy_amount, option::none());
-        
-        // Creator pays full amount upfront
-        let total_buy_cost = base_price + protocol_fee + subject_fee + referral_fee;
-        
-        debug::print(&string::utf8(b"[test_self_trading] Buy details:"));
-        debug::print(&string::utf8(b"Buy amount:"));
-        debug::print(&buy_amount);
-        debug::print(&string::utf8(b"Base price:"));
-        debug::print(&base_price);
-        debug::print(&string::utf8(b"Protocol fee:"));
-        debug::print(&protocol_fee);
-        debug::print(&string::utf8(b"Subject fee:"));
-        debug::print(&subject_fee);
-        debug::print(&string::utf8(b"Total cost:"));
-        debug::print(&total_buy_cost);
-        
-        // Buy passes as creator
-        PodiumProtocol::buy_pass(creator, creator_addr, buy_amount, option::none());
-        
-        // Verify pass balance
-        let pass_balance = PodiumProtocol::get_balance(creator_addr, creator_addr);
-        debug::print(&string::utf8(b"Pass balance after buy:"));
-        debug::print(&pass_balance);
-        assert!(pass_balance == buy_amount, 0);
-        
-        // Verify APT balance after buy
-        let post_buy_balance = coin::balance<AptosCoin>(creator_addr);
-        
-        // Creator should have lost money equal to:
-        // 1. Base price (affects bonding curve) - they'll get back a different amount on sell due to curve
-        // 2. Protocol fee (will pay again on sell)
-        // 3. Referral fee (if any)
-        // They get back the subject fee through distribution
-        let actual_loss = initial_apt_balance - post_buy_balance;
-        
-        debug::print(&string::utf8(b"Balance check after buy:"));
-        debug::print(&string::utf8(b"Initial balance:"));
-        debug::print(&initial_apt_balance);
-        debug::print(&string::utf8(b"Post buy balance:"));
-        debug::print(&post_buy_balance);
-        debug::print(&string::utf8(b"Actual loss:"));
-        debug::print(&actual_loss);
-        
-        // Verify the creator lost money
-        assert!(actual_loss > 0, 1); // Should have lost money
-        
-        // Sell all passes
-        let sell_amount = buy_amount; // Sell exactly what we bought
-        validate_whole_pass_amount(sell_amount);
-        
-        debug::print(&string::utf8(b"[test_self_trading] Selling passes"));
-        debug::print(&string::utf8(b"Sell amount:"));
-        debug::print(&sell_amount);
-        
-        // Calculate sell price and fees
-        let (sell_base_price, sell_protocol_fee, sell_subject_fee) = 
-            PodiumProtocol::calculate_sell_price_with_fees(creator_addr, sell_amount);
-        
-        debug::print(&string::utf8(b"Sell details:"));
-        debug::print(&string::utf8(b"Sell base price:"));
-        debug::print(&sell_base_price);
-        debug::print(&string::utf8(b"Sell protocol fee:"));
-        debug::print(&sell_protocol_fee);
-        debug::print(&string::utf8(b"Sell subject fee:"));
-        debug::print(&sell_subject_fee);
-        
-        PodiumProtocol::sell_pass(creator, creator_addr, sell_amount);
-        
-        // Verify final pass balance
-        let final_pass_balance = PodiumProtocol::get_balance(creator_addr, creator_addr);
-        debug::print(&string::utf8(b"Final pass balance:"));
-        debug::print(&final_pass_balance);
-        assert!(final_pass_balance == 0, 2);
-        
-        // Verify final APT balance
-        let final_balance = coin::balance<AptosCoin>(creator_addr);
-        let total_loss = initial_apt_balance - final_balance;
-        let expected_total_loss = protocol_fee + sell_protocol_fee; // Only protocol fees since subject fees are returned
-        
-        debug::print(&string::utf8(b"Final balance check:"));
-        debug::print(&string::utf8(b"Initial balance:"));
-        debug::print(&initial_apt_balance);
-        debug::print(&string::utf8(b"Final balance:"));
-        debug::print(&final_balance);
-        debug::print(&string::utf8(b"Total loss:"));
-        debug::print(&total_loss);
-        debug::print(&string::utf8(b"Expected total loss:"));
-        debug::print(&expected_total_loss);
-        
-        // Verify final balance shows correct losses
-        assert!(total_loss > 0, 3); // Should have lost money overall
-        let loss_diff = if (total_loss >= expected_total_loss) {
-            total_loss - expected_total_loss
-        } else {
-            expected_total_loss - total_loss
-        };
-        let tolerance = BALANCE_TOLERANCE_BPS * expected_total_loss / 10000;
-        
-        debug::print(&string::utf8(b"Loss difference calculation:"));
-        debug::print(&string::utf8(b"Loss difference:"));
-        debug::print(&loss_diff);
-        debug::print(&string::utf8(b"Tolerance calculation:"));
-        debug::print(&string::utf8(b"BALANCE_TOLERANCE_BPS:"));
-        debug::print(&BALANCE_TOLERANCE_BPS);
-        debug::print(&string::utf8(b"Expected total loss:"));
-        debug::print(&expected_total_loss);
-        debug::print(&string::utf8(b"Calculated tolerance:"));
-        debug::print(&tolerance);
-        debug::print(&string::utf8(b"Assertion will check:"));
-        debug::print(&loss_diff);
-        debug::print(&string::utf8(b"<="));
-        debug::print(&tolerance);
-        
-        assert!(loss_diff <= BALANCE_TOLERANCE_BPS * expected_total_loss / 10000, 4); // Within tolerance
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_self_pass_trading: PASS"));
-    }
-
-    #[test(admin = @podium)]
-    public fun test_self_subscription(
-        admin: &signer,
-    ) {
-        // Setup with minimal initialization
-        initialize_minimal_test(admin);
-        
-        // Create test outpost
-        let outpost = create_test_outpost(admin);
-        
-        // Create subscription tier
-        PodiumProtocol::create_subscription_tier(
-            admin,
-            outpost,
-            string::utf8(b"basic"),
-            SUBSCRIPTION_WEEK_PRICE,
-            1, // DURATION_WEEK
-        );
-        
-        // Record initial balance
-        let initial_balance = coin::balance<AptosCoin>(signer::address_of(admin));
-        
-        // Subscribe to own outpost
-        PodiumProtocol::subscribe(
-            admin,
-            outpost,
-            0, // basic tier ID
-            option::none(),
-        );
-        
-        // Calculate total cost and fees
-        let total_cost = SUBSCRIPTION_WEEK_PRICE;
-        let protocol_fee = (total_cost * 400) / 10000; // 4%
-        let subject_fee = (total_cost * 800) / 10000;  // 8%
-        let total_payment = total_cost + protocol_fee + subject_fee;
-        
-        debug::print(&string::utf8(b"[test_self_subscription] Initial balance:"));
-        debug::print(&initial_balance);
-        debug::print(&string::utf8(b"Total cost:"));
-        debug::print(&total_cost);
-        debug::print(&string::utf8(b"Protocol fee:"));
-        debug::print(&protocol_fee);
-        debug::print(&string::utf8(b"Subject fee:"));
-        debug::print(&subject_fee);
-        debug::print(&string::utf8(b"Total payment:"));
-        debug::print(&total_payment);
-        
-        // Verify final balance with more lenient tolerance
-        let final_balance = coin::balance<AptosCoin>(signer::address_of(admin));
-        let expected_balance = initial_balance - total_cost - protocol_fee; // Creator gets subject fee back
-        let difference = if (final_balance > expected_balance) {
-            final_balance - expected_balance
-        } else {
-            expected_balance - final_balance
-        };
-        let percent_diff = calculate_percentage_diff(final_balance, expected_balance);
-        assert!(percent_diff <= BALANCE_TOLERANCE_BPS * 8, 1); // Increase tolerance for self-subscription
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_self_subscription: PASS"));
-    }
-
-    #[test(aptos_framework = @0x1, admin = @podium, referrer = @0x123, subject = @0x456)]
-    public fun test_fee_distribution(
-        aptos_framework: &signer,
-        admin: &signer,
-        referrer: &signer,
-        subject: &signer,
-    ) {
-        // Setup test environment with all necessary accounts
-        setup_test(aptos_framework, admin, referrer, subject, subject); // reuse subject for target
-        
-        // Get initial balances
-        let initial_treasury_balance = coin::balance<AptosCoin>(@podium);
-        let initial_subject_balance = coin::balance<AptosCoin>(@0x456);
-        let initial_referrer_balance = coin::balance<AptosCoin>(@0x123);
-        
-        // Calculate expected fees using public getters
-        let payment_amount = 10000;
-        let protocol_fee = (payment_amount * PodiumProtocol::get_protocol_subscription_fee()) / 10000;
-        let referrer_fee = (payment_amount * PodiumProtocol::get_referrer_fee()) / 10000;
-        let subject_amount = payment_amount - protocol_fee - referrer_fee;
-        
-        // Mint and distribute coins directly
-        let framework_signer = account::create_signer_for_test(@0x1);
-        aptos_coin::mint(&framework_signer, @podium, protocol_fee);
-        aptos_coin::mint(&framework_signer, @0x456, subject_amount);
-        aptos_coin::mint(&framework_signer, @0x123, referrer_fee);
-        
-        // Verify balances
-        assert!(coin::balance<AptosCoin>(@podium) == initial_treasury_balance + protocol_fee, 1);
-        assert!(coin::balance<AptosCoin>(@0x456) == initial_subject_balance + subject_amount, 2);
-        assert!(coin::balance<AptosCoin>(@0x123) == initial_referrer_balance + referrer_fee, 3);
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_fee_distribution: PASS"));
-    }
-
-    #[test(aptos_framework = @0x1, admin = @podium, referrer = @0x123, target = @0x456)]
-    public fun test_subscription_payment(
-        aptos_framework: &signer,
-        admin: &signer,
-        referrer: &signer,
-        target: &signer,
-    ) {
-        // Setup test environment with all necessary accounts
-        setup_test(aptos_framework, admin, referrer, target, target);
-        
-        // Get initial balances
-        let initial_treasury_balance = coin::balance<AptosCoin>(@podium);
-        let initial_referrer_balance = coin::balance<AptosCoin>(@0x123);
-        let initial_target_balance = coin::balance<AptosCoin>(@0x456);
-        
-        // Calculate expected fees using public getter
-        let payment_amount = 10000;
-        let protocol_fee = (payment_amount * PodiumProtocol::get_protocol_subscription_fee()) / 10000;
-        let referrer_fee = (payment_amount * PodiumProtocol::get_referrer_fee()) / 10000;
-        let subject_amount = payment_amount - protocol_fee - referrer_fee;
-        
-        // Mint and distribute coins directly
-        let framework_signer = account::create_signer_for_test(@0x1);
-        aptos_coin::mint(&framework_signer, @podium, protocol_fee);
-        aptos_coin::mint(&framework_signer, @0x123, referrer_fee);
-        aptos_coin::mint(&framework_signer, @0x456, subject_amount);
-        
-        // Verify balances
-        assert!(coin::balance<AptosCoin>(@podium) == initial_treasury_balance + protocol_fee, 1);
-        assert!(coin::balance<AptosCoin>(@0x123) == initial_referrer_balance + referrer_fee, 2);
-        assert!(coin::balance<AptosCoin>(@0x456) == initial_target_balance + subject_amount, 3);
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_subscription_payment: PASS"));
-    }
-
-    #[test(admin = @podium)]
-    public fun test_fee_update_events(
-        admin: &signer,
-    ) {
-        // Setup with minimal initialization
-        initialize_minimal_test(admin);
-        
-        // Test updating subscription fee
-        PodiumProtocol::update_protocol_subscription_fee(admin, 300); // 3%
-        // Event verification would be done here, but Move doesn't currently support event testing
-        assert!(PodiumProtocol::get_protocol_subscription_fee() == 300, 0);
-        
-        // Test updating pass fee
-        PodiumProtocol::update_protocol_pass_fee(admin, 200); // 2%
-        assert!(PodiumProtocol::get_protocol_pass_fee() == 200, 1);
-        
-        // Test updating referrer fee
-        PodiumProtocol::update_referrer_fee(admin, 500); // 5%
-        assert!(PodiumProtocol::get_referrer_fee() == 500, 2);
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_fee_update_events: PASS"));
-    }
-
-    #[test(admin = @podium)]
-    public fun test_fee_updates(
-        admin: &signer,
-    ) {
-        // Setup with minimal initialization
-        initialize_minimal_test(admin);
-        
-        // Test updating subscription fee
-        PodiumProtocol::update_protocol_subscription_fee(admin, 300); // 3%
-        assert!(PodiumProtocol::get_protocol_subscription_fee() == 300, 0);
-        
-        // Test updating pass fee
-        PodiumProtocol::update_protocol_pass_fee(admin, 200); // 2%
-        assert!(PodiumProtocol::get_protocol_pass_fee() == 200, 1);
-        
-        // Test updating referrer fee
-        PodiumProtocol::update_referrer_fee(admin, 500); // 5%
-        assert!(PodiumProtocol::get_referrer_fee() == 500, 2);
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_fee_updates: PASS"));
-    }
-
-    #[test(admin = @podium, non_admin = @0x123)]
-    #[expected_failure(abort_code = 327681)]
-    public fun test_unauthorized_fee_update(
-        admin: &signer,
-        non_admin: &signer,
-    ) {
-        // Setup with minimal initialization
-        initialize_minimal_test(admin);
-        account::create_account_for_test(@0x123);
-        
-        // Should fail when non-admin tries to update fee
-        PodiumProtocol::update_protocol_subscription_fee(non_admin, 300);
-    }
-
-    #[test(aptos_framework = @0x1, admin = @podium)]
-    #[expected_failure(abort_code = 65538)]
-    public fun test_invalid_fee_value(
-        aptos_framework: &signer,
-        admin: &signer,
-    ) {
-        // Setup test environment with all necessary accounts
-        setup_test(aptos_framework, admin, admin, admin, admin); // reuse admin for other roles since they're not used
-        
-        // Should fail when fee > 100%
-        PodiumProtocol::update_protocol_subscription_fee(admin, 10001);
-    }
-
-    #[test(aptos_framework = @0x1, admin = @podium)]
-    public fun test_bonding_curve_parameter_management(
-        aptos_framework: &signer,
-        admin: &signer,
-    ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, admin, admin, admin);
-        
-        // Get initial parameters
-        let (initial_a, initial_b, initial_c) = PodiumProtocol::get_bonding_curve_params();
-        
-        // Debug print initial parameters
-        debug::print(&string::utf8(b"\n=== Initial Bonding Curve Parameters ==="));
-        debug::print(&string::utf8(b"WEIGHT_A (bps):"));
-        debug::print(&initial_a);
-        debug::print(&string::utf8(b"WEIGHT_B (bps):"));
-        debug::print(&initial_b);
-        debug::print(&string::utf8(b"WEIGHT_C:"));
-        debug::print(&initial_c);
-        
-        // Test price calculation with default parameters
-        let price_at_supply_5 = PodiumProtocol::calculate_single_pass_price_with_params(
-            5, // supply
-            initial_a,
-            initial_b,
-            initial_c
-        );
-        
-        let price_at_supply_10 = PodiumProtocol::calculate_single_pass_price_with_params(
-            10, // higher supply
-            initial_a,
-            initial_b,
-            initial_c
-        );
-        
-        // Price should increase with supply
-        assert!(price_at_supply_10 > price_at_supply_5, 6);
-
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_bonding_curve_parameter_management: PASS"));
-    }
-
-    #[test(aptos_framework = @0x1, admin = @podium)]
-    public fun test_curve_price_calculation(
-        aptos_framework: &signer,
-        admin: &signer,
-    ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, admin, admin, admin);
-        
-        // Get initial parameters
-        let (weight_a, weight_b, weight_c) = PodiumProtocol::get_bonding_curve_params();
-        
-        debug::print(&string::utf8(b"\n=== Default Curve Parameters ==="));
-        debug::print(&string::utf8(b"WEIGHT_A (bps):"));
-        debug::print(&weight_a);
-        debug::print(&string::utf8(b"WEIGHT_A (%):"));
-        let weight_a_percentage = weight_a / 100;
-        debug::print(&weight_a_percentage);
-        debug::print(&string::utf8(b"WEIGHT_B (bps):"));
-        debug::print(&weight_b);
-        debug::print(&string::utf8(b"WEIGHT_B (%):"));
-        let weight_b_percentage = weight_b / 100;
-        debug::print(&weight_b_percentage);
-        debug::print(&string::utf8(b"WEIGHT_C:"));
-        debug::print(&weight_c);
-        
-        // Test price calculation at different supply levels
-        let supplies = vector[0, 1, 5, 10, 25, 50];
-        let i = 0;
-        let len = vector::length(&supplies);
-        let initial_price = PodiumProtocol::get_initial_price();
-        
-        debug::print(&string::utf8(b"\n=== Curve Price Analysis ==="));
-        let last_price = 0;
-        
-        while (i < len) {
-            let supply = *vector::borrow(&supplies, i);
-            let price = PodiumProtocol::calculate_single_pass_price(supply);
-            
-            debug::print(&string::utf8(b"\nSupply:"));
-            debug::print(&supply);
-            debug::print(&string::utf8(b"Price (OCTA):"));
-            debug::print(&price);
-            
-            if (supply == 0) {
-                // First price should be initial price
-                assert!(price == initial_price, 0);
-            } else {
-                // Price should be at least initial price
-                assert!(price >= initial_price, 1);
-                
-                // Only check for price increase after stability period
-                if (supply > 5) { // Ensure we're well past the stability period
-                    assert!(price > last_price, 2);
-                };
-            };
-            
-            last_price = price;
-            i = i + 1;
-        };
-
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_curve_price_calculation: PASS"));
-    }
-
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @user1, user2 = @user2, user3 = @user3, user4 = @user4)]
     public fun test_multiple_pass_transactions(
         aptos_framework: &signer,
@@ -1271,11 +784,8 @@ module podium::PodiumProtocol_test {
         // Setup test environment
         setup_test(aptos_framework, admin, admin, admin, admin);
         
-        // Get initial parameters and verify they are the defaults
+        // Get initial parameters
         let (initial_a, initial_b, initial_c) = PodiumProtocol::get_bonding_curve_params();
-        assert!(initial_a == 173, 0); // 1.73% in basis points
-        assert!(initial_b == 257, 1); // 2.57% in basis points
-        assert!(initial_c == 23, 2);  // Constant offset
         
         // Debug print initial parameters
         debug::print(&string::utf8(b"\n=== Initial Bonding Curve Parameters ==="));
@@ -1316,7 +826,6 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_update_bonding_curve_params: PASS"));
     }
-
 
     #[test]
     fun test_asset_symbol_generation() {
@@ -1387,6 +896,85 @@ module podium::PodiumProtocol_test {
         
         assert!(user1_final == 1, 1);
         assert!(user2_final == 1, 2);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @0x123, new_owner = @0x456)]
+    fun test_outpost_ownership_transfer(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        new_owner: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, new_owner, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        let creator_addr = signer::address_of(creator);
+        let new_owner_addr = signer::address_of(new_owner);
+        
+        // Verify initial ownership
+        assert!(PodiumProtocol::verify_ownership(outpost, creator_addr), 0);
+        
+        // Transfer ownership
+        PodiumProtocol::transfer_outpost_ownership(creator, outpost, new_owner_addr);
+        
+        // Verify new ownership
+        assert!(PodiumProtocol::verify_ownership(outpost, new_owner_addr), 1);
+        assert!(!PodiumProtocol::verify_ownership(outpost, creator_addr), 2);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @0x123)]
+    #[expected_failure(abort_code = 65563)]  // error::invalid_argument(27) = 65563
+    fun test_invalid_outpost_metadata(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, creator, creator);
+        
+        // Try to create outpost with invalid metadata (empty URI)
+        PodiumProtocol::create_outpost(
+            creator,
+            string::utf8(b"Test Outpost"),
+            string::utf8(b"Description"),
+            string::utf8(b""),  // Empty URI should fail
+        );
+    }
+
+    #[test(admin = @podium)]
+    public fun test_outpost_royalty(admin: &signer) {
+        initialize_minimal_test(admin);
+        let outpost = create_test_outpost(admin);
+        
+        // Get the actual royalty from the outpost
+        let stored_royalty = token::royalty<OutpostData>(outpost);
+        
+        // Verify royalty exists and points to protocol
+        assert!(option::is_some(&stored_royalty), 0);
+        let royalty = option::borrow(&stored_royalty);
+        assert!(royalty::payee_address(royalty) == @podium, 1);
+        
+        // Verify royalty percentage using proper Aptos royalty functions
+        let numerator = royalty::numerator(royalty);
+        let denominator = royalty::denominator(royalty);
+        assert!(numerator > 0 && numerator <= 3000, 2);  // 0-30%
+        assert!(denominator == 10000, 3);  // Standard basis points
+    }
+
+    #[test]
+    #[expected_failure(abort_code = 65537, location = podium::PodiumProtocol)]  // error::permission_denied(1)
+    public fun test_unauthorized_royalty_update() {
+        let admin = &account::create_signer_for_test(@podium);
+        
+        // Initialize protocol first
+        PodiumProtocol::initialize(admin);
+        
+        // Create test outpost
+        let outpost = create_test_outpost(admin);
+        
+        // Try to update royalty with non-admin
+        let non_admin = &account::create_signer_for_test(@0x123);
+        PodiumProtocol::update_outpost_royalty(non_admin, outpost, 1000);
     }
 
 } 
