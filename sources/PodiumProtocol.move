@@ -562,8 +562,8 @@ module podium::PodiumProtocol {
         fungible_asset::mint(mint_ref, amount)
     }
 
-    /// Burn passes
-    public fun burn_pass(
+    /// Burn passes (internal function for sell_pass)
+    fun burn_pass(
         owner: &signer,
         asset_symbol: String,
         fa: FungibleAsset
@@ -573,15 +573,30 @@ module podium::PodiumProtocol {
         fungible_asset::burn(burn_ref, fa);
     }
 
+    /// Validate pass amount is valid
+    fun validate_whole_pass_amount(amount: u64) {
+        assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
+    }
+
     /// Transfer passes between accounts
     public fun transfer_pass(
         from: &signer,
         to: address,
-        asset_symbol: String,
+        target_addr: address,  // Either outpost address or user address
         amount: u64
     ) acquires AssetCapabilities {
+        let from_addr = signer::address_of(from);
+        
+        validate_pass_amount(amount);
+        
+        // Get metadata using target address
+        let asset_symbol = get_asset_symbol(target_addr);
+        
+        // Get metadata object
         let caps = borrow_global<AssetCapabilities>(@podium);
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
+        
+        // Transfer using primary store
         primary_fungible_store::transfer(from, *metadata, to, amount);
     }
 
@@ -828,13 +843,6 @@ module podium::PodiumProtocol {
             calculate_sell_price_with_fees(target_addr, amount);
         let amount_received = base_price - protocol_fee - subject_fee;
         assert!(amount_received > 0, error::invalid_argument(EINVALID_AMOUNT));
-        
-        // Debug prints for tracking
-        debug::print(&string::utf8(b"[sell_pass] Details:"));
-        debug::print(&string::utf8(b"Amount (interface/internal units):"));
-        debug::print(&amount);
-        debug::print(&string::utf8(b"Amount received (OCTA):"));
-        debug::print(&amount_received);
         
         // Get asset symbol and burn the passes using internal units
         let asset_symbol = get_asset_symbol(target_addr);

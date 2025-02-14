@@ -315,11 +315,8 @@ module podium::PodiumProtocol_test {
         let pass_balance = PodiumProtocol::get_balance(user1_addr, target_addr);
         assert!(pass_balance == buy_amount, 0);
         
-        // Generate asset symbol for transfer
-        let asset_symbol = PodiumProtocol::get_asset_symbol(target_addr);
-        
         // Transfer 1 pass to user2
-        PodiumProtocol::transfer_pass(user1, user2_addr, asset_symbol, 1);
+        PodiumProtocol::transfer_pass(user1, user2_addr, target_addr, 1);
         
         // Verify final balances
         let user1_final = PodiumProtocol::get_balance(user1_addr, target_addr);
@@ -1348,5 +1345,48 @@ module podium::PodiumProtocol_test {
         );
     }
 
-   
+    #[test(aptos_framework = @0x1, admin = @podium, user1 = @user1, user2 = @user2)]
+    fun test_outpost_pass_trading(
+        aptos_framework: &signer,
+        admin: &signer,
+        user1: &signer,
+        user2: &signer,
+    ) {
+        setup_test(aptos_framework, admin, user1, user2, user1);
+        
+        let user1_addr = signer::address_of(user1);
+        let user2_addr = signer::address_of(user2);
+        
+        // Create an outpost first
+        let outpost = create_test_outpost(user1);
+        let outpost_addr = object::object_address(&outpost);
+        
+        // Create pass token for outpost
+        PodiumProtocol::create_pass_token(
+            user1,
+            outpost_addr,
+            string::utf8(b"Outpost Pass"),
+            string::utf8(b"Outpost Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy passes
+        let buy_amount = 2;
+        PodiumProtocol::buy_pass(user1, outpost_addr, buy_amount, option::none());
+        
+        // Verify initial balance
+        let pass_balance = PodiumProtocol::get_balance(user1_addr, outpost_addr);
+        assert!(pass_balance == buy_amount, 0);
+        
+        // Transfer 1 pass to user2
+        PodiumProtocol::transfer_pass(user1, user2_addr, outpost_addr, 1);
+        
+        // Verify final balances
+        let user1_final = PodiumProtocol::get_balance(user1_addr, outpost_addr);
+        let user2_final = PodiumProtocol::get_balance(user2_addr, outpost_addr);
+        
+        assert!(user1_final == 1, 1);
+        assert!(user2_final == 1, 2);
+    }
+
 } 
