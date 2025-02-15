@@ -347,26 +347,25 @@ module podium::PodiumProtocol_test {
         assert!(user2_final == 1, 2);
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, unauthorized_user = @user1)]
-    #[expected_failure(abort_code = 327692)]
+    #[test(aptos_framework = @0x1, creator = @target, unauthorized_user = @user1)]
+    #[expected_failure(abort_code = 327692)]  // ENOT_OWNER
     public fun test_unauthorized_tier_creation(
         aptos_framework: &signer,
-        admin: &signer,
+        creator: &signer,
         unauthorized_user: &signer,
     ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, unauthorized_user, unauthorized_user, unauthorized_user);
+        setup_test(aptos_framework, creator, unauthorized_user, unauthorized_user, creator);
         
-        // Create test outpost
-        let outpost = create_test_outpost(unauthorized_user);
+        // Create outpost with legitimate owner
+        let outpost = create_test_outpost(creator);
         
-        // Try to create tier with unauthorized user - should fail
+        // Attempt tier creation with unauthorized user
         PodiumProtocol::create_subscription_tier(
             unauthorized_user,
             outpost,
             string::utf8(b"basic"),
             SUBSCRIPTION_WEEK_PRICE,
-            1, // DURATION_WEEK
+            DURATION_WEEK
         );
     }
 
@@ -728,33 +727,65 @@ module podium::PodiumProtocol_test {
         // Rest of the test logic...
     }
 
-    #[test(admin = @podium)]
+    #[test(aptos_framework = @0x1, admin = @podium, buyer = @user1, target = @target)]
     public fun test_pass_payment(
+        aptos_framework: &signer,
         admin: &signer,
+        buyer: &signer,
+        target: &signer,
     ) {
-        // Setup with minimal initialization
-        initialize_minimal_test(admin);
+        setup_test(aptos_framework, admin, buyer, buyer, target);
         
-        // Get initial balances
-        let initial_treasury_balance = coin::balance<AptosCoin>(@podium);
+        // Record initial balances
+        let initial_treasury = coin::balance<AptosCoin>(@podium);
+        let initial_target = coin::balance<AptosCoin>(signer::address_of(target));
+        let initial_buyer = coin::balance<AptosCoin>(signer::address_of(buyer));
         
-        // Calculate expected fees using public getter
-        let payment_amount = 10000;
-        let protocol_fee = (payment_amount * PodiumProtocol::get_protocol_pass_fee()) / 10000;
-        let subject_amount = payment_amount - protocol_fee;
+        // Create pass token for target
+        PodiumProtocol::create_pass_token(
+            target,
+            signer::address_of(target),
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
         
-        // Mint and distribute coins directly using framework signer
-        let framework_signer = account::create_signer_for_test(@0x1);
-        aptos_coin::mint(&framework_signer, @podium, protocol_fee);
-        aptos_coin::mint(&framework_signer, @podium, subject_amount);
+        // Fund buyer account
+        let framework = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework, signer::address_of(buyer), 1000 * OCTA); // 1000 APT
         
-        // Verify balances
-        let final_treasury_balance = coin::balance<AptosCoin>(@podium);
-        assert!(final_treasury_balance == initial_treasury_balance + payment_amount, 1);
-
-        // At the end of each test function, add a summary print
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_pass_payment: PASS"));
+        // Buy pass
+        let buy_amount = 1;
+        let (base_price, protocol_fee, subject_fee, referral_fee) = 
+            PodiumProtocol::calculate_buy_price_with_fees(
+                signer::address_of(target),
+                buy_amount,
+                option::none()
+            );
+        
+        PodiumProtocol::buy_pass(
+            buyer,
+            signer::address_of(target),
+            buy_amount,
+            option::none()
+        );
+        
+        // Verify final balances
+        let final_treasury = coin::balance<AptosCoin>(@podium);
+        let final_target = coin::balance<AptosCoin>(signer::address_of(target));
+        let final_buyer = coin::balance<AptosCoin>(signer::address_of(buyer));
+        
+        // Treasury should receive protocol fee
+        assert!(final_treasury == initial_treasury + protocol_fee, 1);
+        
+        // Target should receive subject fee
+        assert!(final_target == initial_target + subject_fee, 2);
+        
+        // Buyer should have paid total amount
+        assert!(initial_buyer - final_buyer == base_price + protocol_fee + subject_fee + referral_fee, 3);
+        
+        // Verify pass balance
+        assert!(PodiumProtocol::get_balance(signer::address_of(buyer), signer::address_of(target)) == buy_amount, 4);
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
@@ -1299,34 +1330,36 @@ module podium::PodiumProtocol_test {
         assert!(PodiumProtocol::outpost_exists(outpost), 0);
     }
 
-    #[test]
-    fun test_create_outpost() {
-        let creator = create_test_account();
+    #[test(admin = @podium)]
+    fun test_create_outpost(admin: &signer) {
+        initialize_minimal_test(admin);
         
-        // Create outpost and get Object reference
-        let outpost = create_test_outpost(&creator);
+        // Create outpost as regular user through public interface
+        let outpost = PodiumProtocol::create_outpost(
+            admin,
+            string::utf8(b"TestOutpost"),
+            string::utf8(b"Test Description"), 
+            string::utf8(b"https://test.uri")
+        );
         
-        // Verify outpost exists
-        assert!(PodiumProtocol::outpost_exists(outpost), 0);
-        
-        // Verify ownership
-        assert!(PodiumProtocol::verify_ownership(outpost, signer::address_of(&creator)), 0);
+        // Verify through public view functions
+        assert!(PodiumProtocol::has_outpost_data(outpost), 0);
+        assert!(PodiumProtocol::verify_ownership(outpost, signer::address_of(admin)), 1);
     }
 
-    #[test]
-    fun test_create_outpost_entry() {
-        let creator = create_test_account();
+    #[test(admin = @podium)]
+    fun test_create_outpost_entry(admin: &signer) {
+        initialize_minimal_test(admin);
         
-        // Test entry function
+        // Test entry function as regular user
         PodiumProtocol::create_outpost_entry(
-            &creator,
-            string::utf8(b"Test Outpost"),
+            admin,
+            string::utf8(b"TestOutpost"),
             string::utf8(b"Test Description"),
             string::utf8(b"https://test.uri"),
         );
         
-        // Since entry function doesn't return Object, we need to verify differently
-        // e.g., through events or other means
+        // TODO: Add proper verification through events
     }
 
     #[test_only]
