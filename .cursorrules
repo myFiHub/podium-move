@@ -1,8 +1,31 @@
-# Cursor Rules for Move/Movement Development
+# Move Development Guidelines
 
-## CLI Commands
+## Core Principles
 
-### Development Commands
+1. Testing Philosophy
+- Test from user perspective only
+- Use public interfaces exclusively
+- Simulate real user interactions
+- Verify through public views
+- Test deployed contract behavior
+
+2. Code Quality
+- Write clear, focused functions
+- Use explicit visibility modifiers
+- Follow Move naming conventions
+- Document public interfaces
+- Maintain backwards compatibility
+
+3. Security First
+- Validate all inputs
+- Use explicit error codes
+- Follow Checks-Effects-Interactions
+- Implement proper access control
+- Document security assumptions
+
+## Development Workflow
+
+### 1. Project Setup
 ```bash
 # Create new project
 movement move new <project_name>
@@ -14,316 +37,177 @@ movement move build
 movement move test
 movement move test --filter <test_name>
 movement move test --coverage
-movement move test --trace
-
-# Deploy module
-movement move publish \
-  --profile podium \
-  --included-artifacts sparse \
-  --assume-yes \
-  --named-addresses podium=0x123...,fihub=0x456...
-
-# Initialize contract
-movement move run \
-  --profile podium \
-  --function-id 'podium::PodiumProtocol::initialize'
-
-# Upgrade module
-movement move publish \
-  --profile podium \
-  --included-artifacts sparse \
-  --assume-yes \
-  --named-addresses podium=0x123...,fihub=0x456...
-
-# View resources/functions
-movement move view \
-  --profile podium \
-  --function-id 'module::contract::view_function'
 ```
 
-## General Rules
-- Use explicit visibility modifiers (`public`, `public(friend)`, `entry`)
-- Follow Move naming: snake_case for functions/variables, PascalCase for structs/modules
-- Implement comprehensive events for all state changes
-- Follow Checks-Effects-Interactions pattern
-- Document extensively with inline comments
-- Use Move's type system for safety guarantees
-
-## Numeric Handling and Safety
-
-### U64 Arithmetic
-- All integer arithmetic uses u64 by default
-- No built-in overflow protection unlike Solidity 0.8+
-- Always check for potential overflow/underflow
-- Use multiplication before division to prevent precision loss
-- Scale values appropriately for decimal handling
-
-### Overflow Prevention
-- Check addition: `assert!(a <= MAX_U64 - b, EOVERFLOW);`
-- Check multiplication: `assert!(a == 0 || b <= MAX_U64 / a, EOVERFLOW);`
-- Check subtraction: `assert!(a >= b, EUNDERFLOW);`
-- Use intermediate calculations for complex math
-- Scale down large numbers before operations
-- Document all numeric assumptions
-
-### Financial Calculations
-- Use basis points (BPS) for percentage calculations
-- Scale large numbers appropriately (e.g., OCTA = 10^8)
-- Document all scaling factors and units
-- Implement safe math helpers for common operations
-- Validate all numeric inputs against bounds
-- Consider precision loss in division operations
-
-### Constants
+### 2. Code Structure
 ```move
-const MAX_U64: u64 = 18446744073709551615;
-const BPS_DENOMINATOR: u64 = 10000;  // 100% = 10000
-const OCTA: u64 = 100000000;  // 10^8 scaling
-```
-
-## Code Structure
-
-### Module Organization
-1. Uses - ordered by framework then custom
-2. Error Constants - prefixed with 'E'
-3. Other Constants
-4. Structs - capabilities first
-5. Events
-6. Public/Entry Functions
-7. Public View Functions
-8. Internal Functions
-
-### Function Structure
-1. Authorization checks
-2. Input validation
-3. State changes
-4. External calls
-5. Event emission
-
-## Testing Structure
-```move
-#[test_only]
-module podium::MyModule_test {
-    // Setup helpers
-    fun initialize_test_environment() { ... }
+module example::contract {
+    // 1. Uses (framework first, then custom)
+    use std::string;
+    use aptos_framework::account;
     
-    #[test]
-    fun test_core_functionality() {
-        // Test logic
-        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
-        debug::print(&string::utf8(b"test_name: PASS"));
-    }
+    // 2. Error constants
+    const EINVALID_INPUT: u64 = 1;
     
-    #[test]
-    #[expected_failure(abort_code = 65537)]
-    fun test_invalid_input() { ... }
+    // 3. Other constants
+    const MAX_AMOUNT: u64 = 1000;
+    
+    // 4. Structs
+    struct Config has key { ... }
+    
+    // 5. Events
+    struct UpdateEvent has drop, store { ... }
+    
+    // 6. Public/Entry functions
+    public entry fun initialize(...) { ... }
+    
+    // 7. View functions
+    #[view]
+    public fun get_state(): u64 { ... }
+    
+    // 8. Internal functions
+    fun validate_input(...) { ... }
 }
 ```
 
-## Deployment Safety
+### 3. Testing Structure
+```move
+#[test_only]
+module example::contract_tests {
+    use example::contract;
+    
+    #[test]
+    fun test_public_workflow() {
+        // Setup
+        let user = create_test_account();
+        
+        // Execute through public interface
+        contract::initialize(&user);
+        
+        // Verify through public views
+        assert!(contract::get_state() == expected);
+    }
+}
+```
+
+### 4. Deployment Process
 ```bash
-# Test in testnet first
+# Deploy to testnet
 movement move publish \
-  --profile testnet \
-  --included-artifacts sparse \
-  --named-addresses podium=0x123...
+    --profile testnet \
+    --included-artifacts sparse \
+    --named-addresses contract=0x123...
 
 # Verify deployment
 movement move verify
 
 # Monitor events
 movement move events \
-  --profile mainnet \
-  --event-key <key>
+    --profile mainnet \
+    --event-key <key>
+```
+
+## Technical Guidelines
+
+### 1. Numeric Safety
+```move
+// Constants
+const MAX_U64: u64 = 18446744073709551615;
+const BPS_DENOMINATOR: u64 = 10000;  // 100% = 10000
+const OCTA: u64 = 100000000;  // 10^8 scaling
+
+// Overflow checks
+assert!(a <= MAX_U64 - b, EOVERFLOW);
+assert!(a == 0 || b <= MAX_U64 / a, EOVERFLOW);
+assert!(a >= b, EUNDERFLOW);
+```
+
+### 2. Token Handling
+```move
+// Correct token creation
+token::create_from_account(
+    creator,
+    name,
+    description,
+    uri,
+    royalty,
+    collection
+);
+
+// Proper object handling
+let obj = object::convert(config.collection);
+```
+
+### 3. Event Handling
+```move
+// Event definition
+struct UpdateEvent has drop, store {
+    old_value: u64,
+    new_value: u64,
+    timestamp: u64,
+}
+
+// Event emission
+event::emit_event(
+    &mut events,
+    UpdateEvent { old_value, new_value, timestamp }
+);
 ```
 
 ## Best Practices
 
-### Security
-- Use Move Prover for formal verification
-- Implement comprehensive access control
-- Use `acquires` for explicit resource access
-- Validate all inputs thoroughly
-- Use `assert!` with custom error codes
-- Implement emergency pause mechanisms
-- Use friend modules for controlled access
+### 1. Code Organization
+- Group related functionality
+- Separate concerns
+- Use consistent structure
+- Follow Move patterns
 
-### Testing
-- Write comprehensive unit tests
-- Test error cases explicitly
-- Use test-only modules for test helpers
-- Implement integration tests
-- Verify event emission
+### 2. Error Handling
+- Use descriptive error codes
+- Validate early
+- Handle edge cases
+- Document error conditions
 
-### Performance
-- Pack struct fields efficiently
-- Use table/vector for large collections
-- Minimize storage reads/writes
-- Use `copy` instead of `move` for small types
-- Implement efficient indexing strategies
+### 3. Performance
+- Minimize storage access
+- Use efficient data structures
+- Consider gas costs
+- Document tradeoffs
 
-### Error Handling
-- Use descriptive error constants
-- Implement comprehensive error checks
-- Use custom error types
-- Validate early and fail fast
+### 4. Documentation
+- Document public interfaces
+- Explain error conditions
+- Describe event emissions
+- Provide usage examples
 
-### Events
-- Emit events for all state changes
-- Include relevant context in events
-- Use consistent event naming
-- Document event structures
+### 5. Testing
+- Test public interfaces
+- Verify error handling
+- Check event emissions
+- Validate state transitions
 
-### Resource Management
-- Implement proper capability patterns
-- Use resource accounts where appropriate
-- Follow Move's ownership rules
-- Implement proper cleanup
+### 6. Security
+- Validate all inputs
+- Check permissions
+- Handle edge cases
+- Document risks
 
-## Development Workflow
-1. Design
-   - Document module interfaces
-   - Define error codes
-   - Plan resource structure
-   - Design event schema
+## Quality Standards
 
-2. Implementation
-   - Write core functionality
-   - Add comprehensive tests
-   - Document all functions
-   - Implement events
+1. Code Quality
+- Comprehensive tests
+- Clear documentation
+- Consistent style
+- Proper error handling
 
-3. Testing
-   - Unit tests per module
-   - Integration tests
-   - Use Move Prover
-   - Test error cases
+2. Maintenance
+- Keep interfaces stable
+- Document changes
+- Track dependencies
+- Monitor usage
 
-4. Deployment
-   - Use proper deployment scripts
-   - Verify all modules
-   - Check event emission
-   - Monitor initial usage
-
-## Documentation
-
-### Required Documentation Elements
-1. Module Purpose
-2. Function Behavior
-3. Parameter Descriptions
-4. Error Conditions
-5. Event Emissions
-6. Security Considerations
-7. Example Usage
-
-### Style Guide
-- Use consistent indentation (4 spaces)
-- Group related functions together
-- Order functions by visibility
-- Keep functions focused and small
-- Use descriptive variable names
-- Comment complex logic
-- Document public interfaces thoroughly
-
-## Project-Specific Rules
-
-### Podium Protocol Patterns
-1. Implement bonding curve calculations in separate functions
-2. Use proper decimal handling for financial calculations
-3. Implement comprehensive fee distribution logic
-4. Use proper access control for admin functions
-5. Implement proper subscription management
-6. Handle token transfers safely
-7. Implement proper vault management
-8. Use proper event tracking for all operations
-
-### CheerOrBoo Patterns
-1. Implement proper fee calculations
-2. Handle participant distributions safely
-3. Implement proper event tracking
-4. Use safe transfer patterns
-5. Validate all inputs thoroughly
-
-## Quality Assurance
-- Run Move Prover on all modules
-- Test all error conditions
-- Verify event emissions
-- Check resource cleanup
-- Validate access control
-- Test upgrade paths
-- Verify fee calculations
-- Test emergency procedures
-
-## Deployment Safety
-- Use proper deployment scripts
-- Verify module publishing
-- Check initialization
-- Monitor early usage
-- Have rollback plans
-- Test in testnet first
-- Verify all capabilities
-
-## Maintenance
-- Keep documentation updated
-- Monitor contract usage
-- Plan for upgrades
-- Track issues
-- Update tests
+3. Deployment
+- Test in testnet
+- Verify capabilities
 - Monitor events
-- Track gas usage
-
-## Token Object Handling
-
-### Type Safety Rules
-- Always check exact type signatures in API documentation
-- Never assume types with same names are interchangeable across modules
-- Pay attention to module prefixes (aptos_framework vs aptos_token_objects)
-- Properly handle Object wrappers and unwrapping
-
-### Token Creation Patterns
-```move
-// Correct token creation pattern
-token::create_from_account(
-    creator: &signer,          // Direct signer reference
-    name: String,              // Token name
-    description: String,       // Token description
-    uri: String,               // Token URI
-    royalty: Option<Royalty>, // Optional royalty info
-    collection: Object<Collection> // Collection object
-);
-
-// Correct royalty handling
-let extend_ref = object::generate_extend_ref(&constructor_ref);
-let mutator_ref = royalty::generate_mutator_ref(&extend_ref);
-```
-
-### Common Type Mistakes to Avoid
-1. Object Wrapping:
-   - Wrong: passing wrapped object directly
-   - Right: use proper object conversion if needed
-   ```move
-   // Wrong
-   let obj = config.collection;
-   // Right
-   let obj = object::convert(config.collection);
-   ```
-
-2. Reference Types:
-   - Wrong: mixing ExtendRef from different modules
-   - Right: use consistent module source
-   ```move
-   // Wrong
-   use aptos_framework::object::ExtendRef;
-   // Right
-   use aptos_token_objects::token::ExtendRef;
-   ```
-
-3. Token Creation:
-   - Wrong: using constructor_ref directly
-   - Right: generate proper references
-   ```move
-   // Wrong
-   token::create(&constructor_ref, ...);
-   // Right
-   token::create_from_account(creator, ...);
-   ```
+- Have rollback plans

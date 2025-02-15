@@ -392,7 +392,7 @@ module podium::PodiumProtocol {
 
     /// Creates a new outpost
     public fun create_outpost(
-        creator: &signer,
+        _creator: &signer,
         name: String,
         description: String,
         uri: String,
@@ -409,7 +409,7 @@ module podium::PodiumProtocol {
 
         // Return the created outpost
         create_outpost_internal(
-            creator,
+            _creator,
             name,
             description,
             uri,
@@ -419,7 +419,7 @@ module podium::PodiumProtocol {
 
     /// Creates a new token with a deterministic address
     fun create_named_token_with_collection(
-        creator: &signer,
+        _creator: &signer,
         collection: Object<collection::Collection>,
         description: String,
         name: String,
@@ -430,7 +430,7 @@ module podium::PodiumProtocol {
         let seed = token::create_token_seed(&collection::name(collection), &name);
         
         // Create object with deterministic address
-        let constructor_ref = object::create_named_object(creator, seed);
+        let constructor_ref = object::create_named_object(_creator, seed);
         let object_signer = object::generate_signer(&constructor_ref);
 
         // Initialize royalty if provided
@@ -438,7 +438,7 @@ module podium::PodiumProtocol {
             // Initialize royalty directly on the token object
             royalty::init(&constructor_ref, option::extract(&mut royalty));
             // Get the royalty object from the token object
-            let creator_addr = signer::address_of(creator);
+            let creator_addr = signer::address_of(_creator);
             option::some(object::address_to_object<royalty::Royalty>(
                 object::create_object_address(&creator_addr, seed)
             ))
@@ -510,7 +510,7 @@ module podium::PodiumProtocol {
 
     /// Mint new passes
     public fun mint_pass(
-        creator: &signer,
+        _creator: &signer,
         asset_symbol: String,
         amount: u64
     ): FungibleAsset acquires AssetCapabilities {
@@ -521,7 +521,7 @@ module podium::PodiumProtocol {
 
     /// Burn passes (internal function for sell_pass)
     fun burn_pass(
-        owner: &signer,
+        _owner: &signer,
         asset_symbol: String,
         fa: FungibleAsset
     ) acquires AssetCapabilities {
@@ -558,7 +558,6 @@ module podium::PodiumProtocol {
     // ============ Pass Trading & Bonding Curve Functions ============
 
     /// Calculate price for a single pass at given supply
-    /// 
     /// Parameters:
     /// - supply: Current supply of passes (actual units)
     /// Returns calculated price in OCTA units (scaled for APT)
@@ -1068,13 +1067,13 @@ module podium::PodiumProtocol {
 
     /// Initialize subscription configuration for an outpost
     public fun init_subscription_config(
-        creator: &signer,
+        _creator: &signer,
         outpost: Object<OutpostData>
     ) acquires Config {
         let outpost_addr = object::object_address(&outpost);
         
         // Verify ownership
-        assert!(verify_ownership(outpost, signer::address_of(creator)), 
+        assert!(verify_ownership(outpost, signer::address_of(_creator)), 
             error::permission_denied(ENOT_OWNER));
         
         // Initialize subscription config
@@ -1414,47 +1413,32 @@ module podium::PodiumProtocol {
 
     /// Creates a new target asset
     public fun create_target_asset(
-        _creator: &signer,
-        target_id: String,
+        creator: &signer,
         name: String,
-        _description: String,  // Prefix unused with _
-        icon_uri: String,
-        project_uri: String,
-    ): Object<Metadata> acquires AssetCapabilities {
-        let asset_symbol = get_asset_symbol_from_string(target_id);
-        
-        // Create metadata object using creator's signer
-        let constructor_ref = object::create_named_object(
-            _creator,
-            *string::bytes(&asset_symbol)
-        );
-
-        // Initialize the fungible asset with metadata
-        primary_fungible_store::create_primary_store_enabled_fungible_asset(
-            &constructor_ref,
-            option::none(), // No maximum supply
+        _description: String,
+        uri: String,
+        asset_symbol: String,
+        mint_ref: MintRef,
+        burn_ref: BurnRef,
+        transfer_ref: TransferRef,
+        metadata: Object<Metadata>,
+    ) acquires Config, AssetCapabilities {
+        // Create token FIRST with no royalty
+        token::create_from_account(
+            creator,
+            collection::name(borrow_global<Config>(@podium).collection),
             name,
-            asset_symbol,
-            DECIMALS,
-            icon_uri,
-            project_uri,
+            _description,
+            option::none<Royalty>(),  // Start with no royalty
+            uri
         );
 
-        // Generate and store capabilities
-        let mint_ref = fungible_asset::generate_mint_ref(&constructor_ref);
-        let burn_ref = fungible_asset::generate_burn_ref(&constructor_ref);
-        let transfer_ref = fungible_asset::generate_transfer_ref(&constructor_ref);
-        
-        let metadata = object::object_from_constructor_ref<Metadata>(&constructor_ref);
-
-        // Store the refs in the creator's account
+        // Store the refs
         let caps = borrow_global_mut<AssetCapabilities>(@podium);
         table::add(&mut caps.mint_refs, asset_symbol, mint_ref);
         table::add(&mut caps.burn_refs, asset_symbol, burn_ref);
         table::add(&mut caps.transfer_refs, asset_symbol, transfer_ref);
         table::add(&mut caps.metadata_objects, asset_symbol, metadata);
-
-        metadata
     }
 
     /// Creates a new pass token
@@ -1462,7 +1446,7 @@ module podium::PodiumProtocol {
         creator: &signer,
         target_addr: address,
         name: String,
-        _description: String,  // Prefix unused with _
+        _description: String,
         uri: String,
     ) acquires AssetCapabilities {
         let asset_symbol = get_asset_symbol(target_addr);
@@ -1497,6 +1481,16 @@ module podium::PodiumProtocol {
         table::add(&mut caps.burn_refs, asset_symbol, burn_ref);
         table::add(&mut caps.transfer_refs, asset_symbol, transfer_ref);
         table::add(&mut caps.metadata_objects, asset_symbol, metadata);
+
+        // Then handle royalty initialization
+        let royalty_to_init = royalty::create(  // Just use default royalty directly
+            DEFAULT_OUTPOST_ROYALTY_NUMERATOR,
+            ROYALTY_DENOMINATOR,
+            @podium
+        );
+
+        // Initialize royalty on the token
+        royalty::init(&constructor_ref, royalty_to_init);
     }
 
     /// Check if the protocol is initialized
@@ -1709,7 +1703,7 @@ module podium::PodiumProtocol {
         
         // Calculate components
         let two_n = 2 * n;
-        let two_n_plus_1 = two_n + 1;
+        let _two_n_plus_1 = two_n + 1;  // Prefix with underscore if truly unused
         
         // Calculate (n + 1) * (2n + 1) = 2n^2 + 3n + 1
         let n_squared = n * n;
@@ -1797,28 +1791,28 @@ module podium::PodiumProtocol {
 
     /// Creates a new outpost (internal implementation)
     fun create_outpost_internal(
-        creator: &signer,
+        _creator: &signer,
         name: String,
         description: String,
         uri: String,
-        royalty: Option<Royalty>,
+        royalty_opt: Option<Royalty>,  // Clear name indicating it's optional
     ): Object<OutpostData> acquires Config {
         // Verify protocol is initialized
         assert!(exists<Config>(@podium), error::not_found(EPROTOCOL_NOT_INITIALIZED));
         
         // Verify creator has a valid account
-        assert!(account::exists_at(signer::address_of(creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
+        assert!(account::exists_at(signer::address_of(_creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
 
         // Handle payment first
         let purchase_price = get_outpost_purchase_price();
-        coin::transfer<AptosCoin>(creator, @podium, purchase_price);
+        coin::transfer<AptosCoin>(_creator, @podium, purchase_price);
 
         // Get config for collection info
         let config = borrow_global_mut<Config>(@podium);
         
         // Create object with deterministic address
         let seed = token::create_token_seed(&collection::name(config.collection), &name);
-        let constructor_ref = object::create_named_object(creator, seed);
+        let constructor_ref = object::create_named_object(_creator, seed);
         
         // Initialize outpost data FIRST
         let outpost_signer = object::generate_signer(&constructor_ref);
@@ -1832,10 +1826,30 @@ module podium::PodiumProtocol {
             emergency_pause: false,
         });
 
-        // Initialize royalty if provided
-        if (option::is_some(&royalty)) {
-            royalty::init(&constructor_ref, option::extract(&mut royalty));
+        // Create token FIRST with no royalty
+        token::create_from_account(
+            _creator,
+            collection::name(config.collection),
+            name,
+            description,
+            option::none<Royalty>(),  // Start with no royalty
+            uri
+        );
+
+        // Then handle royalty initialization
+        let royalty_to_init = if (option::is_some<Royalty>(&royalty_opt)) {
+            option::extract(&mut royalty_opt)  // Use provided royalty
+        } else {
+            // Create default royalty
+            royalty::create(
+                DEFAULT_OUTPOST_ROYALTY_NUMERATOR,
+                ROYALTY_DENOMINATOR,
+                @podium
+            )
         };
+
+        // Initialize royalty on the token
+        royalty::init(&constructor_ref, royalty_to_init);
 
         // Get object reference AFTER initialization
         let outpost = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
@@ -1848,7 +1862,7 @@ module podium::PodiumProtocol {
         event::emit_event(
             &mut config.outpost_created_events,
             OutpostCreatedEvent {
-                creator: signer::address_of(creator),
+                creator: signer::address_of(_creator),
                 outpost_address: outpost_addr,
                 name,
                 price: purchase_price,
