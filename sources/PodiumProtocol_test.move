@@ -394,18 +394,17 @@ module podium::PodiumProtocol_test {
         aptos_framework: &signer,
         admin: &signer,
     ) {
-        // Setup test environment
         setup_test(aptos_framework, admin, admin, admin, admin);
         
         let outpost = create_test_outpost(admin);
         
-        // Create subscription tiers
+        // Create subscription tiers using protocol constants
         PodiumProtocol::create_subscription_tier(
             admin,
             outpost,
             string::utf8(b"tier0"),
             SUBSCRIPTION_WEEK_PRICE,
-            TEST_DURATION_WEEK
+            DURATION_WEEK  // Use protocol constant instead of TEST_DURATION_WEEK
         );
 
         PodiumProtocol::create_subscription_tier(
@@ -413,7 +412,7 @@ module podium::PodiumProtocol_test {
             outpost,
             string::utf8(b"premium"),
             SUBSCRIPTION_MONTH_PRICE,
-            TEST_DURATION_MONTH
+            DURATION_MONTH  // Use protocol constant
         );
 
         // Subscribe to premium tier
@@ -428,7 +427,7 @@ module podium::PodiumProtocol_test {
         assert!(PodiumProtocol::verify_subscription(
             signer::address_of(admin),
             outpost,
-            1 // premium tier ID
+            1
         ), 0);
 
         // Get subscription details
@@ -437,60 +436,62 @@ module podium::PodiumProtocol_test {
             outpost
         );
         assert!(tier_id == 1, 1);
-        let expected_duration = PodiumProtocol::get_duration_seconds(TEST_DURATION_WEEK);
+        
+        // Use protocol's duration constant for verification
+        let expected_duration = PodiumProtocol::get_duration_seconds(DURATION_MONTH);
         assert!(end_time > start_time, 2);
         assert!(end_time - start_time == expected_duration, 3);
 
-        // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_subscription_flow: PASS"));
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium)]
+    #[test(aptos_framework = @0x1, admin = @podium, subscriber = @user1)]
     public fun test_subscription_expiration(
         aptos_framework: &signer,
         admin: &signer,
+        subscriber: &signer,
     ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, admin, admin, admin);
+        // Setup test environment with subscriber
+        setup_test(aptos_framework, admin, subscriber, subscriber, admin);
         
+        // Create outpost
         let outpost = create_test_outpost(admin);
 
-        // Create tier
+        // Create tier with weekly duration using protocol constant
         PodiumProtocol::create_subscription_tier(
             admin,
             outpost,
-            string::utf8(b"tier0"),
+            string::utf8(b"weekly"),
             SUBSCRIPTION_WEEK_PRICE,
             DURATION_WEEK
         );
 
-        // Subscribe
+        // Subscribe to weekly tier
         PodiumProtocol::subscribe(
-            admin,
+            subscriber,
             outpost,
-            0,
+            0, // weekly tier ID
             option::none(),
         );
 
         // Verify active subscription
         assert!(PodiumProtocol::verify_subscription(
-            signer::address_of(admin),
+            signer::address_of(subscriber),
             outpost,
             0
         ), 0);
 
-        // Move time forward past expiration (8 days)
+        // Fast forward past week duration (8 days = 8 * 24 * 60 * 60 seconds)
         timestamp::fast_forward_seconds(8 * 24 * 60 * 60);
 
-        // Verify subscription expired
+        // Verify subscription is expired
         assert!(!PodiumProtocol::verify_subscription(
-            signer::address_of(admin),
+            signer::address_of(subscriber),
             outpost,
             0
         ), 1);
 
-        // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_subscription_expiration: PASS"));
     }
@@ -1010,20 +1011,37 @@ module podium::PodiumProtocol_test {
         );
     }
 
-    #[test]
-    fun test_outpost_royalty() {
-        let creator = create_test_account();
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    fun test_outpost_royalty(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        // Proper setup with all required accounts
+        setup_test(aptos_framework, admin, creator, creator, creator);
         
         // Create outpost with default royalty
-        let outpost = PodiumProtocol::create_outpost(
-            &creator,
-            string::utf8(b"Test Outpost"),
-            string::utf8(b"Test Description"),
-            string::utf8(b"https://test.uri"),
-        );
-
-        // Verify royalty capability through public interface
+        let outpost = create_test_outpost(creator);
+        
+        // Verify initial royalty state
         assert!(PodiumProtocol::has_royalty_capability(outpost), 0);
+        
+        // Get current royalty through public interface
+        let (numerator, denominator) = PodiumProtocol::get_outpost_royalty(outpost);
+        assert!(numerator == TEST_ROYALTY_NUMERATOR, 1);
+        assert!(denominator == TEST_ROYALTY_DENOMINATOR, 2);
+        
+        // Try updating royalty (should only work with admin)
+        let new_numerator = 1000; // 10%
+        PodiumProtocol::update_outpost_royalty(admin, outpost, new_numerator);
+        
+        // Verify updated royalty
+        let (updated_numerator, updated_denominator) = PodiumProtocol::get_outpost_royalty(outpost);
+        assert!(updated_numerator == new_numerator, 3);
+        assert!(updated_denominator == TEST_ROYALTY_DENOMINATOR, 4);
+
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_outpost_royalty: PASS"));
     }
 
     #[test(admin = @podium, non_admin = @0x123)]

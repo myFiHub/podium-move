@@ -1906,4 +1906,22 @@ module podium::PodiumProtocol {
         );
     }
 
+    /// Get the current royalty configuration for an outpost
+    #[view]
+    public fun get_outpost_royalty(outpost: Object<OutpostData>): (u64, u64) acquires OutpostRoyaltyCapability {
+        let outpost_addr = object::object_address(&outpost);
+        let cap = borrow_global<OutpostRoyaltyCapability>(outpost_addr);
+        let royalty_opt = royalty::get<OutpostData>(outpost);
+        
+        if (option::is_some(&royalty_opt)) {
+            let royalty = option::borrow(&royalty_opt);
+            (
+                royalty::numerator(royalty),
+                royalty::denominator(royalty)
+            )
+        } else {
+            (DEFAULT_OUTPOST_ROYALTY_NUMERATOR, ROYALTY_DENOMINATOR)
+        }
+    }
+
 }
