@@ -1101,7 +1101,7 @@ module podium::PodiumProtocol {
         outpost: Object<OutpostData>,
         name: String,
         price: u64,
-        duration: u64,
+        duration_type: u64
     ) acquires Config {
         let outpost_addr = object::object_address(&outpost);
         debug::print(&string::utf8(b"[create_subscription_tier] Outpost address:"));
@@ -1134,7 +1134,7 @@ module podium::PodiumProtocol {
         vector::push_back(&mut sub_config.tiers, SubscriptionTier {
             name,
             price,
-            duration,
+            duration: get_duration_seconds(duration_type),
         });
 
         // Emit tier updated event
@@ -1144,7 +1144,7 @@ module podium::PodiumProtocol {
                 outpost_addr,
                 tier_id: len, // New tier ID is the previous length
                 price,
-                duration,
+                duration: get_duration_seconds(duration_type),
                 timestamp: timestamp::now_seconds(),
             }
         );
@@ -1333,7 +1333,8 @@ module podium::PodiumProtocol {
     // ============ Subscription Helper Functions ============
 
     /// Convert duration type to seconds
-    fun get_duration_seconds(duration_type: u64): u64 {
+    #[view]
+    public fun get_duration_seconds(duration_type: u64): u64 {
         if (duration_type == DURATION_WEEK) {
             SECONDS_PER_WEEK
         } else if (duration_type == DURATION_MONTH) {
@@ -1881,6 +1882,22 @@ module podium::PodiumProtocol {
     #[view]
     public fun outpost_exists(outpost: Object<OutpostData>): bool {
         exists<OutpostData>(object::object_address(&outpost))
+    }
+
+    /// Check if outpost has royalty capability
+    #[view]
+    public fun has_royalty_capability(outpost: Object<OutpostData>): bool {
+        exists<OutpostRoyaltyCapability>(object::object_address(&outpost))
+    }
+
+    /// Unified duration validation
+    fun validate_duration(duration_type: u64) {
+        assert!(
+            duration_type == DURATION_WEEK ||
+            duration_type == DURATION_MONTH ||
+            duration_type == DURATION_YEAR,
+            EINVALID_DURATION
+        );
     }
 
 }
