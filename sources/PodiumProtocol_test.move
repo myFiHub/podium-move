@@ -65,6 +65,11 @@ module podium::PodiumProtocol_test {
     const DURATION_MONTH: u64 = 2;
     const DURATION_YEAR: u64 = 3;
 
+    // Duration values in seconds
+    const SECONDS_PER_WEEK: u64 = 604800;  // 7 * 24 * 3600
+    const SECONDS_PER_MONTH: u64 = 2592000; // 30 * 24 * 3600
+    const SECONDS_PER_YEAR: u64 = 31536000; // 365 * 24 * 3600
+
     // IMPORTANT NOTES ON CAPABILITIES:
     // 1. BurnCapability and MintCapability do NOT have 'drop' ability
     // 2. They must be explicitly stored or destroyed
@@ -113,22 +118,18 @@ module podium::PodiumProtocol_test {
             account::create_account_for_test(addr);
         };
         
-        // Register account for AptosCoin if needed
+        // Register for AptosCoin with minimum balance
         if (!coin::is_account_registered<AptosCoin>(addr)) {
             coin::register<AptosCoin>(account);
-        };
-        
-        // Fund account if needed
-        if (coin::balance<AptosCoin>(addr) < INITIAL_BALANCE) {
             let framework_signer = account::create_signer_for_test(@0x1);
-            aptos_coin::mint(&framework_signer, addr, INITIAL_BALANCE);
+            aptos_coin::mint(&framework_signer, addr, 1000000000); // 10 APT
         };
     }
 
     // Simplified setup function that uses the initialization helper
     fun setup_test(
         aptos_framework: &signer,
-        podium_signer: &signer,
+        admin: &signer,
         user1: &signer,
         user2: &signer,
         target: &signer,
@@ -137,14 +138,14 @@ module podium::PodiumProtocol_test {
         initialize_test_environment(aptos_framework);
 
         // Setup individual accounts
-        setup_account(podium_signer);
+        setup_account(admin);
         setup_account(user1);
         setup_account(user2);
         setup_account(target);
 
         // Initialize protocol if not already initialized
         if (!PodiumProtocol::is_initialized()) {
-            PodiumProtocol::initialize(podium_signer);
+            PodiumProtocol::initialize(admin);
         };
     }
 
@@ -192,14 +193,11 @@ module podium::PodiumProtocol_test {
 
     // Helper function to create test outpost
     fun create_test_outpost(creator: &signer): Object<OutpostData> {
-        // Verify protocol initialization first
-        if (!PodiumProtocol::is_initialized()) {
-            let podium_signer = account::create_signer_for_test(@podium);
-            account::create_account_for_test(@podium);
-            coin::register<AptosCoin>(&podium_signer);
-            PodiumProtocol::initialize(&podium_signer);
-        };
-        
+        // Ensure creator has enough funds
+        let purchase_price = PodiumProtocol::get_outpost_purchase_price();
+        let framework_signer = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework_signer, signer::address_of(creator), purchase_price * 2);
+
         PodiumProtocol::create_outpost(
             creator,
             string::utf8(b"TestOutpost"),
@@ -360,7 +358,7 @@ module podium::PodiumProtocol_test {
         setup_test(aptos_framework, admin, unauthorized_user, unauthorized_user, unauthorized_user);
         
         // Create test outpost
-        let outpost = create_test_outpost(admin);
+        let outpost = create_test_outpost(unauthorized_user);
         
         // Try to create tier with unauthorized user - should fail
         PodiumProtocol::create_subscription_tier(
@@ -408,7 +406,7 @@ module podium::PodiumProtocol_test {
             outpost,
             string::utf8(b"tier0"),
             SUBSCRIPTION_WEEK_PRICE,
-            7 * 24 * 60 * 60  // 7 days in seconds
+            TEST_DURATION_WEEK
         );
 
         PodiumProtocol::create_subscription_tier(
@@ -416,7 +414,7 @@ module podium::PodiumProtocol_test {
             outpost,
             string::utf8(b"premium"),
             SUBSCRIPTION_MONTH_PRICE,
-            2, // DURATION_MONTH
+            TEST_DURATION_MONTH
         );
 
         // Subscribe to premium tier
@@ -440,7 +438,9 @@ module podium::PodiumProtocol_test {
             outpost
         );
         assert!(tier_id == 1, 1);
+        let expected_duration = PodiumProtocol::get_duration_seconds(TEST_DURATION_WEEK);
         assert!(end_time > start_time, 2);
+        assert!(end_time - start_time == expected_duration, 3);
 
         // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
@@ -1327,6 +1327,130 @@ module podium::PodiumProtocol_test {
         
         // Since entry function doesn't return Object, we need to verify differently
         // e.g., through events or other means
+    }
+
+    #[test_only]
+    const TEST_DURATION_WEEK: u64 = 1;
+    #[test_only]
+    const TEST_DURATION_MONTH: u64 = 2;
+    #[test_only]
+    const TEST_DURATION_YEAR: u64 = 3;
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    #[expected_failure(abort_code = 24)]
+    fun test_duration_validation(
+        aptos_framework: &signer,
+        admin: &signer,
+    ) {
+        setup_test(aptos_framework, admin, admin, admin, admin);
+        let outpost = create_test_outpost(admin);
+        
+        // Should fail with invalid duration
+        PodiumProtocol::create_subscription_tier(
+            admin,
+            outpost,
+            string::utf8(b"Invalid"),
+            SUBSCRIPTION_WEEK_PRICE,
+            4 // Invalid duration
+        );
+    }
+
+    #[test_only]
+    const TEST_USER: address = @0x123;
+    #[test_only]
+    const TEST_TARGET: address = @0x456;
+
+    #[test(aptos_framework = @0x1)]
+    fun test_valid_durations() {
+        let aptos_framework = account::create_account_for_test(@0x1);
+        let admin = account::create_account_for_test(@podium);
+        let user = account::create_account_for_test(TEST_USER);
+        let target = account::create_account_for_test(TEST_TARGET);
+        
+        setup_test(
+            &aptos_framework,
+            &admin,
+            &user,
+            &user,
+            &target
+        );
+        
+        let creator = account::create_account_for_test(@0x789);
+        setup_account(&creator);
+        
+        let outpost = PodiumProtocol::create_outpost(
+            &creator,
+            string::utf8(b"Test Outpost"),
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test.uri")
+        );
+        
+        let admin_signer = account::create_signer_for_test(@podium);
+        
+        // Test all valid duration types
+        PodiumProtocol::create_subscription_tier(
+            &admin_signer,
+            outpost,
+            string::utf8(b"Weekly"),
+            1,
+            DURATION_WEEK
+        );
+        
+        PodiumProtocol::create_subscription_tier(
+            &admin_signer,
+            outpost,
+            string::utf8(b"Monthly"),
+            1,
+            DURATION_MONTH
+        );
+        
+        PodiumProtocol::create_subscription_tier(
+            &admin_signer,
+            outpost,
+            string::utf8(b"Yearly"),
+            1,
+            DURATION_YEAR
+        );
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, user = @user1, target = @target)]
+    public fun test_base_template(
+        aptos_framework: &signer,
+        admin: &signer,
+        user: &signer,
+        target: &signer,
+    ) {
+        // 1. Initialize framework
+        setup_test(aptos_framework, admin, user, user, target);
+        
+        // 2. Create outpost
+        let outpost = create_test_outpost(admin);
+        
+        // 3. Verify basic functionality
+        assert!(PodiumProtocol::has_outpost_data(outpost), 0);
+        assert!(PodiumProtocol::verify_ownership(outpost, signer::address_of(admin)), 1);
+        
+        // 4. Clean up
+        debug::print(&string::utf8(b"Test passed"));
+    }
+
+    #[test(aptos_framework = @0x1)]
+    public fun test_outpost_creation() {
+        let framework = account::create_account_for_test(@0x1);
+        let admin = account::create_account_for_test(@podium);
+        
+        setup_test(&framework, &admin, &admin, &admin, &admin);
+        
+        let outpost = PodiumProtocol::create_outpost(
+            &admin,
+            string::utf8(b"ValidOutpost"),
+            string::utf8(b"Description"),
+            string::utf8(b"https://valid.uri")
+        );
+        
+        // Verify proper initialization
+        assert!(PodiumProtocol::has_outpost_data(outpost), 0);
+        assert!(PodiumProtocol::verify_ownership(outpost, @podium), 1);
     }
 
 } 

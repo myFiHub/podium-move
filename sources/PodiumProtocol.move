@@ -89,13 +89,15 @@ module podium::PodiumProtocol {
     const OCTA: u64 = 100000000; // 10^8 scaling for APT
     const DECIMALS: u8 = 8; // Number of decimal places
 
-    // Time constants
-    const SECONDS_PER_WEEK: u64 = 7 * 24 * 60 * 60;
-    const SECONDS_PER_MONTH: u64 = 30 * 24 * 60 * 60;
-    const SECONDS_PER_YEAR: u64 = 365 * 24 * 60 * 60;
+    // Duration type codes
     const DURATION_WEEK: u64 = 1;
     const DURATION_MONTH: u64 = 2;
     const DURATION_YEAR: u64 = 3;
+
+    // Duration values in seconds
+    const SECONDS_PER_WEEK: u64 = 604800;  // 7 * 24 * 3600
+    const SECONDS_PER_MONTH: u64 = 2592000; // 30 * 24 * 3600
+    const SECONDS_PER_YEAR: u64 = 31536000; // 365 * 24 * 3600
 
     // Calculate the minimum unit (1 whole pass)
     const MIN_WHOLE_PASS: u64 = 100000000; // One whole pass unit (10^8)
@@ -1109,7 +1111,7 @@ module podium::PodiumProtocol {
         outpost: Object<OutpostData>,
         name: String,
         price: u64,
-        duration_type: u64
+        duration: u64
     ) acquires Config {
         let outpost_addr = object::object_address(&outpost);
         let config = borrow_global_mut<Config>(@podium);
@@ -1132,7 +1134,7 @@ module podium::PodiumProtocol {
         assert!(verify_ownership(outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
         
         // Validate inputs
-        validate_duration(duration_type);
+        validate_duration(duration);
         assert!(price > 0, error::invalid_argument(EINVALID_TIER_PRICE));
         
         // Get existing config
@@ -1146,7 +1148,7 @@ module podium::PodiumProtocol {
         vector::push_back(&mut subscription_config.tiers, SubscriptionTier {
             name,
             price,
-            duration: get_duration_seconds(duration_type),
+            duration: get_duration_seconds(duration),
             tier_id: current_tier_count,
             timestamp: timestamp::now_seconds()
         });
@@ -1895,11 +1897,11 @@ module podium::PodiumProtocol {
     }
 
     /// Unified duration validation
-    fun validate_duration(duration_type: u64) {
+    fun validate_duration(duration: u64) {
         assert!(
-            duration_type == DURATION_WEEK ||
-            duration_type == DURATION_MONTH ||
-            duration_type == DURATION_YEAR,
+            duration == DURATION_WEEK ||
+            duration == DURATION_MONTH ||
+            duration == DURATION_YEAR,
             EINVALID_DURATION
         );
     }
