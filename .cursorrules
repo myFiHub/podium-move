@@ -271,3 +271,59 @@ movement move events \
 - Update tests
 - Monitor events
 - Track gas usage
+
+## Token Object Handling
+
+### Type Safety Rules
+- Always check exact type signatures in API documentation
+- Never assume types with same names are interchangeable across modules
+- Pay attention to module prefixes (aptos_framework vs aptos_token_objects)
+- Properly handle Object wrappers and unwrapping
+
+### Token Creation Patterns
+```move
+// Correct token creation pattern
+token::create_from_account(
+    creator: &signer,          // Direct signer reference
+    name: String,              // Token name
+    description: String,       // Token description
+    uri: String,               // Token URI
+    royalty: Option<Royalty>, // Optional royalty info
+    collection: Object<Collection> // Collection object
+);
+
+// Correct royalty handling
+let extend_ref = object::generate_extend_ref(&constructor_ref);
+let mutator_ref = royalty::generate_mutator_ref(&extend_ref);
+```
+
+### Common Type Mistakes to Avoid
+1. Object Wrapping:
+   - Wrong: passing wrapped object directly
+   - Right: use proper object conversion if needed
+   ```move
+   // Wrong
+   let obj = config.collection;
+   // Right
+   let obj = object::convert(config.collection);
+   ```
+
+2. Reference Types:
+   - Wrong: mixing ExtendRef from different modules
+   - Right: use consistent module source
+   ```move
+   // Wrong
+   use aptos_framework::object::ExtendRef;
+   // Right
+   use aptos_token_objects::token::ExtendRef;
+   ```
+
+3. Token Creation:
+   - Wrong: using constructor_ref directly
+   - Right: generate proper references
+   ```move
+   // Wrong
+   token::create(&constructor_ref, ...);
+   // Right
+   token::create_from_account(creator, ...);
+   ```

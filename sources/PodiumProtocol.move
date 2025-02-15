@@ -1820,14 +1820,14 @@ module podium::PodiumProtocol {
         let seed = token::create_token_seed(&collection::name(config.collection), &name);
         let constructor_ref = object::create_named_object(creator, seed);
         
-        // Initialize outpost data BEFORE getting object reference
+        // Initialize outpost data FIRST
         let outpost_signer = object::generate_signer(&constructor_ref);
         move_to(&outpost_signer, OutpostData {
             collection: config.collection,
             name,
             description,
             uri,
-            price: purchase_price,  // Store actual paid price
+            price: purchase_price,
             fee_share: OUTPOST_FEE_SHARE,
             emergency_pause: false,
         });
@@ -1837,7 +1837,7 @@ module podium::PodiumProtocol {
             royalty::init(&constructor_ref, option::extract(&mut royalty));
         };
 
-        // Get object reference AFTER data initialization
+        // Get object reference AFTER initialization
         let outpost = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
         let outpost_addr = object::object_address(&outpost);
 
