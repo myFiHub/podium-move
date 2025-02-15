@@ -750,11 +750,7 @@ module podium::PodiumProtocol_test {
             string::utf8(b"https://test.uri"),
         );
         
-        // Fund buyer account
-        let framework = account::create_signer_for_test(@0x1);
-        aptos_coin::mint(&framework, signer::address_of(buyer), 1000 * OCTA); // 1000 APT
-        
-        // Buy pass
+        // Calculate expected costs first
         let buy_amount = 1;
         let (base_price, protocol_fee, subject_fee, referral_fee) = 
             PodiumProtocol::calculate_buy_price_with_fees(
@@ -763,6 +759,15 @@ module podium::PodiumProtocol_test {
                 option::none()
             );
         
+        // Calculate total cost and fund buyer with sufficient amount plus buffer
+        let total_cost = base_price + protocol_fee + subject_fee + referral_fee;
+        let framework = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework, signer::address_of(buyer), total_cost * 2); // Double for safety
+        
+        // Record post-funding balance
+        let initial_buyer_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        
+        // Execute purchase
         PodiumProtocol::buy_pass(
             buyer,
             signer::address_of(target),
@@ -775,6 +780,15 @@ module podium::PodiumProtocol_test {
         let final_target = coin::balance<AptosCoin>(signer::address_of(target));
         let final_buyer = coin::balance<AptosCoin>(signer::address_of(buyer));
         
+        // Debug balance changes
+        debug::print(&string::utf8(b"=== Balance Changes ==="));
+        debug::print(&string::utf8(b"Initial buyer balance:"));
+        debug::print(&initial_buyer_balance);
+        debug::print(&string::utf8(b"Final buyer balance:"));
+        debug::print(&final_buyer);
+        debug::print(&string::utf8(b"Total cost:"));
+        debug::print(&total_cost);
+        
         // Treasury should receive protocol fee
         assert!(final_treasury == initial_treasury + protocol_fee, 1);
         
@@ -782,7 +796,7 @@ module podium::PodiumProtocol_test {
         assert!(final_target == initial_target + subject_fee, 2);
         
         // Buyer should have paid total amount
-        assert!(initial_buyer - final_buyer == base_price + protocol_fee + subject_fee + referral_fee, 3);
+        assert!(initial_buyer_balance - final_buyer == total_cost, 3);
         
         // Verify pass balance
         assert!(PodiumProtocol::get_balance(signer::address_of(buyer), signer::address_of(target)) == buy_amount, 4);
