@@ -442,3 +442,121 @@ The test suite verifies the core functionality and edge cases of the CheerOrBoo 
 - Validates even distribution among participants
 - Checks remainder handling
 - Ensures no funds are lost in the process
+
+## Initialization Flow
+
+### Dependency Management
+```bash
+# Recommended for faster builds - use local framework clone
+git clone --depth 1 --branch mainnet https://github.com/movement-network/move /tmp/movement-framework
+
+# Update Move.toml dependencies:
+[dependencies]
+AptosFramework = { local = "/tmp/movement-framework/aptos-framework" }
+AptosStdlib = { local = "/tmp/movement-framework/aptos-stdlib" }
+MoveStdlib = { local = "/tmp/movement-framework/move-stdlib" }
+```
+
+### Core Initialization Sequence
+1. **Protocol Initialization** (First-time setup)
+```bash
+movement move run \
+  --profile mainnet \
+  --function-id 'podium::PodiumProtocol::initialize'
+```
+
+2. **Outpost Creation** (Per-content creator)
+```move
+public entry fun create_outpost(
+    creator: &signer,
+    name: String,
+    description: String,
+    uri: String
+) {
+    // Requires protocol initialization
+    // Automatically handles:
+    // - Object initialization
+    // - Token creation
+    // - Royalty setup
+}
+```
+
+3. **Subscription Tier Setup** (Per-outpost)
+```move
+public entry fun create_subscription_tier(
+    owner: &signer,
+    outpost: Object<OutpostData>, 
+    tier_name: String,
+    price: u64,
+    duration: u64
+) {
+    // Validates:
+    // - Outpost ownership
+    // - Tier name uniqueness
+    // - Duration validity
+}
+```
+
+## Testing Guidelines
+
+### Key Test Patterns
+```move
+#[test(aptos_framework = @0x1, admin = @podium)]
+fun test_outpost_lifecycle() {
+    // 1. Protocol initialization
+    // 2. Outpost creation
+    // 3. Subscription tier setup
+    // 4. Pass trading
+    // 5. Emergency pause
+}
+```
+
+### Test Initialization Sequence
+1. Framework setup
+2. Account creation
+3. Protocol initialization
+4. Outpost creation
+5. Subscription tier creation
+
+### Optimized Testing
+```bash
+# Parallel test execution
+movement move test --num-threads 8
+
+# Filter tests by module
+movement move test --filter outpost
+
+# Generate coverage report
+movement move test --coverage
+```
+
+## Deployment Process
+
+### Optimized Deployment
+```bash
+movement move publish \
+  --profile mainnet \
+  --assume-yes \
+  --skip-fetch-latest-git-deps \
+  --included-artifacts sparse \
+  --named-addresses "podium=0xd2f0d0cf38a4c64620f8e9fcba104e0dd88f8d82963bef4ad57686c3ee9ed7aa"
+```
+
+### Post-Deployment Verification
+```move
+#[view]
+public fun verify_initialization(): bool {
+    exists<Config>(@podium) &&
+    table::length(&borrow_global<Config>(@podium).outposts) > 0
+}
+```
+
+## Common Error Reference
+
+Code | Meaning | Resolution
+-----|---------|------------
+0x60002 | Missing ObjectCore | Ensure object initialization before token operations
+0x10001 | Dependency Resolution | Use `--skip-fetch-latest-git-deps`
+0x3000A | Insufficient Balance | Verify test account funding
+0x4000C | Invalid Royalty | Check numerator/denominator values
+0x5001F | Protocol Not Initialized | Call `initialize()` first

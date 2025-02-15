@@ -8,7 +8,7 @@ module podium::PodiumProtocol {
     use aptos_framework::error;
     use aptos_token_objects::collection;
     use aptos_token_objects::token;
-    use aptos_token_objects::royalty::{Self, Royalty};
+    use aptos_token_objects::royalty::{Self, Royalty, MutatorRef};
     use aptos_framework::table::{Self, Table};
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
@@ -102,16 +102,16 @@ module podium::PodiumProtocol {
 
     // Constants for metadata validation
     const MAX_NAME_LENGTH: u64 = 128;
-    const MAX_DESCRIPTION_LENGTH: u64 = 1000;
+    const MAX_DESCRIPTION_LENGTH: u64 = 512;
     const MAX_URI_LENGTH: u64 = 512;
 
     // Constants for royalty validation
     const MIN_ROYALTY_NUMERATOR: u64 = 0;    // 0%
-    const MAX_ROYALTY_NUMERATOR: u64 = 3000; // 30% in basis points
+    const MAX_ROYALTY_NUMERATOR: u64 = 10000; // 100% in basis points
 
     // ============ Core Data Structures ============
 
-    /// Capability to modify outpost royalties
+    /// Capability for updating outpost royalties
     struct OutpostRoyaltyCapability has key {
         mutator_ref: royalty::MutatorRef,
     }
@@ -392,7 +392,7 @@ module podium::PodiumProtocol {
 
     /// Creates a new outpost
     public fun create_outpost(
-        _creator: &signer,
+        creator: &signer,
         name: String,
         description: String,
         uri: String,
@@ -400,7 +400,7 @@ module podium::PodiumProtocol {
         // Validate metadata
         validate_outpost_metadata(&name, &description, &uri);
 
-        // Always use default royalty settings
+        // Create with default royalty
         let royalty = option::some(royalty::create(
             DEFAULT_OUTPOST_ROYALTY_NUMERATOR,
             ROYALTY_DENOMINATOR,
@@ -409,7 +409,7 @@ module podium::PodiumProtocol {
 
         // Return the created outpost
         create_outpost_internal(
-            _creator,
+            creator,
             name,
             description,
             uri,
@@ -1791,78 +1791,74 @@ module podium::PodiumProtocol {
 
     /// Creates a new outpost (internal implementation)
     fun create_outpost_internal(
-        _creator: &signer,
+        creator: &signer,
         name: String,
         description: String,
         uri: String,
-        royalty_opt: Option<Royalty>,  // Clear name indicating it's optional
+        royalty: Option<Royalty>,
     ): Object<OutpostData> acquires Config {
         // Verify protocol is initialized
         assert!(exists<Config>(@podium), error::not_found(EPROTOCOL_NOT_INITIALIZED));
         
         // Verify creator has a valid account
-        assert!(account::exists_at(signer::address_of(_creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
+        assert!(account::exists_at(signer::address_of(creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
 
         // Handle payment first
         let purchase_price = get_outpost_purchase_price();
-        coin::transfer<AptosCoin>(_creator, @podium, purchase_price);
+        coin::transfer<AptosCoin>(creator, @podium, purchase_price);
 
         // Get config for collection info
         let config = borrow_global_mut<Config>(@podium);
         
-        // Create object with deterministic address
-        let seed = token::create_token_seed(&collection::name(config.collection), &name);
-        let constructor_ref = object::create_named_object(_creator, seed);
-        
-        // Initialize outpost data FIRST
-        let outpost_signer = object::generate_signer(&constructor_ref);
-        move_to(&outpost_signer, OutpostData {
+        // 1. Create base object with deterministic address
+        let constructor_ref = object::create_named_object(creator, *string::bytes(&name));
+        let object_signer = object::generate_signer(&constructor_ref);
+
+        // 2. Initialize outpost data FIRST
+        move_to(&object_signer, OutpostData {
             collection: config.collection,
             name,
-            description,
-            uri,
+            description: description.clone(), // Clone for token creation
+            uri: uri.clone(), // Clone for token creation
             price: purchase_price,
             fee_share: OUTPOST_FEE_SHARE,
             emergency_pause: false,
         });
 
-        // Create token FIRST with no royalty
-        token::create_from_account(
-            _creator,
-            collection::name(config.collection),
-            name,
+        // 3. Create token with collection
+        let token = token::create_token_object(
+            &constructor_ref,
+            config.collection,
             description,
-            option::none<Royalty>(),  // Start with no royalty
-            uri
+            name,
+            royalty,
+            uri,
         );
 
-        // Then handle royalty initialization
-        let royalty_to_init = if (option::is_some<Royalty>(&royalty_opt)) {
-            option::extract(&mut royalty_opt)  // Use provided royalty
-        } else {
-            // Create default royalty
-            royalty::create(
-                DEFAULT_OUTPOST_ROYALTY_NUMERATOR,
-                ROYALTY_DENOMINATOR,
-                @podium
-            )
+        // 4. Store royalty capability if royalty was provided
+        if (option::is_some(&royalty)) {
+            // First generate extend ref from constructor ref
+            let extend_ref = object::generate_extend_ref(&constructor_ref);
+            
+            // Then generate royalty mutator ref from extend ref
+            let royalty_mutator_ref = royalty::generate_mutator_ref(extend_ref);
+            
+            // Store royalty capability for future updates
+            move_to(&object_signer, OutpostRoyaltyCapability {
+                mutator_ref: royalty_mutator_ref
+            });
         };
 
-        // Initialize royalty on the token
-        royalty::init(&constructor_ref, royalty_to_init);
-
-        // Get object reference AFTER initialization
+        // Get object reference and store in table
         let outpost = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
         let outpost_addr = object::object_address(&outpost);
-
-        // Add to outposts table
         table::add(&mut config.outposts, outpost_addr, outpost);
 
         // Emit creation event
         event::emit_event(
             &mut config.outpost_created_events,
             OutpostCreatedEvent {
-                creator: signer::address_of(_creator),
+                creator: signer::address_of(creator),
                 outpost_address: outpost_addr,
                 name,
                 price: purchase_price,
@@ -1877,6 +1873,22 @@ module podium::PodiumProtocol {
     #[view]
     public fun get_collection(): Object<collection::Collection> acquires Config {
         borrow_global<Config>(@podium).collection
+    }
+
+    /// Add entry function wrapper if needed
+    public entry fun create_outpost_entry(
+        creator: &signer,
+        name: String,
+        description: String,
+        uri: String,
+    ) acquires Config {
+        let _outpost = create_outpost(creator, name, description, uri);
+    }
+
+    /// Check if outpost exists
+    #[view]
+    public fun outpost_exists(outpost: Object<OutpostData>): bool {
+        exists<OutpostData>(object::object_address(&outpost))
     }
 
 }

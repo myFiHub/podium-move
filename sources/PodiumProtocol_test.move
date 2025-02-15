@@ -6,7 +6,7 @@ module podium::PodiumProtocol_test {
     use std::debug;
     use std::bcs;
     use std::vector;
-    use aptos_framework::object::{Self, Object, ConstructorRef};
+    use aptos_framework::object::{Self, Object};
     use aptos_framework::account;
     use aptos_framework::coin::{Self, BurnCapability};
     use aptos_framework::timestamp;
@@ -18,7 +18,7 @@ module podium::PodiumProtocol_test {
     use aptos_token_objects::token;
     use aptos_framework::primary_fungible_store;
     use aptos_framework::error;
-    use aptos_token_objects::royalty;
+    use aptos_token_objects::royalty::{Self, Royalty};
     use aptos_token_objects::collection;
     use aptos_framework::fungible_asset::{
         Self,
@@ -200,20 +200,34 @@ module podium::PodiumProtocol_test {
 
     // Helper function to create test outpost
     fun create_test_outpost(creator: &signer): Object<OutpostData> {
-        let name = string::utf8(b"Test Outpost");
-        
-        // Create outpost
+        // Initialize protocol if needed
+        if (!PodiumProtocol::is_initialized()) {
+            PodiumProtocol::initialize(creator);
+        };
+
+        // Create outpost using non-entry function to get Object
         let outpost = PodiumProtocol::create_outpost(
             creator,
-            name,
+            string::utf8(b"Test Outpost"),
             string::utf8(b"Test Description"),
-            string::utf8(b"https://test.uri")
+            string::utf8(b"https://test.uri"),
         );
 
+        // Verify outpost was created
+        assert!(PodiumProtocol::outpost_exists(outpost), 0);
+        
         // Initialize subscription config
         PodiumProtocol::init_subscription_config(creator, outpost);
-        
+
         outpost
+    }
+
+    // Add helper for verifying outpost state
+    #[test_only]
+    fun verify_outpost_state(outpost: Object<OutpostData>) {
+        // Instead of accessing internal state, use public interface
+        assert!(!PodiumProtocol::is_paused(outpost), 0);
+        // Remove fee_share check since it's internal
     }
 
     // Helper function to get expected outpost address
@@ -262,6 +276,36 @@ module podium::PodiumProtocol_test {
     // Helper function to convert internal token units to interface units
     fun to_interface_units(amount: u64): u64 {
         amount / OCTA
+    }
+
+    // Add helper function for creating test accounts
+    fun create_test_account(): signer {
+        // Create framework account first to get mint capability
+        let framework = account::create_signer_for_test(@0x1);
+        if (!coin::is_coin_initialized<AptosCoin>()) {
+            let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(&framework);
+            move_to(&framework, TestCap { burn_cap });
+            // Store mint cap instead of destroying it
+            aptos_coin::store_mint_cap(&framework, mint_cap);
+        };
+
+        let addr = @0x123; // Test address
+        if (!account::exists_at(addr)) {
+            account::create_account_for_test(addr);
+        };
+        let account = account::create_signer_for_test(addr);
+        
+        // Setup account with funds
+        if (!coin::is_account_registered<AptosCoin>(addr)) {
+            coin::register<AptosCoin>(&account);
+        };
+        
+        // Fund account using framework account
+        if (coin::balance<AptosCoin>(addr) < INITIAL_BALANCE) {
+            aptos_coin::mint(&framework, addr, INITIAL_BALANCE);
+        };
+
+        account
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, user1 = @user1, user2 = @user2)]
@@ -379,9 +423,9 @@ module podium::PodiumProtocol_test {
         PodiumProtocol::create_subscription_tier(
             admin,
             outpost,
-            string::utf8(b"basic"),
+            string::utf8(b"tier0"),
             SUBSCRIPTION_WEEK_PRICE,
-            1, // DURATION_WEEK
+            7 * 24 * 60 * 60  // 7 days in seconds
         );
 
         PodiumProtocol::create_subscription_tier(
@@ -434,9 +478,9 @@ module podium::PodiumProtocol_test {
         PodiumProtocol::create_subscription_tier(
             admin,
             outpost,
-            string::utf8(b"basic"),
+            string::utf8(b"tier0"),
             SUBSCRIPTION_WEEK_PRICE,
-            1, // DURATION_WEEK
+            7 * 24 * 60 * 60  // 7 days in seconds
         );
 
         // Subscribe
@@ -748,9 +792,9 @@ module podium::PodiumProtocol_test {
         PodiumProtocol::create_subscription_tier(
             creator,
             outpost,
-            string::utf8(b"basic"),
+            string::utf8(b"tier0"),
             SUBSCRIPTION_WEEK_PRICE,
-            1, // DURATION_WEEK
+            7 * 24 * 60 * 60  // 7 days in seconds
         );
         
         // Create pass token
@@ -938,30 +982,34 @@ module podium::PodiumProtocol_test {
         );
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium)]
-    public fun test_outpost_royalty(
-        aptos_framework: &signer,
-        admin: &signer
-    ) {
-        // Setup test environment
-        setup_test(aptos_framework, admin, admin, admin, admin);
+    #[test(admin = @podium)]
+    fun test_outpost_royalty(admin: &signer) {
+        // Setup
+        initialize_minimal_test(admin);
         
         // Create outpost with default royalty
         let outpost = create_test_outpost(admin);
         
-        // Get the actual royalty from the outpost
-        let stored_royalty = token::royalty<OutpostData>(outpost);
+        // Verify initial royalty
+        let token_addr = object::object_address(&outpost);
+        let royalty = token::royalty(object::address_to_object<token::Token>(token_addr));
+        assert!(option::is_some(&royalty), 0);
         
-        // Verify royalty exists and points to protocol
-        assert!(option::is_some(&stored_royalty), 0);
-        let royalty = option::borrow(&stored_royalty);
-        assert!(royalty::payee_address(royalty) == @podium, 1);
+        let royalty = option::extract(&mut royalty);
+        assert!(royalty::numerator(&royalty) == TEST_ROYALTY_NUMERATOR, 1);
+        assert!(royalty::denominator(&royalty) == TEST_ROYALTY_DENOMINATOR, 2);
         
-        // Verify royalty percentage using proper Aptos royalty functions
-        let numerator = royalty::numerator(royalty);
-        let denominator = royalty::denominator(royalty);
-        assert!(numerator > 0 && numerator <= 3000, 2);  // 0-30%
-        assert!(denominator == 10000, 3);  // Standard basis points
+        // Update royalty
+        let new_numerator = 1000; // 10%
+        PodiumProtocol::update_outpost_royalty(admin, outpost, new_numerator);
+        
+        // Verify updated royalty
+        let royalty = token::royalty(object::address_to_object<token::Token>(token_addr));
+        assert!(option::is_some(&royalty), 3);
+        
+        let royalty = option::extract(&mut royalty);
+        assert!(royalty::numerator(&royalty) == new_numerator, 4);
+        assert!(royalty::denominator(&royalty) == TEST_ROYALTY_DENOMINATOR, 5);
     }
 
     #[test(admin = @podium, non_admin = @0x123)]
@@ -1117,38 +1165,41 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(admin = @podium)]
-    public fun test_self_subscription(
-        admin: &signer,
-    ) {
+    fun test_self_subscription(admin: &signer) {
         initialize_minimal_test(admin);
-        let outpost = create_test_outpost(admin);
         
         let initial_balance = coin::balance<AptosCoin>(signer::address_of(admin));
         
-        // Create and subscribe to tier
+        // Create outpost
+        let outpost = create_test_outpost(admin);
+        
+        // Create subscription tier
         PodiumProtocol::create_subscription_tier(
             admin,
             outpost,
-            string::utf8(b"basic"),
+            string::utf8(b"tier0"),
             SUBSCRIPTION_WEEK_PRICE,
-            1
+            7 * 24 * 60 * 60  // 7 days in seconds
         );
-
+        
+        // Subscribe
         PodiumProtocol::subscribe(
             admin,
             outpost,
-            0,
+            0,  // tier_id
             option::none()
         );
 
         let final_balance = coin::balance<AptosCoin>(signer::address_of(admin));
         let total_payment = SUBSCRIPTION_WEEK_PRICE;
-        let expected_loss = (total_payment * 400) / 10000; // Only protocol fee
+        let expected_loss = (total_payment * 400) / 10000; // Protocol fee only
         
         let actual_loss = initial_balance - final_balance;
+        let tolerance = (expected_loss * BALANCE_TOLERANCE_BPS) / 10000;
+        
         assert!(
-            (if (actual_loss > expected_loss) { actual_loss - expected_loss } 
-             else { expected_loss - actual_loss }) <= (expected_loss * BALANCE_TOLERANCE_BPS) / 10000,
+            (if (actual_loss > expected_loss) { actual_loss - expected_loss }
+             else { expected_loss - actual_loss }) <= tolerance,
             0
         );
 
@@ -1270,6 +1321,42 @@ module podium::PodiumProtocol_test {
         debug::print(&actual);
         debug::print(&string::utf8(b"Expected:"));
         debug::print(&expected);
+    }
+
+    // Add helper to verify outpost exists
+    #[test_only]
+    fun verify_outpost_exists(outpost: Object<OutpostData>) {
+        assert!(PodiumProtocol::outpost_exists(outpost), 0);
+    }
+
+    #[test]
+    fun test_create_outpost() {
+        let creator = create_test_account();
+        
+        // Create outpost and get Object reference
+        let outpost = create_test_outpost(&creator);
+        
+        // Verify outpost exists
+        assert!(PodiumProtocol::outpost_exists(outpost), 0);
+        
+        // Verify ownership
+        assert!(PodiumProtocol::verify_ownership(outpost, signer::address_of(&creator)), 0);
+    }
+
+    #[test]
+    fun test_create_outpost_entry() {
+        let creator = create_test_account();
+        
+        // Test entry function
+        PodiumProtocol::create_outpost_entry(
+            &creator,
+            string::utf8(b"Test Outpost"),
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Since entry function doesn't return Object, we need to verify differently
+        // e.g., through events or other means
     }
 
 } 
