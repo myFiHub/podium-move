@@ -285,8 +285,8 @@ module podium::PodiumProtocol_test {
         if (!coin::is_coin_initialized<AptosCoin>()) {
             let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(&framework);
             move_to(&framework, TestCap { burn_cap });
-            // Store mint cap instead of destroying it
-            aptos_coin::store_mint_cap(&framework, mint_cap);
+            // Destroy mint cap instead of storing it
+            coin::destroy_mint_cap(mint_cap);
         };
 
         let addr = @0x123; // Test address

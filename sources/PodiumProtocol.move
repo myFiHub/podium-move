@@ -419,7 +419,7 @@ module podium::PodiumProtocol {
 
     /// Creates a new token with a deterministic address
     fun create_named_token_with_collection(
-        _creator: &signer,
+        creator: &signer,
         collection: Object<collection::Collection>,
         description: String,
         name: String,
@@ -430,15 +430,23 @@ module podium::PodiumProtocol {
         let seed = token::create_token_seed(&collection::name(collection), &name);
         
         // Create object with deterministic address
-        let constructor_ref = object::create_named_object(_creator, seed);
+        let constructor_ref = object::create_named_object(creator, seed);
         let object_signer = object::generate_signer(&constructor_ref);
 
         // Initialize royalty if provided
         let royalty_object = if (option::is_some(&royalty)) {
             // Initialize royalty directly on the token object
             royalty::init(&constructor_ref, option::extract(&mut royalty));
+            
+            // Store royalty capability for future updates
+            let extend_ref = object::generate_extend_ref(&constructor_ref);
+            let royalty_mutator_ref = royalty::generate_mutator_ref(extend_ref);
+            move_to(&object_signer, OutpostRoyaltyCapability {
+                mutator_ref: royalty_mutator_ref
+            });
+
             // Get the royalty object from the token object
-            let creator_addr = signer::address_of(_creator);
+            let creator_addr = signer::address_of(creator);
             option::some(object::address_to_object<royalty::Royalty>(
                 object::create_object_address(&creator_addr, seed)
             ))
@@ -454,7 +462,7 @@ module podium::PodiumProtocol {
             uri,
             mutation_events: object::new_event_handle(&object_signer),
             royalty: royalty_object,
-            index: option::none(),  // Initialize index as none since we don't need it
+            index: option::none(),
         };
         move_to(&object_signer, token);
 
@@ -1809,45 +1817,29 @@ module podium::PodiumProtocol {
 
         // Get config for collection info
         let config = borrow_global_mut<Config>(@podium);
+        let collection = object::address_to_object<collection::Collection>(config.collection_addr);
         
-        // 1. Create base object with deterministic address
-        let constructor_ref = object::create_named_object(creator, *string::bytes(&name));
-        let object_signer = object::generate_signer(&constructor_ref);
-
-        // 2. Initialize outpost data FIRST
-        move_to(&object_signer, OutpostData {
-            collection: config.collection,
-            name,
-            description: description.clone(), // Clone for token creation
-            uri: uri.clone(), // Clone for token creation
-            price: purchase_price,
-            fee_share: OUTPOST_FEE_SHARE,
-            emergency_pause: false,
-        });
-
-        // 3. Create token with collection
-        let token = token::create_token_object(
-            &constructor_ref,
-            config.collection,
+        // Create token using our custom function that handles collection properly
+        let constructor_ref = create_named_token_with_collection(
+            creator,
+            collection,
             description,
             name,
             royalty,
             uri,
         );
 
-        // 4. Store royalty capability if royalty was provided
-        if (option::is_some(&royalty)) {
-            // First generate extend ref from constructor ref
-            let extend_ref = object::generate_extend_ref(&constructor_ref);
-            
-            // Then generate royalty mutator ref from extend ref
-            let royalty_mutator_ref = royalty::generate_mutator_ref(extend_ref);
-            
-            // Store royalty capability for future updates
-            move_to(&object_signer, OutpostRoyaltyCapability {
-                mutator_ref: royalty_mutator_ref
-            });
-        };
+        // Initialize outpost data
+        let object_signer = object::generate_signer(&constructor_ref);
+        move_to(&object_signer, OutpostData {
+            collection,  // Use the collection we got from config
+            name,
+            description,
+            uri,
+            price: purchase_price,
+            fee_share: OUTPOST_FEE_SHARE,
+            emergency_pause: false,
+        });
 
         // Get object reference and store in table
         let outpost = object::object_from_constructor_ref<OutpostData>(&constructor_ref);
