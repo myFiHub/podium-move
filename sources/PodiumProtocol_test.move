@@ -15,7 +15,6 @@ module podium::PodiumProtocol_test {
     use aptos_token_objects::token;
     use aptos_framework::primary_fungible_store;
     use aptos_framework::error;
-    use aptos_framework::fungible_asset;
 
     // Test addresses
     const TREASURY: address = @podium;

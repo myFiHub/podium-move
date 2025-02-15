@@ -8,7 +8,7 @@ module podium::PodiumProtocol {
     use aptos_framework::error;
     use aptos_token_objects::collection;
     use aptos_token_objects::token;
-    use aptos_token_objects::royalty::{Self, Royalty, MutatorRef};
+    use aptos_token_objects::royalty::{Self, Royalty};
     use aptos_framework::table::{Self, Table};
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
@@ -193,17 +193,20 @@ module podium::PodiumProtocol {
     }
 
     /// Subscription configuration
-    struct SubscriptionConfig has key, store {
+    struct SubscriptionConfig has store {
         tiers: vector<SubscriptionTier>,
+        tier_names: Table<String, bool>,
         subscriptions: Table<address, Subscription>,
         max_tiers: u64,
     }
 
     /// Subscription tier details
-    struct SubscriptionTier has store, copy, drop {
+    struct SubscriptionTier has store {
         name: String,
         price: u64,
         duration: u64,
+        tier_id: u64,
+        timestamp: u64
     }
 
     /// Active subscription data
@@ -1087,69 +1090,67 @@ module podium::PodiumProtocol {
         // Initialize subscription config
         let config = borrow_global_mut<Config>(@podium);
         if (!table::contains(&config.subscription_configs, outpost_addr)) {
-            table::add(&mut config.subscription_configs, outpost_addr, SubscriptionConfig {
-                tiers: vector::empty(),
-                subscriptions: table::new(),
-                max_tiers: 0,
-            });
+            table::add(
+                &mut config.subscription_configs,
+                outpost_addr,
+                SubscriptionConfig {
+                    tiers: vector::empty(),
+                    tier_names: table::new(),
+                    subscriptions: table::new(),
+                    max_tiers: 100, // Default max tiers
+                }
+            );
         };
     }
 
     /// Create subscription tier
     public entry fun create_subscription_tier(
-        _owner: &signer,
+        creator: &signer,
         outpost: Object<OutpostData>,
         name: String,
         price: u64,
         duration_type: u64
     ) acquires Config {
         let outpost_addr = object::object_address(&outpost);
-        debug::print(&string::utf8(b"[create_subscription_tier] Outpost address:"));
-        debug::print(&outpost_addr);
-        debug::print(&string::utf8(b"[create_subscription_tier] Creator address:"));
-        debug::print(&signer::address_of(_owner));
-        
-        assert!(verify_ownership(outpost, signer::address_of(_owner)), error::permission_denied(ENOT_OWNER));
-        debug::print(&string::utf8(b"[create_subscription_tier] Ownership verified"));
-        
         let config = borrow_global_mut<Config>(@podium);
-        debug::print(&string::utf8(b"[create_subscription_tier] Checking if config exists..."));
-        assert!(table::contains(&config.subscription_configs, outpost_addr), error::not_found(ETIER_NOT_FOUND));
-        debug::print(&string::utf8(b"[create_subscription_tier] Config exists"));
-
-        let sub_config = table::borrow_mut(&mut config.subscription_configs, outpost_addr);
-        debug::print(&string::utf8(b"[create_subscription_tier] Current number of tiers:"));
-        debug::print(&vector::length(&sub_config.tiers));
         
-        // Verify tier doesn't already exist
-        let i = 0;
-        let len = vector::length(&sub_config.tiers);
-        while (i < len) {
-            let tier = vector::borrow(&sub_config.tiers, i);
-            assert!(tier.name != name, error::already_exists(ETIER_EXISTS));
-            i = i + 1;
+        // Initialize subscription config if missing
+        if (!table::contains(&config.subscription_configs, outpost_addr)) {
+            table::add(
+                &mut config.subscription_configs,
+                outpost_addr,
+                SubscriptionConfig {
+                    tiers: vector::empty(),
+                    tier_names: table::new(),
+                    subscriptions: table::new(),
+                    max_tiers: 100, // Default max tiers
+                }
+            );
         };
-
+        
+        // Verify ownership
+        assert!(verify_ownership(outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
+        
+        // Validate inputs
+        validate_duration(duration_type);
+        assert!(price > 0, error::invalid_argument(EINVALID_TIER_PRICE));
+        
+        // Get existing config
+        let subscription_config = table::borrow_mut(&mut config.subscription_configs, outpost_addr);
+        
+        // Check for existing tier with same name
+        assert!(!table::contains(&subscription_config.tier_names, name), error::already_exists(ETIER_EXISTS));
+        
         // Add new tier
-        vector::push_back(&mut sub_config.tiers, SubscriptionTier {
+        let current_tier_count = vector::length(&subscription_config.tiers);
+        vector::push_back(&mut subscription_config.tiers, SubscriptionTier {
             name,
             price,
             duration: get_duration_seconds(duration_type),
+            tier_id: current_tier_count,
+            timestamp: timestamp::now_seconds()
         });
-
-        // Emit tier updated event
-        event::emit_event(
-            &mut config.tier_updated_events,
-            TierUpdatedEvent {
-                outpost_addr,
-                tier_id: len, // New tier ID is the previous length
-                price,
-                duration: get_duration_seconds(duration_type),
-                timestamp: timestamp::now_seconds(),
-            }
-        );
-
-        debug::print(&string::utf8(b"[create_subscription_tier] Tier added successfully"));
+        table::add(&mut subscription_config.tier_names, name, true);
     }
 
     /// Subscribe to a tier
@@ -1862,7 +1863,8 @@ module podium::PodiumProtocol {
         outpost
     }
 
-    /// Get collection
+    /// # View
+    /// Returns the protocol's main collection object
     #[view]
     public fun get_collection(): Object<collection::Collection> acquires Config {
         borrow_global<Config>(@podium).collection
@@ -1878,13 +1880,15 @@ module podium::PodiumProtocol {
         let _outpost = create_outpost(creator, name, description, uri);
     }
 
-    /// Check if outpost exists
+    /// # View
+    /// Checks if an outpost object exists
     #[view]
     public fun outpost_exists(outpost: Object<OutpostData>): bool {
         exists<OutpostData>(object::object_address(&outpost))
     }
 
-    /// Check if outpost has royalty capability
+    /// # View
+    /// Verifies if an outpost has royalty management capability
     #[view]
     public fun has_royalty_capability(outpost: Object<OutpostData>): bool {
         exists<OutpostRoyaltyCapability>(object::object_address(&outpost))
