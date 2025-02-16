@@ -405,9 +405,18 @@ module podium::PodiumProtocol_test {
         setup_test(aptos_framework, admin, subscriber, subscriber, creator);
         
         // Create outpost with tier using creator
-        let outpost = create_test_outpost_with_tier(creator);
+        let outpost = create_test_outpost(creator);
 
-        // Verify tier exists and has correct details
+        // Create subscription tier first
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic Tier"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Now verify tier exists and has correct details
         let (tier_name, tier_price, tier_duration) = PodiumProtocol::get_subscription_tier_details(outpost, 0);
         assert!(tier_name == string::utf8(b"Basic Tier"), 100);
         assert!(tier_price == SUBSCRIPTION_WEEK_PRICE, 98);
@@ -441,28 +450,25 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"test_subscription_flow: PASS"));
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, subscriber = @user1)]
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
     public fun test_subscription_expiration(
         aptos_framework: &signer,
         admin: &signer,
+        creator: &signer,
         subscriber: &signer,
     ) {
-        setup_test(aptos_framework, admin, subscriber, subscriber, admin);
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
         
-        let outpost = create_test_outpost(admin);
+        let outpost = create_test_outpost(creator);
 
-        // Create tier with test module's constant
+        // Create tier with explicit duration constant
         PodiumProtocol::create_subscription_tier(
-            admin,
+            creator,  // Creator creates the tier, not admin
             outpost,
             string::utf8(b"weekly"),
             SUBSCRIPTION_WEEK_PRICE,
-            DURATION_WEEK
+            DURATION_WEEK  // Use protocol's duration constant
         );
-
-        // Debug print subscription attempt
-        debug::print(&string::utf8(b"Subscribing to tier:"));
-        debug::print(&0u64);
 
         // Subscribe
         PodiumProtocol::subscribe(
@@ -1393,57 +1399,64 @@ module podium::PodiumProtocol_test {
     #[test_only]
     const TEST_TARGET: address = @0x456;
 
-    #[test(aptos_framework = @0x1)]
-    fun test_valid_durations() {
-        let aptos_framework = account::create_account_for_test(@0x1);
-        let admin = account::create_account_for_test(@podium);
-        let user = account::create_account_for_test(TEST_USER);
-        let target = account::create_account_for_test(TEST_TARGET);
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    public fun test_valid_durations(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        // Setup test environment
+        setup_test(aptos_framework, admin, creator, creator, creator);
         
-        setup_test(
-            &aptos_framework,
-            &admin,
-            &user,
-            &user,
-            &target
-        );
+        // Create outpost
+        let outpost = create_test_outpost(creator);
         
-        let creator = account::create_account_for_test(@0x789);
-        setup_account(&creator);
-        
-        let outpost = PodiumProtocol::create_outpost(
-            &creator,
-            string::utf8(b"Test Outpost"),
-            string::utf8(b"Test Description"),
-            string::utf8(b"https://test.uri")
-        );
-        
-        let admin_signer = account::create_signer_for_test(@podium);
-        
-        // Test all valid duration types
+        // Test all valid duration types with creator
         PodiumProtocol::create_subscription_tier(
-            &admin_signer,
+            creator,
             outpost,
             string::utf8(b"Weekly"),
-            1,
+            SUBSCRIPTION_WEEK_PRICE,
             DURATION_WEEK
         );
-        
+
         PodiumProtocol::create_subscription_tier(
-            &admin_signer,
+            creator,
             outpost,
             string::utf8(b"Monthly"),
-            1,
+            SUBSCRIPTION_MONTH_PRICE,
             DURATION_MONTH
         );
-        
+
         PodiumProtocol::create_subscription_tier(
-            &admin_signer,
+            creator,
             outpost,
             string::utf8(b"Yearly"),
-            1,
+            SUBSCRIPTION_YEAR_PRICE,
             DURATION_YEAR
         );
+
+        // Verify tier count
+        assert!(PodiumProtocol::get_tier_count(outpost) == 3, 0);
+
+        // Verify each tier's details
+        let (name, price, duration) = PodiumProtocol::get_subscription_tier_details(outpost, 0);
+        assert!(name == string::utf8(b"Weekly"), 1);
+        assert!(price == SUBSCRIPTION_WEEK_PRICE, 2);
+        assert!(duration == SECONDS_PER_WEEK, 3);
+
+        let (name, price, duration) = PodiumProtocol::get_subscription_tier_details(outpost, 1);
+        assert!(name == string::utf8(b"Monthly"), 4);
+        assert!(price == SUBSCRIPTION_MONTH_PRICE, 5);
+        assert!(duration == SECONDS_PER_MONTH, 6);
+
+        let (name, price, duration) = PodiumProtocol::get_subscription_tier_details(outpost, 2);
+        assert!(name == string::utf8(b"Yearly"), 7);
+        assert!(price == SUBSCRIPTION_YEAR_PRICE, 8);
+        assert!(duration == SECONDS_PER_YEAR, 9);
+
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_valid_durations: PASS"));
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, user = @user1, target = @target)]
