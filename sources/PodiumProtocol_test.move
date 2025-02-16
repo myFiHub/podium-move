@@ -676,7 +676,7 @@ module podium::PodiumProtocol_test {
         let (tier_name, tier_price, tier_duration) = PodiumProtocol::get_subscription_tier_details(outpost, 0);
         assert!(tier_name == string::utf8(b"Test Tier"), 7);
         assert!(tier_price == SUBSCRIPTION_WEEK_PRICE, 8);
-        assert!(tier_duration == 1, 9);
+        assert!(tier_duration == SECONDS_PER_WEEK, 9);
         
         // Subscribe to test subscription views
         PodiumProtocol::subscribe(admin, outpost, 0, option::none());
@@ -1015,7 +1015,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
-    fun test_outpost_royalty(
+    public fun test_outpost_royalty(
         aptos_framework: &signer,
         admin: &signer,
         creator: &signer,
