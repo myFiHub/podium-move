@@ -33,6 +33,7 @@ module podium::PodiumProtocol {
     const EPROTOCOL_NOT_INITIALIZED: u64 = 7;
     const EINVALID_WEIGHT: u64 = 8;  // New error for invalid weight parameters
     const EINVALID_ROYALTY: u64 = 28;
+    const EDUPLICATE_OUTPOST_NAME: u64 = 29;  // New error for duplicate outpost names
 
     // Error constants - Outpost Related
     const EOUTPOST_EXISTS: u64 = 8;
@@ -406,6 +407,16 @@ module podium::PodiumProtocol {
     ): Object<OutpostData> acquires Config {
         // Validate metadata
         validate_outpost_metadata(&name, &description, &uri);
+
+        // Check for duplicate name
+        let config = borrow_global<Config>(@podium);
+        let collection = object::address_to_object<collection::Collection>(config.collection_addr);
+        let seed = token::create_token_seed(&collection::name(collection), &name);
+        let creator_addr = signer::address_of(creator);
+        let expected_addr = object::create_object_address(&creator_addr, seed);
+        
+        // If an object already exists at this address, the name is taken
+        assert!(!exists<OutpostData>(expected_addr), error::already_exists(EDUPLICATE_OUTPOST_NAME));
 
         // Create with default royalty
         let royalty = option::some(royalty::create(
@@ -1804,7 +1815,7 @@ module podium::PodiumProtocol {
         // Verify creator has a valid account
         assert!(account::exists_at(signer::address_of(creator)), error::not_found(EACCOUNT_NOT_REGISTERED));
 
-        // Handle payment first
+        // Handle creation payment to treasury
         let purchase_price = get_outpost_purchase_price();
         coin::transfer<AptosCoin>(creator, @podium, purchase_price);
 
@@ -1822,7 +1833,7 @@ module podium::PodiumProtocol {
             uri,
         );
 
-        // Initialize outpost data
+        // Initialize outpost data with INITIAL_PRICE for pass purchases
         let object_signer = object::generate_signer(&constructor_ref);
         move_to(&object_signer, OutpostData {
             owner: signer::address_of(creator),
@@ -1830,7 +1841,7 @@ module podium::PodiumProtocol {
             name,
             description,
             uri,
-            price: purchase_price,
+            price: INITIAL_PRICE,  // Initial price for passes (1 APT)
             fee_share: OUTPOST_FEE_SHARE,
             emergency_pause: false,
             subscription_tiers: table::new(),

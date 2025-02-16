@@ -2413,4 +2413,65 @@ module podium::PodiumProtocol_test {
         assert!(receiver_balance == 50000000, 2);
     }
 
+    // Remove the first occurrence of test_duplicate_outpost_name and its related code
+    // Add helper function for creating test outpost with name
+    fun create_test_outpost_with_name(creator: &signer, name: String): Object<OutpostData> {
+        // Ensure creator has enough funds
+        let purchase_price = PodiumProtocol::get_outpost_purchase_price();
+        let framework_signer = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework_signer, signer::address_of(creator), purchase_price * 2);
+
+        // Create outpost with specified name
+        let outpost = PodiumProtocol::create_outpost(
+            creator,
+            name,
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Initialize subscription configuration
+        PodiumProtocol::init_subscription_config(creator, outpost);
+
+        outpost
+    }
+
+    // Keep only the second occurrence of test_duplicate_outpost_name which tests with different URIs
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    #[expected_failure(abort_code = 524329)] // EDUPLICATE_OUTPOST_NAME = 29
+    public fun test_duplicate_outpost_name(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, creator, creator);
+        
+        let creator_addr = signer::address_of(creator);
+        let purchase_price = PodiumProtocol::get_outpost_purchase_price();
+        
+        // Fund creator with enough for multiple outposts
+        let framework_signer = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework_signer, creator_addr, purchase_price * 10);
+        
+        // Create first outpost with valid metadata
+        let name = string::utf8(b"DuplicateTest");
+        let description = string::utf8(b"Test Description");
+        let uri1 = string::utf8(b"https://test1.uri");
+        
+        let _ = PodiumProtocol::create_outpost(
+            creator,
+            name,
+            description,
+            uri1,
+        );
+        
+        // Attempt to create second outpost with same name but different URI
+        let uri2 = string::utf8(b"https://test2.uri");
+        let _ = PodiumProtocol::create_outpost(
+            creator,
+            name,  // Same name
+            description,
+            uri2,  // Different URI
+        );
+    }
+
 } 
