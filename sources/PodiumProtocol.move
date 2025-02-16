@@ -634,7 +634,7 @@ module podium::PodiumProtocol {
         referrer: Option<address>
     ): (u64, u64, u64, u64) acquires Config {
         // Get current supply
-        let _current_supply = get_total_supply(target_addr)/ MIN_WHOLE_PASS;
+        let _current_supply = get_total_supply(target_addr);
         
         // Calculate raw price first to avoid dangling reference
         let price = calculate_price(_current_supply, amount, false);
@@ -664,7 +664,7 @@ module podium::PodiumProtocol {
         amount: u64
     ): (u64, u64, u64) acquires Config {
         // Get current supply
-        let _current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
+        let _current_supply = get_total_supply(target_addr);
         
         // Basic validations matching Solidity
         if (amount == 0 || _current_supply < amount) {
