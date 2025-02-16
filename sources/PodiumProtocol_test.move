@@ -54,7 +54,8 @@ module podium::PodiumProtocol_test {
     
     // Fee constants in basis points
     const TEST_OUTPOST_FEE_SHARE: u64 = 500; // 5% in basis points
-    const TEST_MAX_FEE_PERCENTAGE: u64 = 10000; // 100% in basis points
+    const TEST_MAX_FEE_PERCENTAGE: u64 = 400; // 4% instead of 100%
+    const MAX_PROTOCOL_FEE_PERCENT: u64 = 400; // 4% maximum protocol fee
 
     // Define test constants
     const TEST_ROYALTY_NUMERATOR: u64 = 500;  // 5%
@@ -1809,7 +1810,6 @@ module podium::PodiumProtocol_test {
     ) {
         setup_test(aptos_framework, admin, subscriber, subscriber, creator);
         
-        // Create outpost
         let outpost = create_test_outpost(creator);
         
         // Create tier
@@ -1821,58 +1821,53 @@ module podium::PodiumProtocol_test {
             DURATION_WEEK
         );
 
-        // Test with 0% protocol fee
+        // Test 1: 0% protocol fee
         PodiumProtocol::update_protocol_subscription_fee(admin, 0);
+        let (initial_protocol, initial_creator) = execute_subscription_and_get_balances(subscriber, outpost, creator);
+        assert!(coin::balance<AptosCoin>(@podium) == initial_protocol, 0);
+        assert!(coin::balance<AptosCoin>(signer::address_of(creator)) == initial_creator + SUBSCRIPTION_WEEK_PRICE, 1);
+
+        // Test 2: Maximum allowed protocol fee (4%)
+        PodiumProtocol::update_protocol_subscription_fee(admin, MAX_PROTOCOL_FEE_PERCENT);
+        let (initial_protocol_max, initial_creator_max) = execute_subscription_and_get_balances(subscriber, outpost, creator);
         
-        // Record initial balances
-        let initial_protocol = coin::balance<AptosCoin>(@podium);
-        let initial_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+        let expected_protocol_fee = (SUBSCRIPTION_WEEK_PRICE * MAX_PROTOCOL_FEE_PERCENT) / 10000;
+        let expected_creator_share = SUBSCRIPTION_WEEK_PRICE - expected_protocol_fee;
         
-        // Fund subscriber with enough coins
+        assert!(coin::balance<AptosCoin>(@podium) == initial_protocol_max + expected_protocol_fee, 2);
+        assert!(coin::balance<AptosCoin>(signer::address_of(creator)) == initial_creator_max + expected_creator_share, 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    #[expected_failure(abort_code = 65538)] // error::invalid_argument(EINVALID_FEE_VALUE)
+    public fun test_fee_beyond_maximum(
+        aptos_framework: &signer,
+        admin: &signer,
+    ) {
+        setup_test(aptos_framework, admin, admin, admin, admin);
+        // Attempt to set fee beyond maximum (should fail)
+        PodiumProtocol::update_protocol_subscription_fee(admin, MAX_PROTOCOL_FEE_PERCENT + 1);
+    }
+
+    fun execute_subscription_and_get_balances(
+        subscriber: &signer,
+        outpost: Object<OutpostData>,
+        creator: &signer
+    ): (u64, u64) {
         let framework = account::create_signer_for_test(@0x1);
         aptos_coin::mint(&framework, signer::address_of(subscriber), SUBSCRIPTION_WEEK_PRICE * 2);
         
-        // Subscribe with 0% protocol fee
+        let initial_protocol = coin::balance<AptosCoin>(@podium);
+        let initial_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+        
         PodiumProtocol::subscribe(
             subscriber,
             outpost,
             0,
             option::none()
         );
-
-        // Verify protocol received no fee
-        let final_protocol = coin::balance<AptosCoin>(@podium);
-        let final_creator = coin::balance<AptosCoin>(signer::address_of(creator));
         
-        assert!(final_protocol == initial_protocol, 0); // Protocol fee should be 0
-        assert!(final_creator > initial_creator, 1); // Creator should still receive their share
-
-        // Test with maximum protocol fee
-        PodiumProtocol::update_protocol_subscription_fee(admin, TEST_MAX_FEE_PERCENTAGE);
-        
-        // Record balances before second subscription
-        let initial_protocol_max = coin::balance<AptosCoin>(@podium);
-        let initial_creator_max = coin::balance<AptosCoin>(signer::address_of(creator));
-        
-        // Create another subscriber for max fee test
-        let subscriber2 = account::create_signer_for_test(@0x456);
-        setup_account(&subscriber2);
-        aptos_coin::mint(&framework, signer::address_of(&subscriber2), SUBSCRIPTION_WEEK_PRICE * 2);
-        
-        // Subscribe with max protocol fee
-        PodiumProtocol::subscribe(
-            &subscriber2,
-            outpost,
-            0,
-            option::none()
-        );
-
-        // Verify fee distribution with max protocol fee
-        let final_protocol_max = coin::balance<AptosCoin>(@podium);
-        let final_creator_max = coin::balance<AptosCoin>(signer::address_of(creator));
-        
-        assert!(final_protocol_max > initial_protocol_max, 2); // Protocol should receive fee
-        assert!(final_creator_max > initial_creator_max, 3); // Creator should still get share
+        (initial_protocol, initial_creator)
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
@@ -2138,7 +2133,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
-    #[expected_failure(abort_code = 65539)]  // error::invalid_state(EEMERGENCY_PAUSE)
+    #[expected_failure(abort_code = 196621)]  // 3*65536 + EEMERGENCY_PAUSE(13)
     public fun test_subscribe_during_pause(
         aptos_framework: &signer,
         admin: &signer,
@@ -2175,7 +2170,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @0x456)]
-    #[expected_failure(abort_code = 65539)]  // error::invalid_state(EEMERGENCY_PAUSE)
+    #[expected_failure(abort_code = 196621)]  // 3*65536 + EEMERGENCY_PAUSE(13)
     public fun test_subscribe_while_paused(
         aptos_framework: &signer,
         admin: &signer,
@@ -2201,7 +2196,7 @@ module podium::PodiumProtocol_test {
         // Pause outpost
         PodiumProtocol::toggle_emergency_pause(creator, outpost);
 
-        // Attempt to subscribe while paused (this call is expected to abort with code 65539)
+        // Attempt to subscribe while paused
         PodiumProtocol::subscribe(
             subscriber,
             outpost,
