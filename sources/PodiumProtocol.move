@@ -524,14 +524,14 @@ module podium::PodiumProtocol {
     // ============ Pass Token Management Functions ============
 
     /// Mint new passes
-    public fun mint_pass(
+    fun mint_pass(
         _creator: &signer,
         asset_symbol: String,
-        amount: u64
+        amount: u64  // Add scaling from interface units to token units
     ): FungibleAsset acquires AssetCapabilities {
         let caps = borrow_global<AssetCapabilities>(@podium);
         let mint_ref = table::borrow(&caps.mint_refs, asset_symbol);
-        fungible_asset::mint(mint_ref, amount)
+        fungible_asset::mint(mint_ref, amount * MIN_WHOLE_PASS) // Scale up
     }
 
     /// Burn passes (internal function for sell_pass)
@@ -554,21 +554,15 @@ module podium::PodiumProtocol {
     public fun transfer_pass(
         from: &signer,
         to: address,
-        target_addr: address,  // Either outpost address or user address
-        amount: u64
+        target_addr: address,
+        amount: u64  // In token units (1 = 10^-8 pass)
     ) acquires AssetCapabilities {
-        let _from_addr = signer::address_of(from);
-         // Validate amount is positive
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        // Get metadata using target address
         let asset_symbol = get_asset_symbol(target_addr);
-        
-        // Get metadata object
         let caps = borrow_global<AssetCapabilities>(@podium);
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
         
-        // Transfer using primary store
         primary_fungible_store::transfer(from, *metadata, to, amount);
     }
 
@@ -707,10 +701,10 @@ module podium::PodiumProtocol {
     public entry fun buy_pass(
         buyer: &signer,
         target_addr: address,
-        amount: u64,  // amount in interface units (1 = one whole pass)
+        amount: u64,  // In interface units (whole passes)
         referrer: Option<address>
     ) acquires Config, RedemptionVault, AssetCapabilities {
-        // Validate amount is a whole number
+        // Validate whole pass amount
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Get current supply in interface units
@@ -803,9 +797,10 @@ module podium::PodiumProtocol {
     public entry fun sell_pass(
         seller: &signer,
         target_addr: address,
-        amount: u64  // amount in interface units (1 = one whole pass)
+        amount: u64  // In interface units (whole passes)
     ) acquires Config, RedemptionVault, AssetCapabilities {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
+        let scaled_amount = amount * MIN_WHOLE_PASS;
         
         // Calculate sell price and fees using interface units
         let (base_price, protocol_fee, subject_fee) = 
@@ -817,7 +812,7 @@ module podium::PodiumProtocol {
         let asset_symbol = get_asset_symbol(target_addr);
         let caps = borrow_global<AssetCapabilities>(@podium);
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
-        let fa = primary_fungible_store::withdraw(seller, *metadata, amount);
+        let fa = primary_fungible_store::withdraw(seller, *metadata, scaled_amount);
         burn_pass(seller, asset_symbol, fa);
         
         // Withdraw from redemption vault
@@ -1384,7 +1379,7 @@ module podium::PodiumProtocol {
         };
         
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
-        primary_fungible_store::balance(owner, *metadata)
+        primary_fungible_store::balance(owner, *metadata) // Return raw token units
     }
 
     /// Check if outpost is paused
