@@ -72,9 +72,10 @@ module podium::PodiumProtocol {
 
     // Constants - Fee related (in basis points)
     const BPS: u64 = 10000; // 100% = 10000 basis points
-    const MAX_REFERRAL_FEE_PERCENT: u64 = 200; // 2% in basis points
-    const MAX_PROTOCOL_FEE_PERCENT: u64 = 400; // 4% in basis points
-    const MAX_SUBJECT_FEE_PERCENT: u64 = 800; // 8% in basis points
+    const MAX_REFERRAL_FEE_PERCENT: u64 = 1000; // 10% in basis points
+    const MAX_PROTOCOL_FEE_PERCENT: u64 = 2000; // 20% in basis points
+    const MAX_SUBJECT_FEE_PERCENT: u64 = 7000; // 70% in basis points
+    const MAX_REFERRER_FEE_PERCENT: u64 = 5000; // 50% maximum referrer fee
 
     // Constants for scaling and bonding curve calculations
     const INPUT_SCALE: u64 = 1000000; // K factor for overflow prevention
@@ -351,9 +352,9 @@ module podium::PodiumProtocol {
             move_to(admin, Config {
                 collection,
                 collection_addr,
-                protocol_fee_percent: MAX_PROTOCOL_FEE_PERCENT,
-                subject_fee_percent: MAX_SUBJECT_FEE_PERCENT,
-                referral_fee_percent: MAX_REFERRAL_FEE_PERCENT,
+                protocol_fee_percent: 200,  
+                subject_fee_percent: 700,      //7%
+                referral_fee_percent: 100,      //1%
                 protocol_subscription_fee: 500,  // 5% default
                 protocol_pass_fee: 250,         // 2.5% default
                 referrer_fee: 1000,            // 10% default
@@ -1518,18 +1519,13 @@ module podium::PodiumProtocol {
         admin: &signer,
         new_fee: u64,
     ) acquires Config {
-        // Verify admin
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        assert!(new_fee <= MAX_PROTOCOL_FEE_PERCENT, error::invalid_argument(EINVALID_FEE_VALUE));
         
-        // Verify fee is valid
-        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE_VALUE));
-        
-        // Update fee
         let config = borrow_global_mut<Config>(@podium);
         let old_fee = config.protocol_subscription_fee;
         config.protocol_subscription_fee = new_fee;
         
-        // Emit event
         emit_fee_update_event(old_fee, new_fee, string::utf8(b"subscription"));
     }
 
@@ -1539,7 +1535,7 @@ module podium::PodiumProtocol {
         new_fee: u64,
     ) acquires Config {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
-        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE_VALUE));
+        assert!(new_fee <= MAX_PROTOCOL_FEE_PERCENT, error::invalid_argument(EINVALID_FEE_VALUE));
         
         let config = borrow_global_mut<Config>(@podium);
         let old_fee = config.protocol_pass_fee;
@@ -1555,7 +1551,7 @@ module podium::PodiumProtocol {
         new_fee: u64,
     ) acquires Config {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
-        assert!(new_fee <= MAX_FEE_PERCENTAGE, error::invalid_argument(EINVALID_FEE_VALUE));
+        assert!(new_fee <= MAX_REFERRER_FEE_PERCENT, error::invalid_argument(EINVALID_FEE_VALUE));
         
         let config = borrow_global_mut<Config>(@podium);
         let old_fee = config.referrer_fee;

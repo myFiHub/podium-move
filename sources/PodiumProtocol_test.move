@@ -1547,15 +1547,13 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium)]
-    #[expected_failure(abort_code = 65538)]  // error::invalid_argument(EINVALID_FEE_VALUE) where EINVALID_FEE_VALUE=2
+    #[expected_failure(abort_code = 65538)]
     public fun test_fee_beyond_maximum(
         aptos_framework: &signer,
         admin: &signer,
     ) {
         setup_test(aptos_framework, admin, admin, admin, admin);
-        
-        // Attempt to set fee beyond maximum allowed
-        PodiumProtocol::update_protocol_subscription_fee(admin, MAX_PROTOCOL_FEE_PERCENT + 1);
+        PodiumProtocol::update_protocol_subscription_fee(admin, 2001); //20%
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber1 = @user1, subscriber2 = @user2)]
