@@ -704,12 +704,12 @@ module podium::PodiumProtocol {
         target_addr: address,
         amount: u64,  // In interface units (whole passes)
         referrer: Option<address>
-    ) acquires Config, RedemptionVault, AssetCapabilities {
+    ) acquires Config, RedemptionVault, AssetCapabilities, OutpostData {
         // Validate whole pass amount
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Convert token supply to interface units
-        let current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
+        let _current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
         
         // Initialize pass stats if needed
         init_pass_stats(target_addr);
@@ -764,10 +764,17 @@ module podium::PodiumProtocol {
         // Subject fee to target
         if (subject_fee > 0) {
             let subject_coins = coin::extract(&mut payment_coins, subject_fee);
-            if (!coin::is_account_registered<AptosCoin>(target_addr)) {
-                aptos_account::create_account(target_addr);
+            let recipient_addr = if (exists<OutpostData>(target_addr)) {
+                // If target is an outpost, get the owner's address
+                borrow_global<OutpostData>(target_addr).owner
+            } else {
+                // Otherwise use target address directly
+                target_addr
             };
-            coin::deposit(target_addr, subject_coins);
+            if (!coin::is_account_registered<AptosCoin>(recipient_addr)) {
+                aptos_account::create_account(recipient_addr);
+            };
+            coin::deposit(recipient_addr, subject_coins);
         };
         
         // Referral fee if applicable
@@ -799,12 +806,12 @@ module podium::PodiumProtocol {
         seller: &signer,
         target_addr: address,
         amount: u64  // In interface units (whole passes)
-    ) acquires Config, RedemptionVault, AssetCapabilities {
+    ) acquires Config, RedemptionVault, AssetCapabilities, OutpostData {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-         let scaled_amount = amount * MIN_WHOLE_PASS;
+        let scaled_amount = amount * MIN_WHOLE_PASS;
         
         // Convert token supply to interface units
-        let current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
+        let _current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
         
         // Calculate sell price and fees using interface units
         let (base_price, protocol_fee, subject_fee) = 
@@ -839,11 +846,18 @@ module podium::PodiumProtocol {
         
         // Subject fee payment
         if (subject_fee > 0) {
-            assert!(
-                coin::is_account_registered<AptosCoin>(target_addr),
-                error::not_found(EACCOUNT_NOT_REGISTERED)
-            );
-            coin::deposit(target_addr, coin::extract(&mut total_payment, subject_fee));
+            let subject_coins = coin::extract(&mut total_payment, subject_fee);
+            let recipient_addr = if (exists<OutpostData>(target_addr)) {
+                // If target is an outpost, get the owner's address
+                borrow_global<OutpostData>(target_addr).owner
+            } else {
+                // Otherwise use target address directly
+                target_addr
+            };
+            if (!coin::is_account_registered<AptosCoin>(recipient_addr)) {
+                aptos_account::create_account(recipient_addr);
+            };
+            coin::deposit(recipient_addr, subject_coins);
         };
         
         // Seller payment (remaining amount)
