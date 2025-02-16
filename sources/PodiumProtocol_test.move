@@ -1261,6 +1261,8 @@ module podium::PodiumProtocol_test {
         
         // Verify final pass balance
         let final_pass_balance = PodiumProtocol::get_balance(creator_addr, creator_addr);
+        debug::print(&string::utf8(b"[test_self_trading] Final pass balance:"));
+        debug::print(&final_pass_balance);
         assert!(final_pass_balance == 0, 2);
         
         // Verify final APT balance
@@ -1601,6 +1603,579 @@ module podium::PodiumProtocol_test {
         );
 
         outpost
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    public fun test_subscription_near_expiration(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create outpost with tier
+        let outpost = create_test_outpost(creator);
+        
+        // Create subscription tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Weekly"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Subscribe
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,  // tier_id
+            option::none(),
+        );
+
+        // Fast forward to near expiration (1 minute before)
+        timestamp::fast_forward_seconds(SECONDS_PER_WEEK - 60);
+        
+        // Verify subscription still valid
+        assert!(PodiumProtocol::verify_subscription(
+            signer::address_of(subscriber),
+            outpost,
+            0
+        ), 0);
+
+        // Fast forward past expiration
+        timestamp::fast_forward_seconds(120); // 1 minute after expiration
+        
+        // Verify subscription expired
+        assert!(!PodiumProtocol::verify_subscription(
+            signer::address_of(subscriber),
+            outpost,
+            0
+        ), 1);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber1 = @user1, subscriber2 = @user2)]
+    public fun test_multiple_tier_subscriptions(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber1: &signer,
+        subscriber2: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber1, subscriber2, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create multiple tiers
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Premium"),
+            SUBSCRIPTION_MONTH_PRICE,
+            DURATION_MONTH
+        );
+
+        // Subscribe users to different tiers
+        PodiumProtocol::subscribe(subscriber1, outpost, 0, option::none()); // Basic
+        PodiumProtocol::subscribe(subscriber2, outpost, 1, option::none()); // Premium
+
+        // Verify different subscription durations
+        let (tier_id1, start1, end1) = PodiumProtocol::get_subscription(
+            signer::address_of(subscriber1),
+            outpost
+        );
+        let (tier_id2, start2, end2) = PodiumProtocol::get_subscription(
+            signer::address_of(subscriber2),
+            outpost
+        );
+
+        assert!(tier_id1 == 0, 0);
+        assert!(tier_id2 == 1, 1);
+        assert!(end1 - start1 == SECONDS_PER_WEEK, 2);
+        assert!(end2 - start2 == SECONDS_PER_MONTH, 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    #[expected_failure(abort_code = 327693)]  // ESUBSCRIPTION_ALREADY_EXISTS
+    public fun test_overlapping_subscriptions(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create outpost with multiple tiers
+        let outpost = create_test_outpost(creator);
+        
+        // Create two tiers
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Premium"),
+            SUBSCRIPTION_MONTH_PRICE,
+            DURATION_MONTH
+        );
+
+        // Subscribe to first tier
+        PodiumProtocol::subscribe(subscriber, outpost, 0, option::none());
+        
+        // Attempt to subscribe to second tier while first is active (should fail)
+        PodiumProtocol::subscribe(subscriber, outpost, 1, option::none());
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    public fun test_subscription_with_referral(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Record initial balances
+        let initial_referrer = coin::balance<AptosCoin>(@user2);
+        let initial_protocol = coin::balance<AptosCoin>(@podium);
+        let initial_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        // Subscribe with referral
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,
+            option::some(@user2)
+        );
+
+        // Verify fee distribution
+        let final_referrer = coin::balance<AptosCoin>(@user2);
+        let final_protocol = coin::balance<AptosCoin>(@podium);
+        let final_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        // Protocol fee should increase
+        assert!(final_protocol > initial_protocol, 0);
+        // Creator should receive their share
+        assert!(final_creator > initial_creator, 1);
+        // Referrer should receive their share
+        assert!(final_referrer > initial_referrer, 2);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    public fun test_fee_edge_cases(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Test with 0% protocol fee
+        PodiumProtocol::update_protocol_subscription_fee(admin, 0);
+        
+        // Record initial balances
+        let initial_protocol = coin::balance<AptosCoin>(@podium);
+        let initial_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        // Subscribe with 0% protocol fee
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,
+            option::none()
+        );
+
+        // Verify protocol received no fee
+        let final_protocol = coin::balance<AptosCoin>(@podium);
+        let final_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        assert!(final_protocol == initial_protocol, 0); // Protocol fee should be 0
+        assert!(final_creator > initial_creator, 1); // Creator should still receive their share
+
+        // Test with maximum protocol fee
+        PodiumProtocol::update_protocol_subscription_fee(admin, TEST_MAX_FEE_PERCENTAGE);
+        
+        // Record balances before second subscription
+        let initial_protocol_max = coin::balance<AptosCoin>(@podium);
+        let initial_creator_max = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        // Create another subscriber for max fee test
+        let subscriber2 = account::create_signer_for_test(@0x456);
+        setup_account(&subscriber2);
+        
+        // Subscribe with max protocol fee
+        PodiumProtocol::subscribe(
+            &subscriber2,
+            outpost,
+            0,
+            option::none()
+        );
+
+        // Verify fee distribution with max protocol fee
+        let final_protocol_max = coin::balance<AptosCoin>(@podium);
+        let final_creator_max = coin::balance<AptosCoin>(signer::address_of(creator));
+        
+        assert!(final_protocol_max > initial_protocol_max, 2); // Protocol should receive fee
+        assert!(final_creator_max > initial_creator_max, 3); // Creator should still get share
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    public fun test_comprehensive_emergency_pause(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Subscribe before pause
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,
+            option::none()
+        );
+
+        // Pause outpost
+        PodiumProtocol::toggle_emergency_pause(creator, outpost);
+        assert!(PodiumProtocol::is_paused(outpost), 0);
+
+        // Create another subscriber
+        let subscriber2 = account::create_signer_for_test(@0x456);
+        setup_account(&subscriber2);
+        
+        // Verify existing subscription still valid
+        assert!(PodiumProtocol::verify_subscription(
+            signer::address_of(subscriber),
+            outpost,
+            0
+        ), 1);
+
+        // Attempt to create new subscription while paused (should fail)
+        #[expected_failure(abort_code = 327693)]  // EEMERGENCY_PAUSE
+        PodiumProtocol::subscribe(
+            &subscriber2,
+            outpost,
+            0,
+            option::none()
+        );
+
+        // Unpause outpost
+        PodiumProtocol::toggle_emergency_pause(creator, outpost);
+        assert!(!PodiumProtocol::is_paused(outpost), 2);
+
+        // Verify can subscribe after unpause
+        PodiumProtocol::subscribe(
+            &subscriber2,
+            outpost,
+            0,
+            option::none()
+        );
+        
+        assert!(PodiumProtocol::verify_subscription(
+            signer::address_of(&subscriber2),
+            outpost,
+            0
+        ), 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    #[expected_failure(abort_code = 327692)]  // ENOT_OWNER
+    public fun test_unauthorized_emergency_pause(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, creator, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create unauthorized user
+        let unauthorized = account::create_signer_for_test(@0x456);
+        
+        // Attempt to pause with unauthorized user (should fail)
+        PodiumProtocol::toggle_emergency_pause(&unauthorized, outpost);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    public fun test_tier_management(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create initial tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Subscribe to initial tier
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,
+            option::none()
+        );
+
+        // Create new tier with different price and duration
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Premium"),
+            SUBSCRIPTION_MONTH_PRICE,
+            DURATION_MONTH
+        );
+
+        // Verify tier details
+        let (name, price, duration) = PodiumProtocol::get_subscription_tier_details(outpost, 1);
+        assert!(name == string::utf8(b"Premium"), 0);
+        assert!(price == SUBSCRIPTION_MONTH_PRICE, 1);
+        assert!(duration == SECONDS_PER_MONTH, 2);
+
+        // Verify tier count
+        assert!(PodiumProtocol::get_tier_count(outpost) == 2, 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    #[expected_failure(abort_code = 327697)]  // ETIER_EXISTS
+    public fun test_duplicate_tier_name(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, creator, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create first tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Attempt to create tier with same name (should fail)
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_MONTH_PRICE,
+            DURATION_MONTH
+        );
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    public fun test_pass_trading_edge_cases(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy minimum amount
+        let min_amount = 1;
+        PodiumProtocol::buy_pass(buyer, target_addr, min_amount, option::none());
+        
+        // Verify balance
+        let balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
+        assert!(balance == min_amount, 0);
+        
+        // Record balances before sell
+        let initial_buyer = coin::balance<AptosCoin>(signer::address_of(buyer));
+        
+        // Sell all passes
+        PodiumProtocol::sell_pass(buyer, target_addr, min_amount);
+        
+        // Verify final balances
+        let final_buyer = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let final_balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
+        
+        assert!(final_balance == 0, 1); // All passes sold
+        assert!(final_buyer > initial_buyer, 2); // Received payment
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    #[expected_failure(abort_code = 327691)]  // INSUFFICIENT_BALANCE
+    public fun test_insufficient_balance_sell(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy some passes
+        let buy_amount = 1;
+        PodiumProtocol::buy_pass(buyer, target_addr, buy_amount, option::none());
+        
+        // Try to sell more than owned (should fail)
+        PodiumProtocol::sell_pass(buyer, target_addr, buy_amount + 1);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    public fun test_comprehensive_emergency_pause_valid_cases(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        
+        // Create tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Subscribe before pause
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,
+            option::none()
+        );
+
+        // Pause outpost
+        PodiumProtocol::toggle_emergency_pause(creator, outpost);
+        assert!(PodiumProtocol::is_paused(outpost), 0);
+
+        // Verify existing subscription still valid
+        assert!(PodiumProtocol::verify_subscription(
+            signer::address_of(subscriber),
+            outpost,
+            0
+        ), 1);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    #[expected_failure(abort_code = 327693)]  // EEMERGENCY_PAUSE
+    public fun test_subscribe_during_emergency_pause(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        let outpost = create_test_outpost(creator);
+        
+        // Create tier
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        // Pause outpost
+        PodiumProtocol::toggle_emergency_pause(creator, outpost);
+        
+        // Attempt to subscribe while paused (should fail)
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,
+            option::none()
+        );
     }
 
 } 
