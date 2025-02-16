@@ -60,12 +60,11 @@ module podium::PodiumProtocol_test {
     const TEST_ROYALTY_NUMERATOR: u64 = 500;  // 5%
     const TEST_ROYALTY_DENOMINATOR: u64 = 10000;  // 100% = 10000 basis points
 
-    // Add these with other constants
+    // Duration constants - must match protocol values
     const DURATION_WEEK: u64 = 1;
     const DURATION_MONTH: u64 = 2;
     const DURATION_YEAR: u64 = 3;
-
-    // Duration values in seconds
+    
     const SECONDS_PER_WEEK: u64 = 604800;  // 7 * 24 * 3600
     const SECONDS_PER_MONTH: u64 = 2592000; // 30 * 24 * 3600
     const SECONDS_PER_YEAR: u64 = 31536000; // 365 * 24 * 3600
@@ -198,12 +197,18 @@ module podium::PodiumProtocol_test {
         let framework_signer = account::create_signer_for_test(@0x1);
         aptos_coin::mint(&framework_signer, signer::address_of(creator), purchase_price * 2);
 
-        PodiumProtocol::create_outpost(
+        // Create outpost
+        let outpost = PodiumProtocol::create_outpost(
             creator,
             string::utf8(b"TestOutpost"),
             string::utf8(b"Test Description"),
-            string::utf8(b"https://test.uri")
-        )
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Initialize subscription configuration
+        PodiumProtocol::init_subscription_config(creator, outpost);
+
+        outpost
     }
 
     // Add helper for verifying outpost state
@@ -347,21 +352,22 @@ module podium::PodiumProtocol_test {
         assert!(user2_final == 1, 2);
     }
 
-    #[test(aptos_framework = @0x1, creator = @target, unauthorized_user = @user1)]
+    #[test(aptos_framework = @0x1, admin = @podium, unauthorized_user = @user1)]
     #[expected_failure(abort_code = 327692)]  // ENOT_OWNER
     public fun test_unauthorized_tier_creation(
         aptos_framework: &signer,
-        creator: &signer,
+        admin: &signer,
         unauthorized_user: &signer,
     ) {
-        setup_test(aptos_framework, creator, unauthorized_user, unauthorized_user, creator);
+        // Initialize with admin first
+        setup_test(aptos_framework, admin, unauthorized_user, unauthorized_user, admin);
         
-        // Create outpost with legitimate owner
-        let outpost = create_test_outpost(creator);
+        // Create outpost with admin
+        let outpost = create_test_outpost(admin);
         
-        // Attempt tier creation with unauthorized user
+        // Now try unauthorized tier creation
         PodiumProtocol::create_subscription_tier(
-            unauthorized_user,
+            unauthorized_user,  // Should fail here with ENOT_OWNER
             outpost,
             string::utf8(b"basic"),
             SUBSCRIPTION_WEEK_PRICE,
@@ -389,49 +395,47 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"test_permissionless_outpost_creation: PASS"));
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, subscriber = @user1)]
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
     public fun test_subscription_flow(
         aptos_framework: &signer,
         admin: &signer,
+        creator: &signer,
         subscriber: &signer,
     ) {
-        setup_test(aptos_framework, admin, subscriber, subscriber, admin);
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
         
-        let outpost = create_test_outpost(admin);
-        
-        // Create subscription tiers using protocol constants
-        PodiumProtocol::create_subscription_tier(
-            admin,
-            outpost,
-            string::utf8(b"tier0"),
-            SUBSCRIPTION_WEEK_PRICE,
-            DURATION_WEEK  // Use protocol constant
-        );
+        // Create outpost with tier using creator
+        let outpost = create_test_outpost_with_tier(creator);
 
-        // Subscribe to tier
+        // Verify tier exists and has correct details
+        let (tier_name, tier_price, tier_duration) = PodiumProtocol::get_subscription_tier_details(outpost, 0);
+        assert!(tier_name == string::utf8(b"Basic Tier"), 100);
+        assert!(tier_price == SUBSCRIPTION_WEEK_PRICE, 98);
+        assert!(tier_duration == SECONDS_PER_WEEK, 99);
+
+        // Now subscribe
         PodiumProtocol::subscribe(
             subscriber,
             outpost,
-            0,  // tier_id
+            0,  // tier_id for the basic tier
             option::none(),
         );
 
-        // Verify subscription
+        // Verify subscription through public interface
         assert!(PodiumProtocol::verify_subscription(
             signer::address_of(subscriber),
             outpost,
             0
         ), 0);
 
-        // Get subscription details
+        // Get and verify duration
         let (tier_id, start_time, end_time) = PodiumProtocol::get_subscription(
             signer::address_of(subscriber),
             outpost
         );
-
-        // Verify duration
-        let expected_duration = SECONDS_PER_WEEK;
-        assert!(end_time - start_time == expected_duration, 1);
+        assert!(tier_id == 0, 1);
+        assert!(end_time > start_time, 2);
+        assert!(end_time - start_time == SECONDS_PER_WEEK, 3);
 
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_subscription_flow: PASS"));
@@ -447,14 +451,18 @@ module podium::PodiumProtocol_test {
         
         let outpost = create_test_outpost(admin);
 
-        // Create tier with weekly duration
+        // Create tier with test module's constant
         PodiumProtocol::create_subscription_tier(
             admin,
             outpost,
             string::utf8(b"weekly"),
             SUBSCRIPTION_WEEK_PRICE,
-            DURATION_WEEK  // Use protocol constant
+            DURATION_WEEK
         );
+
+        // Debug print subscription attempt
+        debug::print(&string::utf8(b"Subscribing to tier:"));
+        debug::print(&0u64);
 
         // Subscribe
         PodiumProtocol::subscribe(
@@ -464,7 +472,7 @@ module podium::PodiumProtocol_test {
             option::none(),
         );
 
-        // Verify active subscription
+        // Verify initial active state
         assert!(PodiumProtocol::verify_subscription(
             signer::address_of(subscriber),
             outpost,
@@ -474,7 +482,7 @@ module podium::PodiumProtocol_test {
         // Fast forward past week duration
         timestamp::fast_forward_seconds(SECONDS_PER_WEEK + 1);
 
-        // Verify subscription expired
+        // Verify expired state
         assert!(!PodiumProtocol::verify_subscription(
             signer::address_of(subscriber),
             outpost,
@@ -658,8 +666,8 @@ module podium::PodiumProtocol_test {
         // Test get_tier_count
         assert!(PodiumProtocol::get_tier_count(outpost) == 1, 6);
         
-        // Test get_tier_details
-        let (tier_name, tier_price, tier_duration) = PodiumProtocol::get_tier_details(outpost, 0);
+        // Test get_subscription_tier_details
+        let (tier_name, tier_price, tier_duration) = PodiumProtocol::get_subscription_tier_details(outpost, 0);
         assert!(tier_name == string::utf8(b"Test Tier"), 7);
         assert!(tier_price == SUBSCRIPTION_WEEK_PRICE, 8);
         assert!(tier_duration == 1, 9);
@@ -1476,6 +1484,23 @@ module podium::PodiumProtocol_test {
         // Verify proper initialization
         assert!(PodiumProtocol::has_outpost_data(outpost), 0);
         assert!(PodiumProtocol::verify_ownership(outpost, @podium), 1);
+    }
+
+    // Helper function to create test outpost with basic subscription tier
+    fun create_test_outpost_with_tier(creator: &signer): Object<OutpostData> {
+        // Create base outpost first
+        let outpost = create_test_outpost(creator);
+
+        // Create a basic subscription tier as the outpost owner
+        PodiumProtocol::create_subscription_tier(
+            creator,  // Creator is the outpost owner
+            outpost,
+            string::utf8(b"Basic Tier"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+
+        outpost
     }
 
 } 

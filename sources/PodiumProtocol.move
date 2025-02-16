@@ -126,7 +126,10 @@ module podium::PodiumProtocol {
         uri: String,
         price: u64,
         fee_share: u64,
-        emergency_pause: bool
+        emergency_pause: bool,
+        subscription_tiers: Table<u64, SubscriptionTier>,
+        subscriptions: Table<address, Subscription>,
+        tier_names: Table<String, bool>,
     }
 
     /// Pass token structure
@@ -163,9 +166,6 @@ module podium::PodiumProtocol {
         outposts: Table<address, Object<OutpostData>>,
         pass_stats: Table<address, PassStats>,
         
-        // Subscription management
-        subscription_configs: Table<address, SubscriptionConfig>,
-        
         // Event handles
         pass_purchase_events: EventHandle<PassPurchaseEvent>,
         pass_sell_events: EventHandle<PassSellEvent>,
@@ -178,6 +178,7 @@ module podium::PodiumProtocol {
         outpost_created_events: EventHandle<OutpostCreatedEvent>,
         outpost_price: u64,
         bonding_curve_events: EventHandle<BondingCurveUpdateEvent>,
+        subscription_configs: Table<address, SubscriptionConfig>,
     }
 
     /// Asset capabilities for fungible tokens
@@ -203,16 +204,14 @@ module podium::PodiumProtocol {
     }
 
     /// Subscription tier details
-    struct SubscriptionTier has store {
+    struct SubscriptionTier has store, drop {
         name: String,
         price: u64,
         duration: u64,
-        tier_id: u64,
-        timestamp: u64
     }
 
     /// Active subscription data
-    struct Subscription has store, copy, drop {
+    struct Subscription has store, drop {
         tier_id: u64,
         start_time: u64,
         end_time: u64,
@@ -362,7 +361,6 @@ module podium::PodiumProtocol {
                 weight_c: DEFAULT_WEIGHT_C,
                 outposts: table::new(),
                 pass_stats: table::new(),
-                subscription_configs: table::new(),
                 pass_purchase_events: account::new_event_handle<PassPurchaseEvent>(admin),
                 pass_sell_events: account::new_event_handle<PassSellEvent>(admin),
                 subscription_events: account::new_event_handle<SubscriptionEvent>(admin),
@@ -374,6 +372,7 @@ module podium::PodiumProtocol {
                 outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
                 outpost_price: 1000,
                 bonding_curve_events: account::new_event_handle<BondingCurveUpdateEvent>(admin),
+                subscription_configs: table::new<address, SubscriptionConfig>(),
             });
 
             move_to(admin, AssetCapabilities {
@@ -1116,8 +1115,16 @@ module podium::PodiumProtocol {
         let outpost_addr = object::object_address(&outpost);
         let config = borrow_global_mut<Config>(@podium);
         
+        // Verify ownership
+        assert!(verify_ownership(outpost, signer::address_of(creator)), 
+            error::permission_denied(ENOT_OWNER));
+        
+        // Validate inputs
+        validate_duration(duration);
+        assert!(price > 0, error::invalid_argument(EINVALID_TIER_PRICE));
+        
         // Initialize subscription config if missing
-        if (!table::contains(&config.subscription_configs, outpost_addr)) {
+        if (!table::contains<address, SubscriptionConfig>(&config.subscription_configs, outpost_addr)) {
             table::add(
                 &mut config.subscription_configs,
                 outpost_addr,
@@ -1125,32 +1132,26 @@ module podium::PodiumProtocol {
                     tiers: vector::empty(),
                     tier_names: table::new(),
                     subscriptions: table::new(),
-                    max_tiers: 100, // Default max tiers
+                    max_tiers: 100,
                 }
             );
         };
-        
-        // Verify ownership
-        assert!(verify_ownership(outpost, signer::address_of(creator)), error::permission_denied(ENOT_OWNER));
-        
-        // Validate inputs
-        validate_duration(duration);
-        assert!(price > 0, error::invalid_argument(EINVALID_TIER_PRICE));
-        
-        // Get existing config
-        let subscription_config = table::borrow_mut(&mut config.subscription_configs, outpost_addr);
-        
+
+        let subscription_config = table::borrow_mut<address, SubscriptionConfig>(
+            &mut config.subscription_configs,
+            outpost_addr
+        );
+
         // Check for existing tier with same name
-        assert!(!table::contains(&subscription_config.tier_names, name), error::already_exists(ETIER_EXISTS));
-        
-        // Add new tier
-        let current_tier_count = vector::length(&subscription_config.tiers);
+        assert!(!table::contains(&subscription_config.tier_names, name), 
+            error::already_exists(ETIER_EXISTS));
+
+        // Add tier
+        let tier_id = vector::length(&subscription_config.tiers);
         vector::push_back(&mut subscription_config.tiers, SubscriptionTier {
-            name,
+            name: copy name,
             price,
-            duration: get_duration_seconds(duration),
-            tier_id: current_tier_count,
-            timestamp: timestamp::now_seconds()
+            duration: get_duration_seconds(duration)
         });
         table::add(&mut subscription_config.tier_names, name, true);
     }
@@ -1357,19 +1358,18 @@ module podium::PodiumProtocol {
 
     /// Get subscription tier details
     #[view]
-    public fun get_tier_details(
+    public fun get_subscription_tier_details(
         outpost: Object<OutpostData>,
         tier_id: u64
-    ): (String, u64, u64) acquires Config {
-        let outpost_addr = object::object_address(&outpost);
-        let config = borrow_global<Config>(@podium);
-        assert!(table::contains(&config.subscription_configs, outpost_addr), error::not_found(ETIER_NOT_FOUND));
+    ): (String, u64, u64) acquires OutpostData {
+        let outpost_data = borrow_global<OutpostData>(object::object_address(&outpost));
+        let tier = table::borrow<u64, SubscriptionTier>(&outpost_data.subscription_tiers, tier_id);
         
-        let sub_config = table::borrow(&config.subscription_configs, outpost_addr);
-        assert!(tier_id < vector::length(&sub_config.tiers), error::invalid_argument(EINVALID_TIER));
-        
-        let tier = vector::borrow(&sub_config.tiers, tier_id);
-        (tier.name, tier.price, tier.duration)
+        (
+            tier.name,      // String
+            tier.price,     // u64
+            tier.duration   // u64
+        )
     }
 
     /// Get number of tiers
@@ -1843,6 +1843,9 @@ module podium::PodiumProtocol {
             price: purchase_price,
             fee_share: OUTPOST_FEE_SHARE,
             emergency_pause: false,
+            subscription_tiers: table::new(),
+            subscriptions: table::new(),
+            tier_names: table::new(),
         });
 
         // Get object reference and store in table
