@@ -1977,7 +1977,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
-    #[expected_failure(abort_code = 65541)]  // EINVALID_AMOUNT
+    #[expected_failure(abort_code = 65540)]  // EINSUFFICIENT_BALANCE from fungible_asset module
     public fun test_insufficient_balance_sell(
         aptos_framework: &signer,
         admin: &signer,
@@ -1994,8 +1994,8 @@ module podium::PodiumProtocol_test {
         PodiumProtocol::create_pass_token(
             creator,
             target_addr,
-            string::utf8(b"Test Pass"),
-            string::utf8(b"Test Pass Description"),
+            string::utf8(b"TestPass"),
+            string::utf8(b"TestPassDescription"),
             string::utf8(b"https://test.uri"),
         );
         
@@ -2178,6 +2178,9 @@ module podium::PodiumProtocol_test {
 
         // Buy 2 passes with referral
         let buy_amount = 2;
+        let (base_price, protocol_fee, subject_fee, referral_fee) = 
+            PodiumProtocol::calculate_buy_price_with_fees(target_addr, buy_amount, option::some(signer::address_of(referrer)));
+        
         PodiumProtocol::buy_pass(
             buyer,
             target_addr,
@@ -2195,11 +2198,28 @@ module podium::PodiumProtocol_test {
         let final_protocol = coin::balance<AptosCoin>(@podium);
         let final_creator = coin::balance<AptosCoin>(signer::address_of(creator));
 
+        // Debug prints for fee distribution
+        debug::print(&string::utf8(b"=== Fee Distribution ==="));
+        debug::print(&string::utf8(b"Base price:"));
+        debug::print(&base_price);
+        debug::print(&string::utf8(b"Protocol fee:"));
+        debug::print(&protocol_fee);
+        debug::print(&string::utf8(b"Subject fee:"));
+        debug::print(&subject_fee);
+        debug::print(&string::utf8(b"Referral fee:"));
+        debug::print(&referral_fee);
+        
+        debug::print(&string::utf8(b"=== Balance Changes ==="));
+        debug::print(&string::utf8(b"Creator balance change:"));
+        debug::print(&(final_creator - initial_creator));
+        debug::print(&string::utf8(b"Expected subject fee:"));
+        debug::print(&subject_fee);
+
         // Verify balances changed in the right direction
         assert!(final_buyer < initial_buyer, 1); // Buyer paid
-        assert!(final_referrer > initial_referrer, 2); // Referrer got paid
-        assert!(final_protocol > initial_protocol, 3); // Protocol got fee
-        assert!(final_creator > initial_creator, 4); // Creator got paid
+        assert!(final_referrer == initial_referrer + referral_fee, 2); // Referrer got exactly referral fee
+        assert!(final_protocol == initial_protocol + protocol_fee, 3); // Protocol got exactly protocol fee
+        assert!(final_creator == initial_creator + subject_fee, 4); // Creator got exactly subject fee
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
