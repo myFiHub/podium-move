@@ -576,7 +576,7 @@ module podium::PodiumProtocol {
     public fun calculate_single_pass_price(supply: u64): u64 acquires Config {
         let config = borrow_global<Config>(@podium);
         calculate_single_pass_price_with_params(
-            supply,
+            supply,  // Use raw token units but adjust formula
             config.weight_a,
             config.weight_b,
             config.weight_c
@@ -590,9 +590,10 @@ module podium::PodiumProtocol {
     /// * Returns the calculated price in OCTA units (scaled for APT)
     #[view]
     public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
+        let interface_supply = supply / MIN_WHOLE_PASS;
         debug::print(&string::utf8(b"=== Starting price calculation ==="));
         debug::print(&string::utf8(b"Input parameters:"));
-        debug::print(&supply);
+        debug::print(&interface_supply);
         debug::print(&amount);
         debug::print(&is_sell);
 
@@ -601,16 +602,16 @@ module podium::PodiumProtocol {
         
         while (i < amount) {
             let current_supply = if (is_sell) {
-                if (supply <= i + 1) {
+                if (interface_supply <= i + 1) {
                     0
                 } else {
-                    supply - i - 1
+                    interface_supply - i - 1
                 }
             } else {
-                supply + i
+                interface_supply + i
             };
             
-            let pass_price = calculate_single_pass_price(current_supply);
+            let pass_price = calculate_single_pass_price(current_supply * MIN_WHOLE_PASS);
             total_price = total_price + pass_price;
             
             i = i + 1;
@@ -633,7 +634,7 @@ module podium::PodiumProtocol {
         referrer: Option<address>
     ): (u64, u64, u64, u64) acquires Config {
         // Get current supply
-        let _current_supply = get_total_supply(target_addr);
+        let _current_supply = get_total_supply(target_addr)/ MIN_WHOLE_PASS;
         
         // Calculate raw price first to avoid dangling reference
         let price = calculate_price(_current_supply, amount, false);
@@ -663,7 +664,7 @@ module podium::PodiumProtocol {
         amount: u64
     ): (u64, u64, u64) acquires Config {
         // Get current supply
-        let _current_supply = get_total_supply(target_addr);
+        let _current_supply = get_total_supply(target_addr)/ MIN_WHOLE_PASS;
         
         // Basic validations matching Solidity
         if (amount == 0 || _current_supply < amount) {
@@ -707,8 +708,8 @@ module podium::PodiumProtocol {
         // Validate whole pass amount
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
-        // Get current supply in interface units
-        let _current_supply = get_total_supply(target_addr);
+        // Convert token supply to interface units
+        let current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
         
         // Initialize pass stats if needed
         init_pass_stats(target_addr);
@@ -800,7 +801,10 @@ module podium::PodiumProtocol {
         amount: u64  // In interface units (whole passes)
     ) acquires Config, RedemptionVault, AssetCapabilities {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
-        let scaled_amount = amount * MIN_WHOLE_PASS;
+         let scaled_amount = amount * MIN_WHOLE_PASS;
+        
+        // Convert token supply to interface units
+        let current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
         
         // Calculate sell price and fees using interface units
         let (base_price, protocol_fee, subject_fee) = 
@@ -1637,13 +1641,14 @@ module podium::PodiumProtocol {
         weight_b: u64,
         weight_c: u64
     ): u64 {
+        let interface_supply = supply / MIN_WHOLE_PASS;
         // Early return for first purchase
-        if (supply == 0) {
+        if (interface_supply == 0) {
             return INITIAL_PRICE
         };
 
         // Calculate n = s + c - 1
-        let s_plus_c = supply + weight_c;
+        let s_plus_c = interface_supply + weight_c;
         if (s_plus_c <= 1) {
             return INITIAL_PRICE
         };

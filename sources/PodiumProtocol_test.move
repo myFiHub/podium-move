@@ -349,8 +349,8 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"User2:"));
         debug::print(&user2_final);
         
-        assert!(user1_final == 1, 1);
-        assert!(user2_final == 1, 2);
+        assert!(user1_final == 1 * MIN_WHOLE_PASS, 1);
+        assert!(user2_final == 1 * MIN_WHOLE_PASS, 2);
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, unauthorized_user = @user1)]
@@ -1018,14 +1018,14 @@ module podium::PodiumProtocol_test {
         assert!(pass_balance == buy_amount * MIN_WHOLE_PASS, 0);
         
         // Transfer 1 pass to user2
-        PodiumProtocol::transfer_pass(user1, user2_addr, outpost_addr, 1);
+        PodiumProtocol::transfer_pass(user1, user2_addr, outpost_addr, 1 * MIN_WHOLE_PASS);
         
         // Verify final balances
         let user1_final = PodiumProtocol::get_balance(user1_addr, outpost_addr);
         let user2_final = PodiumProtocol::get_balance(user2_addr, outpost_addr);
         
-        assert!(user1_final == 1, 1);
-        assert!(user2_final == 1, 2);
+        assert!(user1_final == 1 * MIN_WHOLE_PASS, 1);
+        assert!(user2_final == 1 * MIN_WHOLE_PASS, 2);
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @0x123, new_owner = @0x456)]
@@ -2203,7 +2203,7 @@ module podium::PodiumProtocol_test {
         let final_protocol = coin::balance<AptosCoin>(@podium);
         let final_creator = coin::balance<AptosCoin>(signer::address_of(creator));
 
-        assert!(initial_buyer - final_buyer == total_cost, 0);
+        assert!(initial_buyer - final_buyer == total_cost + referral_fee, 0);
         assert!(final_referrer - initial_referrer == referral_fee, 1);
         assert!(final_protocol - initial_protocol == protocol_fee, 2);
         assert!(final_creator - initial_creator == subject_fee, 3);
@@ -2292,7 +2292,7 @@ module podium::PodiumProtocol_test {
         // Test valid sell
         PodiumProtocol::sell_pass(buyer, target_addr, buy_amount);
         let final_balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
-        assert!(final_balance == 0, 1);
+        assert!(final_balance == 0, 1); // 0 in token units
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, user1 = @user1, user2 = @user2, user3 = @user3)]
@@ -2321,18 +2321,18 @@ module podium::PodiumProtocol_test {
         // Initial buy by user1
         PodiumProtocol::buy_pass(user1, target_addr, 1, option::none());
         let supply_after1 = PodiumProtocol::get_total_supply(target_addr);
-        assert!(supply_after1 == 1, 0);
+        assert!(supply_after1 == 100000000, 0); // Verify token units
 
         // Subsequent buys
         PodiumProtocol::buy_pass(user2, target_addr, 1, option::none());
         PodiumProtocol::buy_pass(user3, target_addr, 1, option::none());
         let supply_after3 = PodiumProtocol::get_total_supply(target_addr);
-        assert!(supply_after3 == 3, 1);
+        assert!(supply_after3 == 300000000, 1);
 
         // User1 sells
         PodiumProtocol::sell_pass(user1, target_addr, 1);
         let supply_after_sell1 = PodiumProtocol::get_total_supply(target_addr);
-        assert!(supply_after_sell1 == 2, 2);
+        assert!(supply_after_sell1 == 200000000, 2);
 
         // Remaining users sell
         PodiumProtocol::sell_pass(user2, target_addr, 1);
@@ -2368,7 +2368,7 @@ module podium::PodiumProtocol_test {
         // Verify initial balance
         let initial_balance = PodiumProtocol::get_balance(signer::address_of(sender), target_addr);
         debug::print(&initial_balance);
-        assert!(initial_balance == 100000000, 0);
+        assert!(initial_balance == 1 * MIN_WHOLE_PASS, 0);
 
         // Transfer 0.5 pass using protocol function
         PodiumProtocol::transfer_pass(
