@@ -924,10 +924,11 @@ module podium::PodiumProtocol {
             });
         };
         let stats = table::borrow_mut(&mut config.pass_stats, target_addr);
+        let scaled_amount = amount * MIN_WHOLE_PASS;
         if (is_sell) {
-            stats.total_supply = stats.total_supply - amount;
+            stats.total_supply = stats.total_supply - scaled_amount;
         } else {
-            stats.total_supply = stats.total_supply + amount;
+            stats.total_supply = stats.total_supply + scaled_amount;
         };
         stats.last_price = price;
     }
@@ -999,14 +1000,19 @@ module podium::PodiumProtocol {
         object::object_address(metadata)
     }
 
-    /// Safely transfer coins with recipient account verification
+     /// Safely transfer coins with recipient account verification
     fun transfer_with_check(sender: &signer, recipient: address, amount: u64) {
         let sender_addr = signer::address_of(sender);
-        assert!(coin::balance<AptosCoin>(sender_addr) >= amount, error::invalid_argument(INSUFFICIENT_BALANCE));
-        if (!coin::is_account_registered<AptosCoin>(recipient)) {
-            aptos_account::create_account(recipient);
+        assert!(
+            coin::balance<AptosCoin>(sender_addr) >= amount,
+            error::invalid_argument(INSUFFICIENT_BALANCE)
+        );
+
+        if (coin::is_account_registered<AptosCoin>(recipient)) {
+            coin::transfer<AptosCoin>(sender, recipient, amount);
+        } else {
+            aptos_account::transfer(sender, recipient, amount);
         };
-        coin::transfer<AptosCoin>(sender, recipient, amount);
     }
 
     /// Emit purchase event
