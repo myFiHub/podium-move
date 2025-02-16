@@ -213,6 +213,9 @@ npm install
 ### Testing
 ```bash
 movement move test
+movement move test --filter PodiumProtocol
+movement move test --filter upgrade
+movement move test --filter CheerOrBoo
 ```
 
 ### Deployment
@@ -378,6 +381,43 @@ The protocol implements a bonding curve mechanism for pass trading with the foll
 
 ## Testing
 
+## Test Coverage
+
+### Protocol Core Tests
+
+1. **Initialization Tests**
+- `test_initialization`: Verifies protocol setup, treasury configuration, and initial parameters
+- `test_admin_functions`: Tests admin-only functions and access control
+- `test_emergency_pause`: Validates emergency pause functionality and state changes
+
+2. **Outpost Management Tests**
+- `test_outpost_creation_flow`: Validates outpost creation, pricing, and ownership
+- `test_outpost_price_management`: Tests outpost creation costs and treasury payments
+- `test_outpost_metadata`: Verifies proper metadata handling and uniqueness constraints
+- `test_outpost_ownership`: Checks ownership transfers and permissions
+
+3. **Pass Trading Tests**
+- `test_bonding_curve_sequence`: Tests bonding curve pricing through buy/sell sequence
+- `test_pass_trading`: Validates pass purchases, sales, and balance updates
+- `test_fee_distribution`: Verifies correct fee splits between protocol, creator, and referrer
+- `test_vault_redemption`: Tests vault system for pass redemptions
+
+4. **Subscription System Tests**
+- `test_subscription_tier_creation`: Validates tier creation and constraints
+- `test_subscription_management`: Tests subscription purchases and renewals
+- `test_subscription_cancellation`: Verifies subscription cancellation logic
+- `test_subscription_validation`: Checks subscription status and access control
+
+5. **Fee Management Tests**
+- `test_protocol_fees`: Validates fee calculations and distributions
+- `test_referral_fees`: Tests referral system and bonus distributions
+- `test_fee_updates`: Verifies admin fee update functionality
+
+6. **Balance and Fund Safety Tests**
+- `test_insufficient_balance`: Validates proper handling of insufficient funds
+- `test_transfer_safety`: Tests safe transfer patterns and balance checks
+- `test_vault_management`: Verifies vault balance tracking and withdrawals
+
 ### CheerOrBoo Tests
 
 The test suite verifies the core functionality and edge cases of the CheerOrBoo system:
@@ -442,3 +482,123 @@ The test suite verifies the core functionality and edge cases of the CheerOrBoo 
 - Validates even distribution among participants
 - Checks remainder handling
 - Ensures no funds are lost in the process
+
+
+
+## Initialization Flow
+
+### Dependency Management
+```bash
+# Recommended for faster builds - use local framework clone
+git clone --depth 1 --branch mainnet https://github.com/movement-network/move /tmp/movement-framework
+
+# Update Move.toml dependencies:
+[dependencies]
+AptosFramework = { local = "/tmp/movement-framework/aptos-framework" }
+AptosStdlib = { local = "/tmp/movement-framework/aptos-stdlib" }
+MoveStdlib = { local = "/tmp/movement-framework/move-stdlib" }
+```
+
+### Core Initialization Sequence
+1. **Protocol Initialization** (First-time setup)
+```bash
+movement move run \
+  --profile mainnet \
+  --function-id 'podium::PodiumProtocol::initialize'
+```
+
+2. **Outpost Creation** (Per-content creator)
+```move
+public entry fun create_outpost(
+    creator: &signer,
+    name: String,
+    description: String,
+    uri: String
+) {
+    // Requires protocol initialization
+    // Automatically handles:
+    // - Object initialization
+    // - Token creation
+    // - Royalty setup
+}
+```
+
+3. **Subscription Tier Setup** (Per-outpost)
+```move
+public entry fun create_subscription_tier(
+    owner: &signer,
+    outpost: Object<OutpostData>, 
+    tier_name: String,
+    price: u64,
+    duration: u64
+) {
+    // Validates:
+    // - Outpost ownership
+    // - Tier name uniqueness
+    // - Duration validity
+}
+```
+
+## Testing Guidelines
+
+### Key Test Patterns
+```move
+#[test(aptos_framework = @0x1, admin = @podium)]
+fun test_outpost_lifecycle() {
+    // 1. Protocol initialization
+    // 2. Outpost creation
+    // 3. Subscription tier setup
+    // 4. Pass trading
+    // 5. Emergency pause
+}
+```
+
+### Test Initialization Sequence
+1. Framework setup
+2. Account creation
+3. Protocol initialization
+4. Outpost creation
+5. Subscription tier creation
+
+### Optimized Testing
+```bash
+# Parallel test execution
+movement move test --num-threads 8
+
+# Filter tests by module
+movement move test --filter outpost
+
+# Generate coverage report
+movement move test --coverage
+```
+
+## Deployment Process
+
+### Optimized Deployment
+```bash
+movement move publish \
+  --profile mainnet \
+  --assume-yes \
+  --skip-fetch-latest-git-deps \
+  --included-artifacts sparse \
+  --named-addresses "podium=0xd2f0d0cf38a4c64620f8e9fcba104e0dd88f8d82963bef4ad57686c3ee9ed7aa"
+```
+
+### Post-Deployment Verification
+```move
+#[view]
+public fun verify_initialization(): bool {
+    exists<Config>(@podium) &&
+    table::length(&borrow_global<Config>(@podium).outposts) > 0
+}
+```
+
+## Common Error Reference
+
+Code | Meaning | Resolution
+-----|---------|------------
+0x60002 | Missing ObjectCore | Ensure object initialization before token operations
+0x10001 | Dependency Resolution | Use `--skip-fetch-latest-git-deps`
+0x3000A | Insufficient Balance | Verify test account funding
+0x4000C | Invalid Royalty | Check numerator/denominator values
+0x5001F | Protocol Not Initialized | Call `initialize()` first

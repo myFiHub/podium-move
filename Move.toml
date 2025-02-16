@@ -26,5 +26,3 @@ AptosStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "
 AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token/", rev = "aptos-node-v1.7.2" }
 AptosTokenObjects = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-token-objects/", rev = "aptos-node-v1.7.2" }
 MoveStdlib = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/move-stdlib/", rev = "aptos-node-v1.7.2" }
-
-[dev-dependencies]

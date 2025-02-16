@@ -2,7 +2,6 @@
 module podium::CheerOrBoo_test {
     use std::vector;
     use std::hash;
-    use std::string;
     use aptos_std::bcs;
     use aptos_framework::account;
     use aptos_framework::coin;

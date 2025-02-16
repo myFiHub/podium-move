@@ -1,0 +1,30 @@
+---
+profiles:
+  default:
+    network: Custom
+    private_key: "0xa60ca7d3717b844d00550cdc673c4112fc9f916e696fe4c1fce66ad9d8f490cd"
+    public_key: "0xf42bfe2ddf50f695e6ab4cdc8a352e2a30b91c0dcabbd5ef5f22642d9727ea88"
+    account: fb0bcc18421ccf665f11817de55d979d54c2f34e58aba7cf52798228cbc008ea
+    rest_url: "https://aptos.testnet.porto.movementlabs.xyz/v1"
+    faucet_url: "https://fund.testnet.porto.movementlabs.xyz/"
+  deployer:
+    network: Custom
+    private_key: "0x91c7da5081d42282e3c3fc760af02ed1be264d91f44603330aeeb8be222f80ad"
+    public_key: "0x366ea2dca640ef0c70494d71f3d5ba39669dab4274a0b423190a5afca83c99a0"
+    account: a76a50913ac8020b2c88cc3ccc768985cbd27fe2dad8d68fadf7df80626e87e4
+    rest_url: "https://aptos.testnet.porto.movementlabs.xyz/v1"
+    faucet_url: "https://fund.testnet.porto.movementlabs.xyz/"
+  fihub:
+    network: Custom
+    private_key: "0x218a69f3a1d64539f8305cc085faae2091839d2dab08dfc876ba0f75db71d5cf"
+    public_key: "0x8e6d2cd50b99e398a5cf326ad0178ce1f14d38e0e21cd6d9bf1be4268e0650ad"
+    account: 16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8
+    rest_url: "https://mainnet.movementnetwork.xyz/v1"
+    faucet_url: "https://fund.testnet.porto.movementlabs.xyz/"
+  podium:
+    network: Custom
+    private_key: "0x6ad873dbb4d01bc38d266b4783f234a75ba71692e251622e301fc2e8e16f7ebc"
+    public_key: "0xa272751442c79cad455d40f9bf524f8f298389b713ca50ca3b9ec618ced4a1c4"
+    account: d2f0d0cf38a4c64620f8e9fcba104e0dd88f8d82963bef4ad57686c3ee9ed7aa
+    rest_url: "https://fund.testnet.porto.movementlabs.xyz/"
+  
