@@ -15,6 +15,7 @@ module podium::PodiumProtocol_test {
     use aptos_token_objects::token;
     use aptos_framework::primary_fungible_store;
     use aptos_framework::error;
+    use aptos_framework::fungible_asset::FungibleAsset;
 
     // Test addresses
     const TREASURY: address = @podium;
@@ -65,7 +66,7 @@ module podium::PodiumProtocol_test {
     const DURATION_WEEK: u64 = 1;
     const DURATION_MONTH: u64 = 2;
     const DURATION_YEAR: u64 = 3;
-    
+
     const SECONDS_PER_WEEK: u64 = 604800;  // 7 * 24 * 3600
     const SECONDS_PER_MONTH: u64 = 2592000; // 30 * 24 * 3600
     const SECONDS_PER_YEAR: u64 = 31536000; // 365 * 24 * 3600
@@ -136,12 +137,12 @@ module podium::PodiumProtocol_test {
     ) {
         // Initialize minimal test environment first
         initialize_minimal_test(admin);
-        
+
         // Setup accounts with proper funding
         setup_account(user1);
         setup_account(user2);
         setup_account(target);
-        
+
         // Fund accounts for testing
         let framework = account::create_signer_for_test(@0x1);
         aptos_coin::mint(&framework, signer::address_of(user1), INITIAL_BALANCE);
@@ -407,7 +408,7 @@ module podium::PodiumProtocol_test {
         
         // Create outpost with tier using creator
         let outpost = create_test_outpost(creator);
-
+        
         // Create subscription tier first
         PodiumProtocol::create_subscription_tier(
             creator,
@@ -1230,7 +1231,7 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"test_fee_update_events: PASS"));
     }
 
-     #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
+    #[test(aptos_framework = @0x1, podium_signer = @podium, creator = @target)]
     public fun test_self_pass_trading(
         aptos_framework: &signer,
         podium_signer: &signer,
@@ -1614,7 +1615,7 @@ module podium::PodiumProtocol_test {
         (initial_protocol, initial_creator)
     }
 
-       #[test(aptos_framework = @0x1, admin = @podium)]
+    #[test(aptos_framework = @0x1, admin = @podium)]
     #[expected_failure(abort_code = 24)]
     fun test_duration_validation(
         aptos_framework: &signer,
@@ -1766,7 +1767,7 @@ module podium::PodiumProtocol_test {
             SUBSCRIPTION_WEEK_PRICE,
             DURATION_WEEK
         );
-
+        
         // Subscribe
         PodiumProtocol::subscribe(
             subscriber,
@@ -1826,7 +1827,7 @@ module podium::PodiumProtocol_test {
             SUBSCRIPTION_MONTH_PRICE,
             DURATION_MONTH
         );
-
+        
         // Fund subscriber
         let framework = account::create_signer_for_test(@0x1);
         aptos_coin::mint(&framework, signer::address_of(subscriber), SUBSCRIPTION_WEEK_PRICE * 2);
@@ -2149,6 +2150,231 @@ module podium::PodiumProtocol_test {
         };
         
         account
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1, referrer = @user2)]
+    public fun test_pass_trading_with_referral(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+        referrer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, referrer, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"TestPass"),
+            string::utf8(b"TestPassDescription"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Get initial balances
+        let initial_buyer = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let initial_referrer = coin::balance<AptosCoin>(signer::address_of(referrer));
+        let initial_protocol = coin::balance<AptosCoin>(@podium);
+        let initial_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+
+        // Buy 2 passes with referral
+        let buy_amount = 2;
+        PodiumProtocol::buy_pass(
+            buyer,
+            target_addr,
+            buy_amount,
+            option::some(signer::address_of(referrer))
+        );
+
+        // Calculate expected fees
+        let (total_price, protocol_fee, subject_fee, referral_fee) = 
+            PodiumProtocol::calculate_buy_price_with_fees(target_addr, buy_amount, option::some(signer::address_of(referrer)));
+
+        // Verify balances
+        let final_buyer = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let final_referrer = coin::balance<AptosCoin>(signer::address_of(referrer));
+        let final_protocol = coin::balance<AptosCoin>(@podium);
+        let final_creator = coin::balance<AptosCoin>(signer::address_of(creator));
+
+        assert!(initial_buyer - final_buyer == total_price, 0);
+        assert!(final_referrer - initial_referrer == referral_fee, 1);
+        assert!(final_protocol - initial_protocol == protocol_fee, 2);
+        assert!(final_creator - initial_creator == subject_fee, 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    #[expected_failure(abort_code = 65541)] // EINVALID_AMOUNT
+    public fun test_fractional_pass_buy(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"TestPass"),
+            string::utf8(b"TestPassDescription"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Attempt to buy 0.5 passes (should fail)
+        PodiumProtocol::buy_pass(buyer, target_addr, 0, option::none());
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    #[expected_failure(abort_code = 65541)] // EINVALID_AMOUNT
+    public fun test_fractional_pass_sell(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"TestPass"),
+            string::utf8(b"TestPassDescription"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Buy valid amount first
+        PodiumProtocol::buy_pass(buyer, target_addr, 1, option::none());
+        
+        // Attempt to sell 0.5 passes (should fail)
+        PodiumProtocol::sell_pass(buyer, target_addr, 0);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    public fun test_whole_pass_requirements(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"TestPass"),
+            string::utf8(b"TestPassDescription"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Test valid whole number operations
+        let buy_amount = 3;
+        PodiumProtocol::buy_pass(buyer, target_addr, buy_amount, option::none());
+        
+        let balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
+        assert!(balance == buy_amount, 0);
+
+        // Test valid sell
+        PodiumProtocol::sell_pass(buyer, target_addr, buy_amount);
+        let final_balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
+        assert!(final_balance == 0, 1);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, user1 = @user1, user2 = @user2, user3 = @user3)]
+    public fun test_bonding_curve_sequence(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        user1: &signer,
+        user2: &signer,
+        user3: &signer,
+    ) {
+        setup_test(aptos_framework, admin, user1, user2, creator);
+        setup_account(user3);
+        
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"TestPass"),
+            string::utf8(b"TestPassDescription"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Initial buy by user1
+        PodiumProtocol::buy_pass(user1, target_addr, 1, option::none());
+        let supply_after1 = PodiumProtocol::get_total_supply(target_addr);
+        assert!(supply_after1 == 1, 0);
+
+        // Subsequent buys
+        PodiumProtocol::buy_pass(user2, target_addr, 1, option::none());
+        PodiumProtocol::buy_pass(user3, target_addr, 1, option::none());
+        let supply_after3 = PodiumProtocol::get_total_supply(target_addr);
+        assert!(supply_after3 == 3, 1);
+
+        // User1 sells
+        PodiumProtocol::sell_pass(user1, target_addr, 1);
+        let supply_after_sell1 = PodiumProtocol::get_total_supply(target_addr);
+        assert!(supply_after_sell1 == 2, 2);
+
+        // Remaining users sell
+        PodiumProtocol::sell_pass(user2, target_addr, 1);
+        PodiumProtocol::sell_pass(user3, target_addr, 1);
+        let final_supply = PodiumProtocol::get_total_supply(target_addr);
+        assert!(final_supply == 0, 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, sender = @user1, receiver = @user2)]
+    public fun test_fractional_transfer(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        sender: &signer,
+        receiver: &signer,
+    ) {
+        setup_test(aptos_framework, admin, sender, receiver, creator);
+        
+        let outpost = create_test_outpost(creator);
+        let target_addr = object::object_address(&outpost);
+        
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"TestPass"),
+            string::utf8(b"TestPassDescription"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Buy whole pass
+        PodiumProtocol::buy_pass(sender, target_addr, 1, option::none());
+        
+        // Transfer 0.5 pass using protocol function
+        PodiumProtocol::transfer_pass(
+            sender,
+            signer::address_of(receiver),
+            target_addr,
+            50000000 // 0.5 pass in internal units
+        );
+
+        // Verify balances
+        let sender_balance = PodiumProtocol::get_balance(signer::address_of(sender), target_addr);
+        let receiver_balance = PodiumProtocol::get_balance(signer::address_of(receiver), target_addr);
+        assert!(sender_balance == 50000000, 0);
+        assert!(receiver_balance == 50000000, 1);
     }
 
 } 

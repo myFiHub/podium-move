@@ -552,12 +552,14 @@ module podium::PodiumProtocol {
 
     /// Transfer passes between accounts
     public fun transfer_pass(
-        _from: &signer,
+        from: &signer,
         to: address,
         target_addr: address,  // Either outpost address or user address
         amount: u64
     ) acquires AssetCapabilities {
-        let _from_addr = signer::address_of(_from);
+        let _from_addr = signer::address_of(from);
+         // Validate amount is positive
+        assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
         // Get metadata using target address
         let asset_symbol = get_asset_symbol(target_addr);
@@ -567,7 +569,7 @@ module podium::PodiumProtocol {
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
         
         // Transfer using primary store
-        primary_fungible_store::transfer(_from, *metadata, to, amount);
+        primary_fungible_store::transfer(from, *metadata, to, amount);
     }
 
     // ============ Pass Trading & Bonding Curve Functions ============
