@@ -1053,6 +1053,12 @@ module podium::PodiumProtocol {
         string::utf8(COLLECTION_NAME_BYTES)
     }
 
+    #[view]
+    public fun get_outpost_owner(outpost: Object<OutpostData>): address acquires OutpostData {
+        let outpost_addr = object::object_address(&outpost);
+        borrow_global<OutpostData>(outpost_addr).owner
+    }
+
     /// Get outpost purchase price
     #[view]
     public fun get_outpost_purchase_price(): u64 acquires Config {
