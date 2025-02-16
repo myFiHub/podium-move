@@ -120,6 +120,7 @@ module podium::PodiumProtocol {
 
     /// Outpost data structure
     struct OutpostData has key, store {
+        owner: address,
         collection: Object<collection::Collection>,
         name: String,
         description: String,
@@ -1148,6 +1149,8 @@ module podium::PodiumProtocol {
         referrer: Option<address>
     ) acquires OutpostData, Config {
         let outpost_data = borrow_global_mut<OutpostData>(object::object_address(&outpost));
+        // Abort if the outpost is paused
+        assert!(!outpost_data.emergency_pause, error::invalid_state(EEMERGENCY_PAUSE));
         let config = borrow_global_mut<Config>(@podium);
         
         // Verify tier exists
@@ -1173,7 +1176,7 @@ module podium::PodiumProtocol {
 
         // Transfer fees
         transfer_with_check(subscriber, config.treasury, protocol_fee);
-        transfer_with_check(subscriber, object::object_address(&outpost), subject_fee);
+        transfer_with_check(subscriber, outpost_data.owner, subject_fee);
         if (option::is_some(&referrer)) {
             transfer_with_check(subscriber, option::extract(&mut referrer), referral_fee);
         };
@@ -1800,6 +1803,7 @@ module podium::PodiumProtocol {
         // Initialize outpost data
         let object_signer = object::generate_signer(&constructor_ref);
         move_to(&object_signer, OutpostData {
+            owner: signer::address_of(creator),
             collection,
             name,
             description,
@@ -1811,7 +1815,7 @@ module podium::PodiumProtocol {
             tier_names: table::new(),
             subscriptions: table::new(),
             max_tiers: 100,
-            tier_count: 0, // Initialize tier count
+            tier_count: 0,
         });
 
         // Get object reference and store in table
@@ -1891,6 +1895,17 @@ module podium::PodiumProtocol {
         } else {
             (DEFAULT_OUTPOST_ROYALTY_NUMERATOR, ROYALTY_DENOMINATOR)
         }
+    }
+
+      #[view]
+    public fun get_protocol_fees(): (u64, u64, u64) acquires Config {
+        let config = borrow_global<Config>(@podium);
+        (config.protocol_subscription_fee, config.protocol_pass_fee, config.referrer_fee)
+    }
+
+    #[view] 
+    public fun get_treasury_address(): address acquires Config {
+        borrow_global<Config>(@podium).treasury
     }
 
 }
