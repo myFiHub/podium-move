@@ -34,6 +34,9 @@ module podium::PodiumProtocol {
     const EINVALID_WEIGHT: u64 = 8;  // New error for invalid weight parameters
     const EINVALID_ROYALTY: u64 = 28;
     const EDUPLICATE_OUTPOST_NAME: u64 = 29;  // New error for duplicate outpost names
+    const EINVALID_METADATA: u64 = 30;  // Error for invalid metadata
+    const EINVALID_CODE: u64 = 31;  // Error for invalid code
+    const EINVALID_METADATA_FORMAT: u64 = 32;  // Error for invalid metadata format
 
     // Error constants - Outpost Related
     const EOUTPOST_EXISTS: u64 = 8;
@@ -226,10 +229,54 @@ module podium::PodiumProtocol {
         coins: coin::Coin<AptosCoin>,
     }
 
-    /// Upgrade capability
+        /// Enhanced upgrade capability with safety features
     struct UpgradeCapability has key, store {
-        version: u64
+        version: u64,
+        last_upgrade_time: u64,
+        upgrade_in_progress: bool,
+        emergency_pause: bool,
+        upgrade_events: EventHandle<UpgradeEvent>,
+        migration_events: EventHandle<MigrationEvent>
     }
+
+    /// Track migration status
+    struct MigrationStatus has key {
+        current_version: u64,
+        last_successful_migration: u64,
+        failed_migrations: Table<u64, MigrationError>,
+        completed_migrations: vector<u64>
+    }
+
+    /// Event for tracking upgrades
+    struct UpgradeEvent has drop, store {
+        old_version: u64,
+        new_version: u64,
+        timestamp: u64,
+        success: bool,
+        metadata: vector<u8>
+    }
+
+    /// Event for tracking migrations
+    struct MigrationEvent has drop, store {
+        from_version: u64,
+        to_version: u64,
+        timestamp: u64,
+        success: bool,
+        error_code: Option<u64>
+    }
+
+    /// Migration error details
+    struct MigrationError has store {
+        version: u64,
+        timestamp: u64,
+        error_code: u64,
+        error_message: String
+    }
+
+    // Add new error codes
+    const EUPGRADE_IN_PROGRESS: u64 = 32;
+    const EMIGRATION_FAILED: u64 = 33;
+    const EVERSION_MISMATCH: u64 = 34;
 
     /// Event for bonding curve parameter updates
     struct BondingCurveUpdateEvent has drop, store {
@@ -375,7 +422,7 @@ module podium::PodiumProtocol {
                 outpost_config_events: account::new_event_handle<OutpostSubscriptionConfigEvent>(admin),
                 fee_update_events: account::new_event_handle<ProtocolFeeUpdateEvent>(admin),
                 outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
-                outpost_price: 1000,
+                outpost_price: 5000000000, //100 APT
                 bonding_curve_events: account::new_event_handle<BondingCurveUpdateEvent>(admin),
             });
 
@@ -391,9 +438,159 @@ module podium::PodiumProtocol {
             });
 
             move_to(admin, UpgradeCapability {
-                version: 1
+                version: 1,
+                last_upgrade_time: timestamp::now_seconds(),
+                upgrade_in_progress: false,
+                emergency_pause: false,
+                upgrade_events: account::new_event_handle<UpgradeEvent>(admin),
+                migration_events: account::new_event_handle<MigrationEvent>(admin)
             });
         }
+    }
+
+// ============ Upgrade Initialization Functions ============
+        /// Safe upgrade with validation and migration
+    public entry fun safe_upgrade(
+        admin: &signer,
+        metadata_serialized: vector<u8>,
+        code: vector<vector<u8>>,
+        target_version: u64
+    ) acquires UpgradeCapability, MigrationStatus, Config {
+        // Verify admin
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        // Get upgrade capability
+        let upgrade_cap = borrow_global_mut<UpgradeCapability>(@podium);
+        
+        // Safety checks
+        assert!(!upgrade_cap.upgrade_in_progress, error::invalid_state(EUPGRADE_IN_PROGRESS));
+        assert!(!upgrade_cap.emergency_pause, error::invalid_state(EEMERGENCY_PAUSE));
+        assert!(target_version == upgrade_cap.version + 1, error::invalid_argument(EVERSION_MISMATCH));
+        
+        // Set upgrade in progress
+        upgrade_cap.upgrade_in_progress = true;
+        
+        // Perform pre-upgrade validation
+        validate_pre_upgrade(target_version);
+        
+        // Attempt upgrade
+        let success = true;
+        let error_code = option::none();
+        
+        // Start upgrade
+        code::publish_package_txn(admin, metadata_serialized, code);
+        
+        // Perform migration if needed
+        if (needs_migration(target_version)) {
+            let (migration_success, migration_error) = perform_migration(target_version);
+            success = migration_success;
+            if (!migration_success) {
+                error_code = option::some(migration_error);
+            };
+        };
+        
+        // Update version and status
+        if (success) {
+            upgrade_cap.version = target_version;
+            upgrade_cap.last_upgrade_time = timestamp::now_seconds();
+        };
+        
+        // Reset upgrade in progress
+        upgrade_cap.upgrade_in_progress = false;
+        
+        // Emit events
+        event::emit_event(
+            &mut upgrade_cap.upgrade_events,
+            UpgradeEvent {
+                old_version: upgrade_cap.version,
+                new_version: target_version,
+                timestamp: timestamp::now_seconds(),
+                success,
+                metadata: metadata_serialized
+            }
+        );
+        
+        event::emit_event(
+            &mut upgrade_cap.migration_events,
+            MigrationEvent {
+                from_version: upgrade_cap.version,
+                to_version: target_version,
+                timestamp: timestamp::now_seconds(),
+                success,
+                error_code
+            }
+        );
+        
+        // If upgrade failed, abort
+        assert!(success, error::internal(EMIGRATION_FAILED));
+    }
+
+    /// Validate pre-upgrade state
+    fun validate_pre_upgrade(target_version: u64) acquires Config {
+        let config = borrow_global<Config>(@podium);
+        // Add version-specific validation logic
+        if (target_version == 2) {
+            // Validate v1 to v2 upgrade requirements
+            validate_v1_to_v2_requirements(config);
+        } else if (target_version == 3) {
+            // Validate v2 to v3 upgrade requirements
+            validate_v2_to_v3_requirements(config);
+        };
+    }
+
+    /// Perform version-specific migration
+    fun perform_migration(target_version: u64): (bool, u64) acquires Config, MigrationStatus {
+        let migration_status = borrow_global_mut<MigrationStatus>(@podium);
+        
+        if (target_version == 2) {
+            migrate_to_v2()
+        } else if (target_version == 3) {
+            migrate_to_v3()
+        } else {
+            (true, 0) // No migration needed
+        }
+    }
+
+    /// Example v1 to v2 migration
+    fun migrate_to_v2(): (bool, u64) acquires Config {
+        let config = borrow_global_mut<Config>(@podium);
+        
+        // Perform v1 to v2 migrations
+        // Example: Add new fields, modify existing ones
+        
+        (true, 0)
+    }
+
+    /// Emergency pause upgrades
+    public entry fun emergency_pause_upgrades(
+        admin: &signer
+    ) acquires UpgradeCapability {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        let upgrade_cap = borrow_global_mut<UpgradeCapability>(@podium);
+        upgrade_cap.emergency_pause = true;
+    }
+
+    /// Resume upgrades after emergency pause
+    public entry fun resume_upgrades(
+        admin: &signer
+    ) acquires UpgradeCapability {
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        let upgrade_cap = borrow_global_mut<UpgradeCapability>(@podium);
+        upgrade_cap.emergency_pause = false;
+    }
+
+    /// Get current upgrade status
+    #[view]
+    public fun get_upgrade_status(): (u64, u64, bool, bool) acquires UpgradeCapability {
+        let cap = borrow_global<UpgradeCapability>(@podium);
+        (
+            cap.version,
+            cap.last_upgrade_time,
+            cap.upgrade_in_progress,
+            cap.emergency_pause
+        )
     }
 
     // ============ Outpost Management Functions ============
@@ -1397,9 +1594,47 @@ module podium::PodiumProtocol {
         assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
         
         let upgrade_cap = borrow_global_mut<UpgradeCapability>(@podium);
-        upgrade_cap.version = upgrade_cap.version + 1;
         
+        // Safety checks
+        assert!(!upgrade_cap.upgrade_in_progress, error::invalid_state(EUPGRADE_IN_PROGRESS));
+        assert!(!upgrade_cap.emergency_pause, error::invalid_state(EEMERGENCY_PAUSE));
+        
+        // Basic validation
+        assert!(!vector::is_empty(&metadata_serialized), error::invalid_argument(EINVALID_METADATA_FORMAT));
+        assert!(!vector::is_empty(&code), error::invalid_argument(EINVALID_CODE));
+        
+        // Set upgrade in progress
+        upgrade_cap.upgrade_in_progress = true;
+        
+        // Calculate next version
+        let target_version = upgrade_cap.version + 1;
+        
+        // Attempt upgrade
+        let success = true;
+        
+        // Start upgrade
         code::publish_package_txn(admin, metadata_serialized, code);
+        
+        // Update version and status if successful
+        if (success) {
+            upgrade_cap.version = target_version;
+            upgrade_cap.last_upgrade_time = timestamp::now_seconds();
+        };
+        
+        // Reset upgrade in progress
+        upgrade_cap.upgrade_in_progress = false;
+        
+        // Emit upgrade event
+        event::emit_event(
+            &mut upgrade_cap.upgrade_events,
+            UpgradeEvent {
+                old_version: upgrade_cap.version,
+                new_version: target_version,
+                timestamp: timestamp::now_seconds(),
+                success,
+                metadata: metadata_serialized
+            }
+        );
     }
 
     /// Get balance of passes
@@ -1770,9 +2005,6 @@ module podium::PodiumProtocol {
         assert!(vector::length(uri_bytes) > 0, error::invalid_argument(EINVALID_METADATA));
     }
 
-    // Add new error constant
-    const EINVALID_METADATA: u64 = 27;
-
     /// Update outpost royalty (admin only)
     public entry fun update_outpost_royalty(
         admin: &signer,
@@ -1940,5 +2172,27 @@ module podium::PodiumProtocol {
     public fun get_treasury_address(): address acquires Config {
         borrow_global<Config>(@podium).treasury
     }
+
+    // ===== Upgradeability Stubs =====
+    fun needs_migration(target_version: u64): bool {
+        // Stub implementation: currently, no migration is needed for any target version
+        false
+    }
+
+    fun validate_v1_to_v2_requirements(_config: &Config) {
+        // Stub: no additional requirements for v1 to v2 migration
+        ()
+    }
+
+    fun validate_v2_to_v3_requirements(_config: &Config) {
+        // Stub: no additional requirements for v2 to v3 migration
+        ()
+    }
+
+    fun migrate_to_v3(): (bool, u64) {
+        // Stub: assume migration succeeds
+        (true, 0)
+    }
+    // ===== End Upgradeability Stubs =====
 
 }

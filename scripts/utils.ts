@@ -8,6 +8,9 @@ import { MoveConfigManager } from './move_config';
 export const MOVE_DECIMALS = 8;
 export const PASS_DECIMALS = 8;
 
+// Add this type helper at the top with other constants
+type MoveModuleId = `${string}::${string}::${string}`;
+
 // Helper function to get project root path
 const getProjectRoot = () => process.cwd();
 
@@ -42,10 +45,21 @@ export async function viewFunction(aptos: Aptos, params: {
     arguments: any[];
 }): Promise<any[]> {
     try {
+        // Ensure function name is properly formatted
+        const functionId = params.function.includes('::') 
+            ? (params.function as MoveModuleId)
+            : `${params.function}::${params.function}::${params.function}` as MoveModuleId;
+
+        // Format type arguments to ensure they're valid Move module IDs
+        const formattedTypeArgs = params.type_arguments.map(arg => {
+            if (!arg.includes('::')) return undefined;
+            return arg as MoveModuleId;
+        }).filter((arg): arg is MoveModuleId => arg !== undefined);
+
         return await aptos.view({
             payload: {
-                function: params.function as `${string}::${string}::${string}`,
-                typeArguments: params.type_arguments,
+                function: functionId,
+                typeArguments: formattedTypeArgs,
                 functionArguments: params.arguments
             }
         });

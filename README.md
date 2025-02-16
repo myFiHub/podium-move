@@ -213,6 +213,9 @@ npm install
 ### Testing
 ```bash
 movement move test
+movement move test --filter PodiumProtocol
+movement move test --filter upgrade
+movement move test --filter CheerOrBoo
 ```
 
 ### Deployment
@@ -378,6 +381,43 @@ The protocol implements a bonding curve mechanism for pass trading with the foll
 
 ## Testing
 
+## Test Coverage
+
+### Protocol Core Tests
+
+1. **Initialization Tests**
+- `test_initialization`: Verifies protocol setup, treasury configuration, and initial parameters
+- `test_admin_functions`: Tests admin-only functions and access control
+- `test_emergency_pause`: Validates emergency pause functionality and state changes
+
+2. **Outpost Management Tests**
+- `test_outpost_creation_flow`: Validates outpost creation, pricing, and ownership
+- `test_outpost_price_management`: Tests outpost creation costs and treasury payments
+- `test_outpost_metadata`: Verifies proper metadata handling and uniqueness constraints
+- `test_outpost_ownership`: Checks ownership transfers and permissions
+
+3. **Pass Trading Tests**
+- `test_bonding_curve_sequence`: Tests bonding curve pricing through buy/sell sequence
+- `test_pass_trading`: Validates pass purchases, sales, and balance updates
+- `test_fee_distribution`: Verifies correct fee splits between protocol, creator, and referrer
+- `test_vault_redemption`: Tests vault system for pass redemptions
+
+4. **Subscription System Tests**
+- `test_subscription_tier_creation`: Validates tier creation and constraints
+- `test_subscription_management`: Tests subscription purchases and renewals
+- `test_subscription_cancellation`: Verifies subscription cancellation logic
+- `test_subscription_validation`: Checks subscription status and access control
+
+5. **Fee Management Tests**
+- `test_protocol_fees`: Validates fee calculations and distributions
+- `test_referral_fees`: Tests referral system and bonus distributions
+- `test_fee_updates`: Verifies admin fee update functionality
+
+6. **Balance and Fund Safety Tests**
+- `test_insufficient_balance`: Validates proper handling of insufficient funds
+- `test_transfer_safety`: Tests safe transfer patterns and balance checks
+- `test_vault_management`: Verifies vault balance tracking and withdrawals
+
 ### CheerOrBoo Tests
 
 The test suite verifies the core functionality and edge cases of the CheerOrBoo system:
@@ -442,6 +482,8 @@ The test suite verifies the core functionality and edge cases of the CheerOrBoo 
 - Validates even distribution among participants
 - Checks remainder handling
 - Ensures no funds are lost in the process
+
+
 
 ## Initialization Flow
 

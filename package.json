@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@aptos-labs/ts-sdk": "latest",
+    "eventemitter3": "^5.0.1",
     "yaml": "^2.3.4"
   }
 }

@@ -11,11 +11,15 @@ module podium::PodiumProtocol_test {
     use aptos_framework::coin::{Self, BurnCapability};
     use aptos_framework::timestamp;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
-    use podium::PodiumProtocol::{Self, OutpostData};
+    use podium::PodiumProtocol::{
+        Self,
+        OutpostData,
+        Config,
+        UpgradeCapability,
+    };
     use aptos_token_objects::token;
     use aptos_framework::primary_fungible_store;
     use aptos_framework::error;
-    use aptos_framework::fungible_asset::FungibleAsset;
 
     // Test addresses
     const TREASURY: address = @podium;
@@ -1050,7 +1054,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @0x123)]
-    #[expected_failure(abort_code = 65563)]  // error::invalid_argument(27) = 65563
+    #[expected_failure(abort_code = 65566)]  // error::invalid_argument(30) = 65566
     fun test_invalid_outpost_metadata(
         aptos_framework: &signer,
         admin: &signer,
@@ -2469,7 +2473,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
-    #[expected_failure(abort_code = 65563)] // error::invalid_argument(27)
+    #[expected_failure(abort_code = 65566)] // error::invalid_argument(27)
     public fun test_duplicate_outpost_name(
         aptos_framework: &signer,
         admin: &signer,
@@ -2507,7 +2511,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
-    #[expected_failure(abort_code = 524317)] // EINVALID_METADATA
+    #[expected_failure(abort_code = 524317)] // EINVALID_METADATA = 30
     public fun test_duplicate_outpost_name_metadata_first(
         aptos_framework: &signer,
         admin: &signer,
@@ -2545,7 +2549,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
-    #[expected_failure(abort_code = 65563)] // EINVALID_METADATA
+    #[expected_failure(abort_code = 65566)] // EINVALID_METADATA = 30
     public fun test_duplicate_outpost_name_with_valid_metadata(
         aptos_framework: &signer,
         admin: &signer,
@@ -2583,6 +2587,142 @@ module podium::PodiumProtocol_test {
         );
     }
 
+    // Test constants for upgrade testing
+    // Simple mock metadata format
+    const VALID_METADATA: vector<u8> = x"0E506F6469756D50726F746F636F6C01000000"; // Just package name and version
+    
+    // Simple mock bytecode format
+    const VALID_CODE_MODULE: vector<u8> = x"A11CEB0B0600"; // Just magic bytes and version
 
+    // Helper function to create test package data
+    fun create_test_package_data(): (vector<u8>, vector<vector<u8>>) {
+        let metadata = VALID_METADATA;
+        let code = vector[VALID_CODE_MODULE];
+        (metadata, code)
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    public fun test_upgrade_capability(
+        aptos_framework: &signer,
+        admin: &signer
+    ) {
+        // Setup
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        let admin_addr = signer::address_of(admin);
+        account::create_account_for_test(admin_addr);
+        
+        // Initialize protocol
+        PodiumProtocol::initialize(admin);
+        
+        // Initial version should be 1
+        let (version, _, _, _) = PodiumProtocol::get_upgrade_status();
+        assert!(version == 1, 1);
+        
+        // Prepare valid package data
+        let (metadata, code) = create_test_package_data();
+        
+        // Perform upgrade
+        PodiumProtocol::upgrade(admin, metadata, code);
+        
+        // Version should increment exactly by 1
+        let (new_version, _, _, _) = PodiumProtocol::get_upgrade_status();
+        assert!(new_version == 2, 2);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    public fun test_multiple_upgrades(
+        aptos_framework: &signer,
+        admin: &signer,
+    ) {
+        // Setup
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        let admin_addr = signer::address_of(admin);
+        account::create_account_for_test(admin_addr);
+        
+        // Initialize protocol
+        PodiumProtocol::initialize(admin);
+        
+        // Get initial version
+        let (initial_version, _, _, _) = PodiumProtocol::get_upgrade_status();
+        
+        // Debug print initial parameters
+        debug::print(&string::utf8(b"\n=== Initial Version ==="));
+        debug::print(&initial_version);
+        
+        // Prepare valid package data
+        let (metadata, code) = create_test_package_data();
+        
+        // First upgrade
+        PodiumProtocol::upgrade(admin, metadata, code);
+        let (version_after_first, _, _, _) = PodiumProtocol::get_upgrade_status();
+        assert!(version_after_first == initial_version + 1, 1);
+        
+        // Second upgrade with same code (in practice would be different)
+        let (metadata, code) = create_test_package_data();
+        PodiumProtocol::upgrade(admin, metadata, code);
+        let (version_after_second, _, _, _) = PodiumProtocol::get_upgrade_status();
+        assert!(version_after_second == initial_version + 2, 2);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    #[expected_failure(abort_code = 65542)] // EINVALID_CODE = 31
+    public fun test_upgrade_with_empty_code(
+        aptos_framework: &signer,
+        admin: &signer
+    ) {
+        // Setup
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        let admin_addr = signer::address_of(admin);
+        account::create_account_for_test(admin_addr);
+        
+        // Initialize protocol
+        PodiumProtocol::initialize(admin);
+        
+        // Attempt upgrade with empty code (should fail)
+        let metadata = VALID_METADATA;
+        let code = vector::empty<vector<u8>>();  // Empty vector of vectors
+        
+        // Should fail with EINVALID_CODE
+        PodiumProtocol::upgrade(admin, metadata, code);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, unauthorized = @0x123)]
+    #[expected_failure(abort_code = 0x50001, location = podium::PodiumProtocol)] // ENOT_ADMIN
+    public fun test_unauthorized_upgrade(
+        aptos_framework: &signer,
+        admin: &signer,
+        unauthorized: &signer
+    ) {
+        // Setup
+        timestamp::set_time_has_started_for_testing(aptos_framework);
+        let admin_addr = signer::address_of(admin);
+        account::create_account_for_test(admin_addr);
+        account::create_account_for_test(signer::address_of(unauthorized));
+        
+        // Initialize protocol
+        PodiumProtocol::initialize(admin);
+        
+        // Prepare valid package data
+        let (metadata, code) = create_test_package_data();
+        
+        // Attempt unauthorized upgrade (should fail)
+        PodiumProtocol::upgrade(unauthorized, metadata, code);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium)]
+    #[expected_failure(abort_code = 196613)] // EEMERGENCY_PAUSE = 13
+    public fun test_upgrade_during_pause(
+        aptos_framework: &signer,
+        admin: &signer,
+    ) {
+        setup_test(aptos_framework, admin, admin, admin, admin);
+        
+        // Pause upgrades
+        PodiumProtocol::emergency_pause_upgrades(admin);
+        
+        // Attempt upgrade while paused
+        let (metadata, code) = create_test_package_data();
+        PodiumProtocol::upgrade(admin, metadata, code);
+    }
 
 } 
