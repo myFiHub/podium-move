@@ -1879,7 +1879,7 @@ module podium::PodiumProtocol {
     #[view]
     public fun get_outpost_royalty(outpost: Object<OutpostData>): (u64, u64) acquires OutpostRoyaltyCapability {
         let outpost_addr = object::object_address(&outpost);
-        let cap = borrow_global<OutpostRoyaltyCapability>(outpost_addr);
+        let _cap = borrow_global<OutpostRoyaltyCapability>(outpost_addr);
         let royalty_opt = royalty::get<OutpostData>(outpost);
         
         if (option::is_some(&royalty_opt)) {
