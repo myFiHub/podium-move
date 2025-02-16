@@ -68,7 +68,7 @@ module podium::PodiumProtocol {
     // Constants - Outpost related
     const COLLECTION_NAME_BYTES: vector<u8> = b"PodiumOutposts";
     const COLLECTION_DESCRIPTION_BYTES: vector<u8> = b"Podium Protocol Outposts";
-    const COLLECTION_URI_BYTES: vector<u8> = b"https://podium.fi/outposts";
+    const COLLECTION_URI_BYTES: vector<u8> = b"https://podium.myfihub.com/outposts";
     const MAX_FEE_PERCENTAGE: u64 = 10000; // 100% = 10000 basis points
     const OUTPOST_FEE_SHARE: u64 = 500;
     const DEFAULT_OUTPOST_ROYALTY_NUMERATOR: u64 = 500;  // 5%
@@ -114,7 +114,7 @@ module podium::PodiumProtocol {
 
     // Constants for royalty validation
     const MIN_ROYALTY_NUMERATOR: u64 = 0;    // 0%
-    const MAX_ROYALTY_NUMERATOR: u64 = 10000; // 100% in basis points
+    const MAX_ROYALTY_NUMERATOR: u64 = 2000; // 20% in basis points
 
     // ============ Core Data Structures ============
 
@@ -154,14 +154,14 @@ module podium::PodiumProtocol {
     /// Central configuration
     struct Config has key {
         collection: Object<collection::Collection>,
-        collection_addr: address,  // Keep both for compatibility
+        collection_addr: address,
         // Fee configuration
         protocol_fee_percent: u64,
         subject_fee_percent: u64,
         referral_fee_percent: u64,
-        protocol_subscription_fee: u64, // basis points (e.g. 500 = 5%)
-        protocol_pass_fee: u64,        // basis points
-        referrer_fee: u64,             // basis points
+        protocol_subscription_fee: u64,  //basis points (e.g. 500 = 5%)
+        protocol_pass_fee: u64,
+        referrer_fee: u64,
         treasury: address,
         
         // Bonding curve parameters
@@ -184,6 +184,9 @@ module podium::PodiumProtocol {
         outpost_config_events: EventHandle<OutpostSubscriptionConfigEvent>,
         fee_update_events: EventHandle<ProtocolFeeUpdateEvent>,
         outpost_created_events: EventHandle<OutpostCreatedEvent>,
+        collection_update_events: EventHandle<CollectionUpdateEvent>,
+        collection_metadata_events: EventHandle<CollectionMetadataUpdateEvent>,
+        admin_transfer_events: EventHandle<AdminOwnershipTransferEvent>,
         outpost_price: u64,
         bonding_curve_events: EventHandle<BondingCurveUpdateEvent>,
     }
@@ -379,6 +382,31 @@ module podium::PodiumProtocol {
         timestamp: u64
     }
 
+    /// Event for collection updates
+    struct CollectionUpdateEvent has drop, store {
+        old_collection: Object<collection::Collection>,
+        new_collection: Object<collection::Collection>,
+        timestamp: u64,
+    }
+
+    /// Event for collection metadata updates
+    struct CollectionMetadataUpdateEvent has drop, store {
+        old_name: String,
+        old_description: String,
+        old_uri: String,
+        new_name: String,
+        new_description: String,
+        new_uri: String,
+        timestamp: u64,
+    }
+
+    /// Event for admin ownership transfer
+    struct AdminOwnershipTransferEvent has drop, store {
+        old_admin: address,
+        new_admin: address,
+        timestamp: u64,
+    }
+
     // ============ Initialization Functions ============
 
     /// Initialize the protocol
@@ -422,6 +450,9 @@ module podium::PodiumProtocol {
                 outpost_config_events: account::new_event_handle<OutpostSubscriptionConfigEvent>(admin),
                 fee_update_events: account::new_event_handle<ProtocolFeeUpdateEvent>(admin),
                 outpost_created_events: account::new_event_handle<OutpostCreatedEvent>(admin),
+                collection_update_events: account::new_event_handle<CollectionUpdateEvent>(admin),
+                collection_metadata_events: account::new_event_handle<CollectionMetadataUpdateEvent>(admin),
+                admin_transfer_events: account::new_event_handle<AdminOwnershipTransferEvent>(admin),
                 outpost_price: 5000000000, //100 APT
                 bonding_curve_events: account::new_event_handle<BondingCurveUpdateEvent>(admin),
             });
@@ -2194,5 +2225,37 @@ module podium::PodiumProtocol {
         (true, 0)
     }
     // ===== End Upgradeability Stubs =====
+
+    /// Transfer admin ownership of the protocol (admin only)
+    public entry fun transfer_admin_ownership(
+        admin: &signer,
+        new_admin: address
+    ) acquires Config {
+        // Verify current admin
+        assert!(signer::address_of(admin) == @podium, error::permission_denied(ENOT_ADMIN));
+        
+        // Verify new admin has account
+        assert!(account::exists_at(new_admin), error::not_found(EACCOUNT_NOT_REGISTERED));
+        
+        // Get config
+        let config = borrow_global_mut<Config>(@podium);
+        
+        // Store old admin for event
+        let old_admin = @podium;
+        
+        // Update treasury to new admin
+        config.treasury = new_admin;
+        
+        // Emit admin transfer event
+        event::emit_event(
+            &mut config.admin_transfer_events,
+            AdminOwnershipTransferEvent {
+                old_admin,
+                new_admin,
+                timestamp: timestamp::now_seconds(),
+            }
+        );
+    }
+
 
 }
