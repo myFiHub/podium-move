@@ -664,7 +664,7 @@ module podium::PodiumProtocol {
         amount: u64
     ): (u64, u64, u64) acquires Config {
         // Get current supply
-        let _current_supply = get_total_supply(target_addr)/ MIN_WHOLE_PASS;
+        let _current_supply = get_total_supply(target_addr) / MIN_WHOLE_PASS;
         
         // Basic validations matching Solidity
         if (amount == 0 || _current_supply < amount) {
@@ -1642,13 +1642,16 @@ module podium::PodiumProtocol {
         weight_c: u64
     ): u64 {
         let interface_supply = supply / MIN_WHOLE_PASS;
+        // Handle final pass sale scenario
+        let adjusted_supply = if (interface_supply == 0) { 1 } else { interface_supply };
+        
         // Early return for first purchase
-        if (interface_supply == 0) {
+        if (adjusted_supply == 0) {
             return INITIAL_PRICE
         };
 
         // Calculate n = s + c - 1
-        let s_plus_c = interface_supply + weight_c;
+        let s_plus_c = adjusted_supply + weight_c;
         if (s_plus_c <= 1) {
             return INITIAL_PRICE
         };
