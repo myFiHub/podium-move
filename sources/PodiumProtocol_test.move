@@ -2435,9 +2435,41 @@ module podium::PodiumProtocol_test {
         outpost
     }
 
-    // Keep only the second occurrence of test_duplicate_outpost_name which tests with different URIs
+
+
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
-    #[expected_failure(abort_code = 524329)] // EDUPLICATE_OUTPOST_NAME = 29
+    public fun test_different_outpost_names(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, creator, creator);
+        
+        // Create first outpost
+        let outpost1 = PodiumProtocol::create_outpost(
+            creator,
+            string::utf8(b"FirstOutpost"),
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test1.uri"),
+        );
+        
+        // Create second outpost with different name
+        let outpost2 = PodiumProtocol::create_outpost(
+            creator,
+            string::utf8(b"SecondOutpost"),
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test2.uri"),
+        );
+        
+        // Verify both outposts exist and have correct ownership
+        assert!(PodiumProtocol::has_outpost_data(outpost1), 0);
+        assert!(PodiumProtocol::has_outpost_data(outpost2), 1);
+        assert!(PodiumProtocol::verify_ownership(outpost1, signer::address_of(creator)), 2);
+        assert!(PodiumProtocol::verify_ownership(outpost2, signer::address_of(creator)), 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    #[expected_failure(abort_code = 65563)] // error::invalid_argument(27)
     public fun test_duplicate_outpost_name(
         aptos_framework: &signer,
         admin: &signer,
@@ -2464,14 +2496,93 @@ module podium::PodiumProtocol_test {
             uri1,
         );
         
-        // Attempt to create second outpost with same name but different URI
-        let uri2 = string::utf8(b"https://test2.uri");
+        // Attempt to create second outpost with same name but invalid URI
+        let uri2 = string::utf8(b""); // Empty URI should trigger EINVALID_METADATA
         let _ = PodiumProtocol::create_outpost(
             creator,
             name,  // Same name
             description,
-            uri2,  // Different URI
+            uri2,  // Invalid URI
         );
     }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    #[expected_failure(abort_code = 524317)] // EINVALID_METADATA
+    public fun test_duplicate_outpost_name_metadata_first(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, creator, creator);
+        
+        let creator_addr = signer::address_of(creator);
+        let purchase_price = PodiumProtocol::get_outpost_purchase_price();
+        
+        // Fund creator with enough for multiple outposts
+        let framework_signer = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework_signer, creator_addr, purchase_price * 10);
+        
+        // Create first outpost with valid metadata
+        let name = string::utf8(b"DuplicateTest");
+        let description = string::utf8(b"Test Description");
+        let uri1 = string::utf8(b"https://test1.uri");
+        
+        let _ = PodiumProtocol::create_outpost(
+            creator,
+            name,
+            description,
+            uri1,
+        );
+        
+        // Attempt to create second outpost with same name and valid metadata
+        let uri2 = string::utf8(b"https://test2.uri"); // Valid URI
+        let _ = PodiumProtocol::create_outpost(
+            creator,
+            name,  // Same name
+            description,
+            uri2,  // Different but valid URI
+        );
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target)]
+    #[expected_failure(abort_code = 65563)] // EINVALID_METADATA
+    public fun test_duplicate_outpost_name_with_valid_metadata(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, creator, creator);
+        
+        let creator_addr = signer::address_of(creator);
+        let purchase_price = PodiumProtocol::get_outpost_purchase_price();
+        
+        // Fund creator with enough for multiple outposts
+        let framework_signer = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework_signer, creator_addr, purchase_price * 10);
+        
+        // Create first outpost with valid metadata
+        let name = string::utf8(b"DuplicateTest");
+        let description = string::utf8(b"Test Description");
+        let uri1 = string::utf8(b"https://test1.uri");
+        
+        let _ = PodiumProtocol::create_outpost(
+            creator,
+            name,
+            description,
+            uri1,
+        );
+        
+        // Attempt to create second outpost with same name AND invalid metadata
+        let empty_description = string::utf8(b""); // Invalid description
+        let empty_uri = string::utf8(b""); // Invalid URI
+        let _ = PodiumProtocol::create_outpost(
+            creator,
+            name,  // Same name
+            empty_description, // Invalid description
+            empty_uri,  // Invalid URI
+        );
+    }
+
+
 
 } 
