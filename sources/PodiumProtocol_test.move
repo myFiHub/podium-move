@@ -352,18 +352,19 @@ module podium::PodiumProtocol_test {
         assert!(user2_final == 1, 2);
     }
 
-    #[test(aptos_framework = @0x1, admin = @podium, unauthorized_user = @user1)]
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, unauthorized_user = @user1)]
     #[expected_failure(abort_code = 327692)]  // ENOT_OWNER
     public fun test_unauthorized_tier_creation(
         aptos_framework: &signer,
         admin: &signer,
+        creator: &signer,
         unauthorized_user: &signer,
     ) {
         // Initialize with admin first
-        setup_test(aptos_framework, admin, unauthorized_user, unauthorized_user, admin);
+        setup_test(aptos_framework, admin, unauthorized_user, unauthorized_user, creator);
         
-        // Create outpost with admin
-        let outpost = create_test_outpost(admin);
+        // Create outpost with creator (the legitimate owner)
+        let outpost = create_test_outpost(creator);
         
         // Now try unauthorized tier creation
         PodiumProtocol::create_subscription_tier(
@@ -844,7 +845,6 @@ module podium::PodiumProtocol_test {
         // Verify pass balance
         assert!(PodiumProtocol::get_balance(signer::address_of(buyer), target_addr) == PASS_AMOUNT, 0);
 
-        // At the end of each test function, add a summary print
         debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
         debug::print(&string::utf8(b"test_outpost_creation_and_pass_buying: PASS"));
     }
@@ -972,7 +972,7 @@ module podium::PodiumProtocol_test {
     }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @0x123, new_owner = @0x456)]
-    fun test_outpost_ownership_transfer(
+    public fun test_outpost_ownership_transfer(
         aptos_framework: &signer,
         admin: &signer,
         creator: &signer,
@@ -1061,6 +1061,93 @@ module podium::PodiumProtocol_test {
         
         // Try to update royalty with non-admin (should fail)
         PodiumProtocol::update_outpost_royalty(non_admin, outpost, 1000);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @0x123, new_owner = @0x456)]
+    public fun test_comprehensive_ownership_transfer(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        new_owner: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, new_owner, creator);
+        
+        // Create outpost
+        let outpost = create_test_outpost(creator);
+        let creator_addr = signer::address_of(creator);
+        let new_owner_addr = signer::address_of(new_owner);
+        
+        // Verify initial ownership and capabilities
+        assert!(PodiumProtocol::verify_ownership(outpost, creator_addr), 0);
+        
+        // Create initial subscription tier as creator
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Initial Tier"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+        
+        // Transfer ownership
+        PodiumProtocol::transfer_outpost_ownership(creator, outpost, new_owner_addr);
+        
+        // Verify new ownership
+        assert!(PodiumProtocol::verify_ownership(outpost, new_owner_addr), 1);
+        assert!(!PodiumProtocol::verify_ownership(outpost, creator_addr), 2);
+        
+        // Verify new owner can perform all creator operations:
+        
+        // 1. Create new subscription tier
+        PodiumProtocol::create_subscription_tier(
+            new_owner,
+            outpost,
+            string::utf8(b"New Owner Tier"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+        
+        // 2. Update outpost price
+        PodiumProtocol::update_outpost_price(
+            new_owner,
+            outpost,
+            SUBSCRIPTION_WEEK_PRICE * 2
+        );
+        
+        // 3. Toggle emergency pause
+        PodiumProtocol::toggle_emergency_pause(new_owner, outpost);
+        assert!(PodiumProtocol::is_paused(outpost), 3);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, new_owner = @user1)]
+    #[expected_failure(abort_code = 327692)]  // ENOT_OWNER
+    public fun test_old_owner_operations_fail(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        new_owner: &signer,
+    ) {
+        setup_test(aptos_framework, admin, creator, new_owner, creator);
+        
+        // Create outpost with creator
+        let outpost = create_test_outpost(creator);
+        
+        // Transfer ownership to new_owner
+        PodiumProtocol::transfer_outpost_ownership(
+            creator, 
+            outpost, 
+            signer::address_of(new_owner)
+        );
+        
+        // Now try to create tier with old owner (creator)
+        // This should fail with ENOT_OWNER since creator is no longer the owner
+        PodiumProtocol::create_subscription_tier(
+            creator,  // Using old owner
+            outpost,
+            string::utf8(b"Should Fail"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
     }
 
     #[test(admin = @podium)]
