@@ -11,11 +11,13 @@ module podium::PodiumProtocol_test {
     use aptos_framework::coin::{Self, BurnCapability};
     use aptos_framework::timestamp;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
+    use aptos_framework::aptos_account;
     use podium::PodiumProtocol::{
         Self,
         OutpostData,
-        Config,
-        UpgradeCapability,
+        // Remove unused imports
+        // Config,
+        // UpgradeCapability,
     };
     use aptos_token_objects::token;
     use aptos_framework::primary_fungible_store;
@@ -2723,6 +2725,90 @@ module podium::PodiumProtocol_test {
         // Attempt upgrade while paused
         let (metadata, code) = create_test_package_data();
         PodiumProtocol::upgrade(admin, metadata, code);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    public fun test_buy_pass_new_account(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        // Create a new address that doesn't have an account yet
+        let new_target_addr = @0x123;
+        
+        // Create pass token for the new address
+        PodiumProtocol::create_pass_token(
+            creator,
+            new_target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy pass - this should handle the new account creation automatically
+        PodiumProtocol::buy_pass(
+            buyer,
+            new_target_addr,
+            1, // buy 1 pass
+            option::none()
+        );
+        
+        // Verify the purchase was successful
+        let balance = PodiumProtocol::get_balance(signer::address_of(buyer), new_target_addr);
+        assert!(balance == MIN_WHOLE_PASS, 0);
+        
+        // Verify the account was created and received payment
+        assert!(account::exists_at(new_target_addr), 1);
+        assert!(coin::balance<AptosCoin>(new_target_addr) > 0, 2);
+    }
+
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    public fun test_buy_pass_existing_account(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        // Use an existing account (creator's account) as the target
+        let target_addr = signer::address_of(creator);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy pass for existing account
+        PodiumProtocol::buy_pass(
+            buyer,
+            target_addr,
+            1, // buy 1 pass
+            option::none()
+        );
+        
+        // Verify the purchase was successful
+        let balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
+        assert!(balance == MIN_WHOLE_PASS, 0);
+        
+        // Try another purchase to same account
+        PodiumProtocol::buy_pass(
+            buyer,
+            target_addr,
+            1,
+            option::none()
+        );
+        
+        // Verify second purchase
+        let balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
+        assert!(balance == 2 * MIN_WHOLE_PASS, 1);
     }
 
 } 
