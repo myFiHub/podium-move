@@ -13,7 +13,6 @@ module podium::PodiumProtocol {
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
     use aptos_framework::timestamp;
-    use std::debug;
     use aptos_framework::aggregator_v2;
     use aptos_framework::code;
     use aptos_framework::fungible_asset::{Self, Metadata, FungibleAsset, MintRef, TransferRef, BurnRef};
@@ -830,12 +829,6 @@ module podium::PodiumProtocol {
     #[view]
     public fun calculate_price(supply: u64, amount: u64, is_sell: bool): u64 acquires Config {
         let interface_supply = supply / MIN_WHOLE_PASS;
-        debug::print(&string::utf8(b"=== Starting price calculation ==="));
-        debug::print(&string::utf8(b"Input parameters:"));
-        debug::print(&interface_supply);
-        debug::print(&amount);
-        debug::print(&is_sell);
-
         let total_price = 0;
         let i = 0;
         
@@ -856,8 +849,6 @@ module podium::PodiumProtocol {
             i = i + 1;
         };
         
-        debug::print(&string::utf8(b"=== Final total price calculated ==="));
-        debug::print(&total_price);
         total_price
     }
 
@@ -920,19 +911,6 @@ module podium::PodiumProtocol {
         let protocol_fee = (price * config.protocol_fee_percent) / BPS;
         let subject_fee = (price * config.subject_fee_percent) / BPS;
         
-        // Add debug prints
-        debug::print(&string::utf8(b"[calculate_sell_price_with_fees] Calculation:"));
-        debug::print(&string::utf8(b"Current supply:"));
-        debug::print(&_current_supply);
-        debug::print(&string::utf8(b"Amount to sell:"));
-        debug::print(&amount);
-        debug::print(&string::utf8(b"Raw price:"));
-        debug::print(&price);
-        debug::print(&string::utf8(b"Protocol fee:"));
-        debug::print(&protocol_fee);
-        debug::print(&string::utf8(b"Subject fee:"));
-        debug::print(&subject_fee);
-        
         // Return raw price and fees
         (price, protocol_fee, subject_fee)
     }
@@ -973,13 +951,6 @@ module podium::PodiumProtocol {
         let (base_price, protocol_fee, subject_fee, referral_fee) = 
             calculate_buy_price_with_fees(target_addr, amount, referrer);
         let total_payment_required = base_price + protocol_fee + subject_fee + referral_fee;
-        
-        // Debug prints for tracking
-        debug::print(&string::utf8(b"[buy_pass] Details:"));
-        debug::print(&string::utf8(b"Amount (interface/internal units):"));
-        debug::print(&amount);
-        debug::print(&string::utf8(b"Total cost (OCTA):"));
-        debug::print(&total_payment_required);
         
         // Withdraw full payment from buyer
         let payment_coins = coin::withdraw<AptosCoin>(buyer, total_payment_required);
@@ -1067,11 +1038,6 @@ module podium::PodiumProtocol {
         
         // Withdraw from redemption vault
         let vault = borrow_global_mut<RedemptionVault>(@podium);
-        debug::print(&string::utf8(b"[vault] Attempting withdrawal from vault:"));
-        debug::print(&base_price);
-        debug::print(&string::utf8(b"[vault] Current vault balance:"));
-        debug::print(&coin::value(&vault.coins));
-        
         let total_payment = coin::extract<AptosCoin>(&mut vault.coins, base_price);
         
         // Protocol fee payment
@@ -1120,17 +1086,9 @@ module podium::PodiumProtocol {
     fun deposit_to_vault(coins: coin::Coin<AptosCoin>) acquires RedemptionVault {
         let vault = borrow_global_mut<RedemptionVault>(@podium);
         let deposit_amount = coin::value(&coins);
-        debug::print(&string::utf8(b"[vault] Depositing to redemption vault:"));
-        debug::print(&deposit_amount);
         let previous_balance = coin::value(&vault.coins);
-        debug::print(&string::utf8(b"[vault] Previous vault balance:"));
-        debug::print(&previous_balance);
-        
         coin::merge(&mut vault.coins, coins);
-        
         let new_balance = coin::value(&vault.coins);
-        debug::print(&string::utf8(b"[vault] New vault balance:"));
-        debug::print(&new_balance);
     }
 
     /// Withdraw coins from vault
@@ -1188,7 +1146,6 @@ module podium::PodiumProtocol {
 
     /// Get asset symbol for a target/outpost
     public fun get_asset_symbol(target: address): String {
-        debug::print(&string::utf8(b"[get_asset_symbol] Creating symbol"));
         let symbol = string::utf8(b"P");
         
         // Convert address to bytes using BCS
@@ -1212,8 +1169,6 @@ module podium::PodiumProtocol {
             i = i + 1;
         };
         
-        debug::print(&string::utf8(b"Generated symbol:"));
-        debug::print(&symbol);
         symbol
     }
 
