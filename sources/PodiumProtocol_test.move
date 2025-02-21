@@ -810,6 +810,39 @@ module podium::PodiumProtocol_test {
         assert!(PodiumProtocol::get_balance(signer::address_of(buyer), signer::address_of(target)) == buy_amount * MIN_WHOLE_PASS, 4);
     }
 
+    #[test]
+    fun test_buy_pass_unregistered_account() {
+        let aptos_framework = account::create_signer_for_test(@aptos_framework);
+        let admin = account::create_signer_for_test(@podium);
+        let creator = account::create_signer_for_test(@0x123);
+        let buyer = account::create_signer_for_test(@0x456);
+        
+        // Setup protocol
+        setup_test(&aptos_framework, &admin, &creator, &creator, &creator);
+        let target_addr = signer::address_of(&creator);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            &creator,
+            target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Description"),
+            string::utf8(b"https://test.uri")
+        );
+        
+        // Create account first
+        aptos_account::create_account(signer::address_of(&buyer));
+        
+        // Fund buyer account using aptos_coin::mint
+        aptos_coin::mint(&aptos_framework, signer::address_of(&buyer), 100 * OCTA);
+        
+        // Try to buy pass - should work even though we didn't explicitly register the coin
+        PodiumProtocol::buy_pass(&buyer, target_addr, 1, option::none());
+        
+        // Verify the purchase succeeded
+        assert!(PodiumProtocol::get_balance(signer::address_of(&buyer), target_addr) == 1 * MIN_WHOLE_PASS, 0);
+    }
+
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
     public fun test_outpost_creation_and_pass_buying(
         aptos_framework: &signer,
