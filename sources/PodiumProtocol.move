@@ -996,9 +996,6 @@ module podium::PodiumProtocol {
             let protocol_coins = coin::extract(&mut payment_coins, protocol_fee);
             if (!account::exists_at(config.treasury)) {
                 aptos_account::create_account(config.treasury);
-            } else if (!coin::is_account_registered<AptosCoin>(config.treasury)) {
-                // If account exists but coin isn't registered
-                coin::register<AptosCoin>(config.treasury);
             };
             coin::deposit(config.treasury, protocol_coins);
         };
@@ -1015,8 +1012,6 @@ module podium::PodiumProtocol {
             };
             if (!account::exists_at(recipient_addr)) {
                 aptos_account::create_account(recipient_addr);
-            } else if (!coin::is_account_registered<AptosCoin>(recipient_addr)) {
-                coin::register<AptosCoin>(recipient_addr);
             };
             coin::deposit(recipient_addr, subject_coins);
         };
@@ -1027,8 +1022,6 @@ module podium::PodiumProtocol {
             let referral_coins = coin::extract(&mut payment_coins, referral_fee);
             if (!account::exists_at(referrer_addr)) {
                 aptos_account::create_account(referrer_addr);
-            } else if (!coin::is_account_registered<AptosCoin>(referrer_addr)) {
-                coin::register<AptosCoin>(referrer_addr);
             };
             coin::deposit(referrer_addr, referral_coins);
         };
