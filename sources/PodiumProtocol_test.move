@@ -2811,4 +2811,94 @@ module podium::PodiumProtocol_test {
         assert!(balance == 2 * MIN_WHOLE_PASS, 1);
     }
 
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    public fun test_pass_price_scaling(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        setup_test(aptos_framework, admin, buyer, buyer, creator);
+        
+        let target_addr = signer::address_of(creator);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+
+        // Record initial buyer balance
+        let initial_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        
+        // Buy 5 passes one at a time
+        let total_cost_sequential = 0;
+        let i = 0;
+        while (i < 5) {
+            let pre_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+            PodiumProtocol::buy_pass(
+                buyer,
+                target_addr,
+                1,
+                option::none()
+            );
+            let post_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+            let purchase_cost = pre_balance - post_balance;
+            debug::print(&string::utf8(b"Sequential purchase cost (pass #):"));
+            debug::print(&i);
+            debug::print(&purchase_cost);
+            total_cost_sequential = total_cost_sequential + purchase_cost;
+            i = i + 1;
+        };
+        
+        debug::print(&string::utf8(b"Total cost for 5 sequential purchases:"));
+        debug::print(&total_cost_sequential);
+
+        // Reset buyer balance for bulk purchase test
+        let framework_signer = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework_signer, signer::address_of(buyer), initial_balance);
+        
+        // Buy 5 passes at once
+        let pre_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        PodiumProtocol::buy_pass(
+            buyer,
+            target_addr,
+            5,
+            option::none()
+        );
+        let post_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let bulk_purchase_cost = pre_balance - post_balance;
+        
+        debug::print(&string::utf8(b"Bulk purchase cost (5 passes):"));
+        debug::print(&bulk_purchase_cost);
+        
+        // Verify bulk purchase costs same as sequential purchases
+        assert!(bulk_purchase_cost == total_cost_sequential, 0);
+
+        // Now test a larger purchase of 10 passes
+        let pre_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        PodiumProtocol::buy_pass(
+            buyer,
+            target_addr,
+            10,
+            option::none()
+        );
+        let post_balance = coin::balance<AptosCoin>(signer::address_of(buyer));
+        let large_purchase_cost = pre_balance - post_balance;
+        
+        debug::print(&string::utf8(b"Large purchase cost (10 passes):"));
+        debug::print(&large_purchase_cost);
+        
+        // Verify the large purchase cost more than double the 5-pass purchase
+        // (due to price scaling)
+        assert!(large_purchase_cost > bulk_purchase_cost * 2, 1);
+        
+        // Verify total pass balance
+        let final_balance = PodiumProtocol::get_balance(signer::address_of(buyer), target_addr);
+        assert!(final_balance == 20 * MIN_WHOLE_PASS, 2); // 5 + 5 + 10 passes
+    }
+
 } 
