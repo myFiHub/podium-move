@@ -922,6 +922,12 @@ module podium::PodiumProtocol {
         amount: u64,  // In interface units (whole passes)
         referrer: Option<address>
     ) acquires Config, RedemptionVault, AssetCapabilities, OutpostData {
+        // First, ensure buyer has registered AptosCoin
+        let buyer_addr = signer::address_of(buyer);
+        if (!coin::is_account_registered<AptosCoin>(buyer_addr)) {
+            aptos_account::create_account(buyer_addr);
+        };
+
         // Validate whole pass amount
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
@@ -1017,6 +1023,12 @@ module podium::PodiumProtocol {
         target_addr: address,
         amount: u64  // In interface units (whole passes)
     ) acquires Config, RedemptionVault, AssetCapabilities, OutpostData {
+        // Ensure seller has AptosCoin registered
+        let seller_addr = signer::address_of(seller);
+        if (!coin::is_account_registered<AptosCoin>(seller_addr)) {
+            aptos_account::create_account(seller_addr);
+        };
+
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         let scaled_amount = amount * MIN_WHOLE_PASS;
         

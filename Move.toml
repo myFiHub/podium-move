@@ -4,8 +4,8 @@ version = "0.0.1"
 authors = ["FiHub"]
 
 [addresses]
-podium = "0x625d878f6210509158416405ae9056bd9ba5c3138cfd284d7300e07dc73a5f77"
-fihub = "0x927d3b626f01d6a9b2ef25e706086bd8fb1633cf0898e24fcabd6ea95c360f0b"
+podium = "0xd2f0d0cf38a4c64620f8e9fcba104e0dd88f8d82963bef4ad57686c3ee9ed7aa"
+fihub = "0x16310a1d01085ecd5c1978539c4b303a183db68869b3c197ad51b84e012427a8"
 user1 = "_"
 user2 = "_"
 target = "_"
@@ -19,6 +19,7 @@ user2 = "0x234"
 target = "0x345"
 user3 = "0x456"
 user4 = "0x567"
+
 
 [dependencies]
 AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework/", rev = "aptos-node-v1.7.2" }
