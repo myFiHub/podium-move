@@ -2961,6 +2961,103 @@ module podium::PodiumProtocol_test {
         assert!(balance == 2 * MIN_WHOLE_PASS, 1);
     }
 
+    
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, seller = @user1)]
+    public fun test_sell_pass_existing_account(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        seller: &signer,
+    ) {
+        // Initialize minimal test environment
+        initialize_minimal_test(admin);
+        
+        // Get addresses
+        let target_addr = signer::address_of(creator);
+        let seller_addr = signer::address_of(seller);
+        
+        // Create and setup target account first (simulating existing account in production)
+        if (!account::exists_at(target_addr)) {
+            aptos_account::create_account(target_addr);
+        };
+        if (!coin::is_account_registered<AptosCoin>(target_addr)) {
+            coin::register<AptosCoin>(creator);
+        };
+        
+        // Setup seller account
+        if (!account::exists_at(seller_addr)) {
+            aptos_account::create_account(seller_addr);
+        };
+        if (!coin::is_account_registered<AptosCoin>(seller_addr)) {
+            coin::register<AptosCoin>(seller);
+        };
+        
+        // Verify accounts exist before we start (matching production scenario)
+        assert!(account::exists_at(target_addr), 0);
+        assert!(coin::is_account_registered<AptosCoin>(target_addr), 1);
+        assert!(account::exists_at(seller_addr), 2);
+        assert!(coin::is_account_registered<AptosCoin>(seller_addr), 3);
+        
+        // Fund seller to buy passes first
+        let framework = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework, seller_addr, 100 * OCTA);
+        
+        // Create pass token for existing account
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy passes first
+        PodiumProtocol::buy_pass(
+            seller,
+            target_addr,
+            2,  // buy 2 passes
+            option::none()
+        );
+        
+        // Verify purchase succeeded
+        let balance_after_buy = PodiumProtocol::get_balance(seller_addr, target_addr);
+        assert!(balance_after_buy == 2 * MIN_WHOLE_PASS, 4);
+        
+        // Record balances before sell
+        let seller_apt_before = coin::balance<AptosCoin>(seller_addr);
+        
+        // Sell one pass - this should work with existing account
+        PodiumProtocol::sell_pass(
+            seller,
+            target_addr,
+            1  // sell 1 pass
+        );
+        
+        // Verify sell succeeded
+        let balance_after_sell = PodiumProtocol::get_balance(seller_addr, target_addr);
+        assert!(balance_after_sell == MIN_WHOLE_PASS, 5); // Should have 1 pass left
+        
+        // Verify seller received payment
+        let seller_apt_after = coin::balance<AptosCoin>(seller_addr);
+        assert!(seller_apt_after > seller_apt_before, 6);
+        
+        // Sell remaining pass
+        PodiumProtocol::sell_pass(
+            seller,
+            target_addr,
+            1
+        );
+        
+        // Verify final state
+        let final_balance = PodiumProtocol::get_balance(seller_addr, target_addr);
+        assert!(final_balance == 0, 7); // Should have no passes left
+
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_sell_pass_existing_account: PASS"));
+        debug::print(&string::utf8(b"Verified that selling passes works with existing accounts"));
+    }
+
+
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
     public fun test_pass_price_scaling(
         aptos_framework: &signer,
