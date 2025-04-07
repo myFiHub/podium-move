@@ -3057,6 +3057,88 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"Verified that selling passes works with existing accounts"));
     }
 
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, trader = @user1)]
+    public fun test_trade_with_unregistered_accounts(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        trader: &signer,
+    ) {
+        // Initialize minimal test environment
+        initialize_minimal_test(admin);
+        
+        // Setup creator and trader accounts (but don't register for AptosCoin)
+        let creator_addr = signer::address_of(creator);
+        let trader_addr = signer::address_of(trader);
+        
+        // Only create accounts, don't register for AptosCoin
+        if (!account::exists_at(creator_addr)) {
+            account::create_account_for_test(creator_addr);
+        };
+        if (!account::exists_at(trader_addr)) {
+            account::create_account_for_test(trader_addr);
+        };
+        
+        // Verify accounts exist but are NOT registered for AptosCoin
+        assert!(account::exists_at(creator_addr), 0);
+        assert!(!coin::is_account_registered<AptosCoin>(creator_addr), 1);
+        assert!(account::exists_at(trader_addr), 2);
+        assert!(!coin::is_account_registered<AptosCoin>(trader_addr), 3);
+        
+        // Fund trader to buy passes (must register for this)
+        coin::register<AptosCoin>(trader);
+        let framework = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework, trader_addr, 100 * OCTA);
+        
+        // Create pass token
+        PodiumProtocol::create_pass_token(
+            creator,
+            creator_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy passes - should work even though creator isn't registered
+        PodiumProtocol::buy_pass(
+            trader,
+            creator_addr,
+            2,  // buy 2 passes
+            option::none()
+        );
+        
+        // Verify purchase succeeded
+        let balance_after_buy = PodiumProtocol::get_balance(trader_addr, creator_addr);
+        assert!(balance_after_buy == 2 * MIN_WHOLE_PASS, 4);
+        
+        // Verify creator received payment despite not being registered initially
+        assert!(coin::is_account_registered<AptosCoin>(creator_addr), 5); // Should be registered now
+        assert!(coin::balance<AptosCoin>(creator_addr) > 0, 6);
+        
+        // Create an unregistered referrer
+        let referrer = account::create_account_for_test(@0x789);
+        let referrer_addr = signer::address_of(&referrer);
+        
+        // Buy more passes with unregistered referrer
+        PodiumProtocol::buy_pass(
+            trader,
+            creator_addr,
+            1,  // buy 1 more pass
+            option::some(referrer_addr)
+        );
+        
+        // Verify referrer got paid despite being unregistered initially
+        assert!(coin::is_account_registered<AptosCoin>(referrer_addr), 7);
+        assert!(coin::balance<AptosCoin>(referrer_addr) > 0, 8);
+        
+        // Verify final pass balance
+        let final_balance = PodiumProtocol::get_balance(trader_addr, creator_addr);
+        assert!(final_balance == 3 * MIN_WHOLE_PASS, 9);
+
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_trade_with_unregistered_accounts: PASS"));
+        debug::print(&string::utf8(b"Verified that trading works with unregistered accounts"));
+    }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
     public fun test_pass_price_scaling(

@@ -36,7 +36,8 @@ module podium::PodiumProtocol {
     const EINVALID_METADATA: u64 = 30;  // Error for invalid metadata
     const EINVALID_CODE: u64 = 31;  // Error for invalid code
     const EINVALID_METADATA_FORMAT: u64 = 32;  // Error for invalid metadata format
-
+    const ECOIN_STORE_NOT_PUBLISHED: u64 = 35;
+    
     // Error constants - Outpost Related
     const EOUTPOST_EXISTS: u64 = 8;
     const EOUTPOST_NOT_FOUND: u64 = 9;
@@ -966,28 +967,16 @@ module podium::PodiumProtocol {
             calculate_buy_price_with_fees(target_addr, amount, referrer);
         let total_payment_required = base_price + protocol_fee + subject_fee + referral_fee;
         
-        // Withdraw full payment from buyer
-        let payment_coins = coin::withdraw<AptosCoin>(buyer, total_payment_required);
-        
-        // Extract base price for redemption pool
-        let redemption_coins = coin::extract(&mut payment_coins, base_price);
-        deposit_to_vault(redemption_coins);
-        
         // Handle fee distributions
         let config = borrow_global<Config>(@podium);
         
         // Protocol fee to treasury
         if (protocol_fee > 0) {
-            let protocol_coins = coin::extract(&mut payment_coins, protocol_fee);
-            if (!account::exists_at(config.treasury)) {
-                aptos_account::create_account(config.treasury);
-            };
-            coin::deposit(config.treasury, protocol_coins);
+            transfer_with_check(buyer, config.treasury, protocol_fee);
         };
         
         // Subject fee to target
         if (subject_fee > 0) {
-            let subject_coins = coin::extract(&mut payment_coins, subject_fee);
             let recipient_addr = if (exists<OutpostData>(target_addr)) {
                 // If target is an outpost, get the owner's address
                 borrow_global<OutpostData>(target_addr).owner
@@ -995,24 +984,18 @@ module podium::PodiumProtocol {
                 // Otherwise use target address directly
                 target_addr
             };
-            if (!account::exists_at(recipient_addr)) {
-                aptos_account::create_account(recipient_addr);
-            };
-            coin::deposit(recipient_addr, subject_coins);
+            transfer_with_check(buyer, recipient_addr, subject_fee);
         };
         
         // Referral fee if applicable
         if (referral_fee > 0 && option::is_some(&referrer)) {
             let referrer_addr = option::extract(&mut referrer);
-            let referral_coins = coin::extract(&mut payment_coins, referral_fee);
-            if (!account::exists_at(referrer_addr)) {
-                aptos_account::create_account(referrer_addr);
-            };
-            coin::deposit(referrer_addr, referral_coins);
+            transfer_with_check(buyer, referrer_addr, referral_fee);
         };
-        
-        // Any remaining dust goes to treasury
-        coin::deposit(config.treasury, payment_coins);
+
+        // Base price goes to redemption vault
+        let payment_coins = coin::withdraw<AptosCoin>(buyer, base_price);
+        deposit_to_vault(payment_coins);
         
         // Mint and transfer passes using internal units
         let fa = mint_pass(buyer, asset_symbol, amount);
