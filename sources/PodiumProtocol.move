@@ -797,6 +797,11 @@ module podium::PodiumProtocol {
     ) acquires AssetCapabilities {
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
         
+        // Ensure receiver account exists and is registered
+        if (!account::exists_at(to)) {
+            aptos_account::create_account(to);
+        };
+        
         let asset_symbol = get_asset_symbol(target_addr);
         let caps = borrow_global<AssetCapabilities>(@podium);
         let metadata = table::borrow(&caps.metadata_objects, asset_symbol);
@@ -924,8 +929,11 @@ module podium::PodiumProtocol {
     ) acquires Config, RedemptionVault, AssetCapabilities, OutpostData {
         // First, ensure buyer has registered AptosCoin
         let buyer_addr = signer::address_of(buyer);
-        if (!coin::is_account_registered<AptosCoin>(buyer_addr)) {
+        if (!account::exists_at(buyer_addr)) {
             aptos_account::create_account(buyer_addr);
+        };
+        if (!coin::is_account_registered<AptosCoin>(buyer_addr)) {
+            coin::register<AptosCoin>(buyer);
         };
 
         // Validate whole pass amount
@@ -1025,8 +1033,11 @@ module podium::PodiumProtocol {
     ) acquires Config, RedemptionVault, AssetCapabilities, OutpostData {
         // Ensure seller has AptosCoin registered
         let seller_addr = signer::address_of(seller);
-        if (!coin::is_account_registered<AptosCoin>(seller_addr)) {
+        if (!account::exists_at(seller_addr)) {
             aptos_account::create_account(seller_addr);
+        };
+        if (!coin::is_account_registered<AptosCoin>(seller_addr)) {
+            coin::register<AptosCoin>(seller);
         };
 
         assert!(amount > 0, error::invalid_argument(EINVALID_AMOUNT));
@@ -1402,6 +1413,33 @@ module podium::PodiumProtocol {
             0
         };
         let subject_fee = price - protocol_fee - referral_fee;
+
+        // Ensure subscriber account exists and is registered
+        if (!account::exists_at(subscriber_addr)) {
+            aptos_account::create_account(subscriber_addr);
+        };
+        if (!coin::is_account_registered<AptosCoin>(subscriber_addr)) {
+            coin::register<AptosCoin>(subscriber);
+        };
+
+        // Ensure treasury account exists and is registered
+        if (!account::exists_at(config.treasury)) {
+            aptos_account::create_account(config.treasury);
+        };
+
+        // Ensure outpost owner account exists and is registered
+        if (!account::exists_at(outpost_data.owner)) {
+            aptos_account::create_account(outpost_data.owner);
+        };
+
+        // Handle referrer account if present
+        if (option::is_some(&referrer)) {
+            let referrer_addr = option::extract(&mut referrer);
+            if (!account::exists_at(referrer_addr)) {
+                aptos_account::create_account(referrer_addr);
+            };
+            option::fill(&mut referrer, referrer_addr);
+        };
 
         // Transfer fees
         transfer_with_check(subscriber, config.treasury, protocol_fee);

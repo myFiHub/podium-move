@@ -554,6 +554,83 @@ module podium::PodiumProtocol_test {
         debug::print(&string::utf8(b"test_create_target_asset: PASS"));
     }
 
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, buyer = @user1)]
+    public fun test_buy_pass_create_pass_token_existing_account(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        buyer: &signer,
+    ) {
+        // Initialize minimal test environment
+        initialize_minimal_test(admin);
+        
+        // Get addresses
+        let target_addr = signer::address_of(creator);
+        let buyer_addr = signer::address_of(buyer);
+        
+        // Create and setup target account first (simulating existing account in production)
+        if (!account::exists_at(target_addr)) {
+            aptos_account::create_account(target_addr);
+        };
+        if (!coin::is_account_registered<AptosCoin>(target_addr)) {
+            coin::register<AptosCoin>(creator);
+        };
+        
+        // Setup buyer account
+        if (!account::exists_at(buyer_addr)) {
+            aptos_account::create_account(buyer_addr);
+        };
+        if (!coin::is_account_registered<AptosCoin>(buyer_addr)) {
+            coin::register<AptosCoin>(buyer);
+        };
+        
+        // Verify target account exists before we start (matching production scenario)
+        assert!(account::exists_at(target_addr), 0);
+        assert!(coin::is_account_registered<AptosCoin>(target_addr), 1);
+        
+        // Fund buyer
+        let framework = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework, buyer_addr, 100 * OCTA);
+        
+        // Create pass token - this operation in production was failing with EACCOUNT_ALREADY_EXISTS
+        // Now it should work even though account exists
+        PodiumProtocol::create_pass_token(
+            creator,
+            target_addr,
+            string::utf8(b"Test Pass"),
+            string::utf8(b"Test Pass Description"),
+            string::utf8(b"https://test.uri"),
+        );
+        
+        // Buy pass - this should work since account exists and is registered
+        PodiumProtocol::buy_pass(
+            buyer,
+            target_addr,
+            1,  // buy 1 pass
+            option::none()
+        );
+        
+        // Verify the purchase succeeded
+        let balance = PodiumProtocol::get_balance(buyer_addr, target_addr);
+        assert!(balance == MIN_WHOLE_PASS, 2);
+        
+        // Try another purchase to same account - should also work
+        PodiumProtocol::buy_pass(
+            buyer,
+            target_addr,
+            1,
+            option::none()
+        );
+        
+        // Verify second purchase succeeded
+        let final_balance = PodiumProtocol::get_balance(buyer_addr, target_addr);
+        assert!(final_balance == 2 * MIN_WHOLE_PASS, 3);
+
+        debug::print(&string::utf8(b"=== TEST SUMMARY ==="));
+        debug::print(&string::utf8(b"test_buy_pass_create_pass_token_existing_account: PASS"));
+        debug::print(&string::utf8(b"Verified that operations succeed with existing account"));
+    }
+
     #[test(aptos_framework = @0x1, podium_signer = @podium, user1 = @user1, target = @target)]
     public fun test_pass_auto_creation(
         aptos_framework: &signer,
@@ -1831,6 +1908,46 @@ module podium::PodiumProtocol_test {
         ), 1);
     }
 
+    #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
+    public fun test_subscribe_account_exists(
+        aptos_framework: &signer,
+        admin: &signer,
+        creator: &signer,
+        subscriber: &signer,
+    ) {
+        setup_test(aptos_framework, admin, subscriber, subscriber, creator);
+        
+        // Create account first
+        let subscriber_addr = signer::address_of(subscriber);
+        if (!account::exists_at(subscriber_addr)) {
+            aptos_account::create_account(subscriber_addr);
+        };
+        
+        // Create outpost and tier
+        let outpost = create_test_outpost(creator);
+        PodiumProtocol::create_subscription_tier(
+            creator,
+            outpost,
+            string::utf8(b"Basic"),
+            SUBSCRIPTION_WEEK_PRICE,
+            DURATION_WEEK
+        );
+        
+        // Fund subscriber
+        let framework = account::create_signer_for_test(@0x1);
+        aptos_coin::mint(&framework, subscriber_addr, SUBSCRIPTION_WEEK_PRICE * 2);
+        
+        // Try to subscribe - should work with existing account
+        PodiumProtocol::subscribe(
+            subscriber,
+            outpost,
+            0,
+            option::none()
+        );
+        
+        // Verify the subscription succeeded
+        assert!(PodiumProtocol::verify_subscription(subscriber_addr, outpost, 0), 0);
+    }
 
     #[test(aptos_framework = @0x1, admin = @podium, creator = @target, subscriber = @user1)]
     #[expected_failure(abort_code = 524306)]  // Update to match actual error code
